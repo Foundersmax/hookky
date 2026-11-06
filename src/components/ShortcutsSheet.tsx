@@ -6,7 +6,7 @@ const GROUPS: { title: string; keys: [string, string][] }[] = [
     title: "Timeline",
     keys: [["Drag a scene", "Reorder"], ["Alt + ← / →", "Move the selected scene"], ["Drag a scene's edge", "Resize (snaps to pauses)"], ["Alt while resizing", "Resize without snapping"], ["= / -", "Zoom in / out"], ["0", "Fit the whole timeline"], ["⌘/Ctrl + scroll", "Zoom around the cursor"], ["Double-click a scene", "Zoom to it"]],
   },
-  { title: "Studio", keys: [["F", "Focus on the canvas"], ["⌘/Ctrl + Z", "Undo"], ["⇧ + ⌘/Ctrl + Z", "Redo"], ["?", "Show this sheet"]] },
+  { title: "Studio", keys: [["⌘/Ctrl + K", "Command bar: search, run, or ask the agent"], ["F", "Focus on the canvas"], ["⌘/Ctrl + Z", "Undo"], ["⇧ + ⌘/Ctrl + Z", "Redo"], ["?", "Show this sheet"]] },
   { title: "Chat", keys: [["Enter", "Send"], ["Shift + Enter", "New line"]] },
 ];
 

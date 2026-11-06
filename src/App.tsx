@@ -14,6 +14,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ShortcutsSheet } from "./components/ShortcutsSheet";
 import { Home } from "./components/Home";
 import { Versions } from "./components/Versions";
+import { CommandPalette } from "./components/CommandPalette";
 import { clock } from "./clock";
 import { images } from "./runtime";
 import { STYLE_PRESETS, FONT_CHOICES } from "./presets";
@@ -29,6 +30,7 @@ export function App() {
   const [tab, setTab] = useState<(typeof TABS)[number]>("Scene");
   const [toastMsg, setToast] = useState<string | null>(null);
   const [showKeys, setShowKeys] = useState(false);
+  const [showPalette, setShowPalette] = useState(false);
   // Desktop panel visibility: hide either sidebar to give the canvas more room.
   const [panels, setPanels] = useState<{ left: boolean; right: boolean }>(() => {
     try {
@@ -43,6 +45,7 @@ export function App() {
     } catch {}
   }, [panels]);
   const focused = !panels.left && !panels.right;
+  const toggleTheme = () => setTheme((t) => ((t ?? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")) === "dark" ? "light" : "dark"));
   const toggleFocus = () => setPanels(focused ? { left: true, right: true } : { left: false, right: false });
   const [theme, setTheme] = useState<"dark" | "light" | null>(() => {
     try {
@@ -135,6 +138,11 @@ export function App() {
   // keyboard
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setShowPalette((v) => !v);
+        return;
+      }
       const tag = (e.target as HTMLElement).tagName;
       const type = (e.target as HTMLInputElement).type;
       const typing = tag === "TEXTAREA" || tag === "SELECT" || (tag === "INPUT" && !["range", "checkbox", "radio", "button", "color"].includes(type)) || (e.target as HTMLElement).isContentEditable;
@@ -220,10 +228,13 @@ export function App() {
         </button>
         <Versions toast={toast} />
         </>)}
+        <button className="btn ghost cmdk" title="Command bar (⌘K)" aria-label="Command bar" onClick={() => setShowPalette(true)}>
+          <Icon name="search" /> <span>Search or ask…</span> <kbd>⌘K</kbd>
+        </button>
         <button className="btn icon ghost" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts" onClick={() => setShowKeys(true)}>
           <Icon name="keyboard" />
         </button>
-        <button className="btn icon ghost" title="Toggle theme" onClick={() => setTheme((t) => ((t ?? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")) === "dark" ? "light" : "dark"))}>
+        <button className="btn icon ghost" title="Toggle theme" onClick={toggleTheme}>
           <Icon name="sun" />
         </button>
         {view === "studio" ? (
@@ -277,6 +288,18 @@ export function App() {
       )}
       {toastMsg && <div className="toast">{toastMsg}</div>}
       {showKeys && <ShortcutsSheet onClose={() => setShowKeys(false)} />}
+      {showPalette && (
+        <CommandPalette
+          host={{
+            close: () => setShowPalette(false),
+            openTab: (t) => (setState({ view: "studio" }), setTab(t)),
+            toggleFocus,
+            toggleTheme,
+            showKeys: () => setShowKeys(true),
+            toast,
+          }}
+        />
+      )}
     </div>
   );
 }

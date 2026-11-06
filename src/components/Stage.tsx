@@ -49,6 +49,12 @@ export function Stage() {
     document.addEventListener("fullscreenchange", onChange);
     return () => document.removeEventListener("fullscreenchange", onChange);
   }, []);
+  // The command bar asks for fullscreen with an event.
+  useEffect(() => {
+    const onReq = () => enterFull();
+    window.addEventListener("hookky:fullscreen", onReq);
+    return () => window.removeEventListener("hookky:fullscreen", onReq);
+  }, []);
   useEffect(() => {
     if (full === "off") return;
     // Browsers exit real fullscreen on Esc themselves; this covers the full-window player and any view that passes Esc through.

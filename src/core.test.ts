@@ -7,6 +7,7 @@ import { buildScenes, patchScenes, fitToVoiceover, snapCutsToPauses, snapPoints,
 import { lintStoryboard, notesForAgent } from "./agent/lint";
 import { TEMPLATES, type Project, type Scene } from "./types";
 import { tokenize } from "./engine/text";
+import { score } from "./fuzzy";
 
 const brand = { name: "Orbit", bg: "#0B0B0C", fg: "#F4F4EF", accent: "#C8FF3D", muted: "#6E6E6A", fontDisplay: "Inter", fontBody: "Inter", radius: 8 };
 const fallback: Project = { id: "p1", title: "Fallback", aspect: "16:9", style: "noir", brand, captions: false, grain: true, scenes: [{ id: "f1", template: "title-reveal", duration: 3 }] };
@@ -183,4 +184,16 @@ test("tokenize keeps punctuation and word parts glued to accent words", () => {
   assert.deepEqual(tokenize("re*brand* now").map((x) => [x.text, !!x.glue]), [["re", false], ["brand", true], ["now", false]]);
   assert.deepEqual(tokenize("*Done.* Next").map((x) => [x.text, x.em, !!x.glue]), [["Done.", true, false], ["Next", false, false]]);
   assert.deepEqual(tokenize("a * b").map((x) => x.text), ["a", "b"]);
+});
+
+// ---------------------------------------------------------------- command bar matching
+test("command matching ignores punctuation and ranks word starts first", () => {
+  const labels = ["Format: vertical (9:16)", "New project: Vertical reel", "Style: Swiss", "Style: Mono", "Add Quote", "Open “Lumière launch”"];
+  const best = (q: string) => labels.map((l) => [l, score(q, l)] as const).filter(([, s]) => s >= 0).sort((a, b) => b[1] - a[1])[0]?.[0];
+  assert.equal(best("style swis"), "Style: Swiss");
+  assert.equal(best("swiss"), "Style: Swiss");
+  assert.equal(best("add quote"), "Add Quote");
+  assert.equal(best("lumiere"), "Open “Lumière launch”", "accents are ignored");
+  assert.equal(best("vertical"), "Format: vertical (9:16)");
+  assert.equal(score("zzz", "Add Quote"), -1);
 });
