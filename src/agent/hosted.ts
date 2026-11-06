@@ -3,7 +3,7 @@
 import { TEMPLATES, TRANSITIONS, BACKGROUNDS, MOTIONS, PACES } from "../types";
 import type { ChatAttachment } from "../types";
 import { STYLE_PRESETS } from "../presets";
-import { getState, applyStoryboard, applyPatch, setBrand, updateProject } from "../store";
+import { getState, applyStoryboard, applyPatch, setBrand, updateProject, applyKit } from "../store";
 import { totalDuration } from "../engine/render";
 import { sampleCap, sampleLimits } from "../host";
 import { directorPrompt } from "./prompt";
@@ -78,10 +78,11 @@ export const hostedTools = (activity: (label: string) => void, onDirections: (d:
   },
   {
     name: "set_brand",
-    description: "Set the look: style preset id and/or name, bg, fg, accent, muted (hex), fontDisplay, fontBody, logo (asset id), aspect, captions (bool). Returns a confirmation.",
+    description: "Set the look: kit (name of a saved brand kit; applies its whole look), style preset id and/or name, bg, fg, accent, muted (hex), fontDisplay, fontBody, logo (asset id), aspect, captions (bool). Returns a confirmation.",
     inputSchema: {
       type: "object" as const,
       properties: {
+        kit: { type: "string" },
         style: { type: "string", enum: STYLE_PRESETS.map((p) => p.id) },
         name: { type: "string" }, bg: { type: "string" }, fg: { type: "string" }, accent: { type: "string" }, muted: { type: "string" },
         fontDisplay: { type: "string" }, fontBody: { type: "string" }, logo: { type: "string" },
@@ -90,11 +91,16 @@ export const hostedTools = (activity: (label: string) => void, onDirections: (d:
     },
     execute(input: Record<string, unknown>) {
       activity("Setting brand");
-      const { aspect, captions, ...brand } = input as Record<string, any>;
+      const { aspect, captions, kit, ...brand } = input as Record<string, any>;
+      let kitNote = "";
+      if (typeof kit === "string" && kit.trim()) {
+        const k = applyKit(kit);
+        kitNote = k ? ` Applied the "${k.name}" kit.` : ` No brand kit called "${kit}" (kits: ${getState().kits.map((x) => x.name).join(", ") || "none"}).`;
+      }
       const clean = sanitizeBrand(brand);
       if (Object.keys(clean).length) setBrand(clean);
       if (aspect || typeof captions === "boolean") updateProject((p) => ({ ...p, ...(aspect && { aspect }), ...(typeof captions === "boolean" && { captions }) }));
-      return `Brand updated.\n\n${review()}`;
+      return `Brand updated.${kitNote}\n\n${review()}`;
     },
   },
 ];

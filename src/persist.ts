@@ -3,6 +3,7 @@
 //   kv "index"           ProjectMeta[]   (the dashboard list)
 //   kv "current"         id of the project open in the studio
 //   kv "library"         Asset[]         (shared by every project)
+//   kv "kits"            BrandKit[]      saved brand kits (shared by every project)
 //   kv "project:<id>"    { project, chat, savedAt }
 //   kv "versions:<id>"   Version[]       (named snapshots)
 //   blobs "audio:<id>" / "music:<id>"    the voice-over and music files
@@ -230,6 +231,15 @@ export async function saveLibrary(assets: Asset[]) {
       savedClips.delete(id);
     }
   await put("library", assets.map((a) => (keep.has(a.id) ? { ...a, src: CLIP } : a)));
+}
+
+export async function loadKits(): Promise<unknown[]> {
+  if (!(await db())) return [];
+  const v = await get<unknown[]>("kits");
+  return Array.isArray(v) ? v : [];
+}
+export async function saveKits(kits: unknown[]) {
+  if (await db()) await put("kits", kits);
 }
 
 export async function setCurrent(id: string) {

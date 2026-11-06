@@ -74,6 +74,17 @@ export interface Scene {
   notes?: string;
 }
 
+/** A saved identity to reuse across projects. */
+export interface BrandKit {
+  id: string;
+  name: string;
+  style: string;
+  brand: Brand;
+  /** applied to every new project */
+  isDefault?: boolean;
+  updatedAt: number;
+}
+
 export interface Brand {
   name: string;
   bg: string;
@@ -189,6 +200,7 @@ export type AgentEvent =
   | { type: "brand"; brand: Partial<Brand> & { style?: string } }
   | { type: "settings"; settings: Partial<Pick<Project, "aspect" | "captions" | "grain" | "title">> }
   | { type: "directions"; directions: Direction[] }
+  | { type: "kit"; name: string }
   | { type: "error"; message: string }
   | { type: "done" };
 

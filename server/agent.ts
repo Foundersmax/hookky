@@ -127,10 +127,11 @@ const tools: Anthropic.Beta.BetaToolUnion[] = [
   },
   {
     name: "set_brand",
-    description: "Set the visual identity: style preset and/or explicit colours and fonts.",
+    description: "Set the visual identity: a saved brand kit, a style preset, and/or explicit colours and fonts (applied in that order).",
     input_schema: {
       type: "object",
       properties: {
+        kit: { type: "string", description: "name of one of the user's brand_kits: applies its whole look" },
         style: { type: "string", enum: STYLE_PRESETS.map((p) => p.id) },
         name: { type: "string" },
         bg: { type: "string" },
@@ -312,6 +313,7 @@ class Shadow {
   style: string;
   assetIds: Set<string>;
   audio?: Timing & { hasWords: boolean };
+  kits: { name: string; style: string; brand: Partial<Brand> }[];
 
   constructor(state: any) {
     const st = state && typeof state === "object" ? state : {};
@@ -320,11 +322,18 @@ class Shadow {
     const preset = presetById(this.style);
     this.brand = { name: "", ...preset.brand, ...sanitizeBrand(st.project?.brand) } as Brand;
     this.assetIds = new Set((Array.isArray(st.assets) ? st.assets : []).map((a: any) => String(a?.id)));
+    this.kits = (Array.isArray(st.brand_kits) ? st.brand_kits : [])
+      .filter((k: any) => k && typeof k.name === "string")
+      .map((k: any) => ({ name: String(k.name), style: presetById(String(k.style ?? "")).id, brand: sanitizeBrand(k.brand) }));
     const vo = st.voiceover;
     if (vo && typeof vo.duration === "number") {
       const pauses = (Array.isArray(vo.pauses) ? vo.pauses : []).filter((x: any) => Array.isArray(x)).map(([s, e]: number[]) => ({ s: Number(s), e: Number(e) }));
       this.audio = { duration: vo.duration, pauses, hasWords: Array.isArray(vo.sentences) && vo.sentences.length > 0 };
     }
+  }
+  kit(name: string) {
+    const n = name.trim().toLowerCase().replace(/\s+kit$/, "");
+    return this.kits.find((k) => k.name.toLowerCase() === n) ?? this.kits.find((k) => k.name.toLowerCase().includes(n));
   }
   review() {
     return notesForAgent(lintStoryboard({ scenes: this.scenes, brand: this.brand, assetIds: this.assetIds, audio: this.audio }));
@@ -360,7 +369,18 @@ async function runTool(name: string, input: unknown, send: (e: AgentEvent) => vo
       return `Applied ${p.data.ops.length} edit(s).\n\n${shadow.review()}`;
     }
     case "set_brand": {
-      const { aspect, captions, ...brand } = i ?? {};
+      const { aspect, captions, kit: kitName, ...brand } = i ?? {};
+      let kitNote = "";
+      if (typeof kitName === "string" && kitName.trim()) {
+        const kit = shadow.kit(kitName);
+        if (!kit) kitNote = ` No brand kit called "${kitName}" (kits: ${shadow.kits.map((k) => k.name).join(", ") || "none"}).`;
+        else {
+          send({ type: "kit", name: kit.name });
+          shadow.style = kit.style;
+          shadow.brand = { ...shadow.brand, ...kit.brand };
+          kitNote = ` Applied the "${kit.name}" kit.`;
+        }
+      }
       const clean = sanitizeBrand(brand);
       if (Object.keys(clean).length) send({ type: "brand", brand: clean });
       if (clean.style) {
@@ -371,7 +391,7 @@ async function runTool(name: string, input: unknown, send: (e: AgentEvent) => vo
       shadow.brand = { ...shadow.brand, ...colours };
       if (aspect || typeof captions === "boolean") send({ type: "settings", settings: { ...(aspect && { aspect }), ...(typeof captions === "boolean" && { captions }) } });
       const ignored = Object.keys(brand).filter((k) => !(k in clean));
-      return `Brand updated.${ignored.length ? ` Ignored invalid values for: ${ignored.join(", ")} (colours must be #RGB or #RRGGBB hex).` : ""}\n\n${shadow.review()}`;
+      return `Brand updated.${kitNote}${ignored.length ? ` Ignored invalid values for: ${ignored.join(", ")} (colours must be #RGB or #RRGGBB hex).` : ""}\n\n${shadow.review()}`;
     }
     case "search_visuals": {
       const { assets, notes } = await searchVisuals(String(i.query ?? ""), i.sources, Math.min(24, i.count ?? 12));

@@ -3,6 +3,7 @@ import { useStudio, setBrand, setState, getState, addAssets } from "../store";
 import { fontFamilies, fontFileToAsset, registerFonts } from "../fonts";
 import type { Asset } from "../types";
 import { Icon } from "./Icon";
+import { BrandKits } from "./BrandKits";
 import { STYLE_PRESETS, FONT_CHOICES } from "../presets";
 
 function FontOptions({ custom, current }: { custom: string[]; current: string }) {
@@ -36,6 +37,7 @@ export function BrandPanel() {
   const b = project.brand;
   return (
     <>
+      <BrandKits />
       <div className="field">
         <label>Style</label>
         <div className="presets">

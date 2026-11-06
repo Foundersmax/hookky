@@ -1,5 +1,5 @@
 import type { AgentEvent, ChatAttachment, Direction } from "../types";
-import { getState, setState, pushChat, updateChat, applyStoryboard, applyPatch, setBrand, addAssets, updateProject, buildCount } from "../store";
+import { getState, setState, pushChat, updateChat, applyStoryboard, applyPatch, setBrand, addAssets, updateProject, buildCount, applyKit } from "../store";
 import { uid } from "../engine/util";
 import { totalDuration } from "../engine/render";
 import { sentences } from "../audio/analyze";
@@ -19,7 +19,7 @@ export function currentNotes() {
 
 /** Compact snapshot of the studio the agent sees each turn. */
 function studioState() {
-  const { project: p, assets } = getState();
+  const { project: p, assets, kits } = getState();
   const vo = p.audio && {
     file: p.audio.name,
     duration: +p.audio.duration.toFixed(2),
@@ -32,6 +32,7 @@ function studioState() {
     scenes: p.scenes.map(({ id, ...s }, i) => ({ index: i, ...s })),
     assets: assets.slice(-60).filter((a) => a.kind !== "font").map((a) => ({ id: a.id, title: a.title.slice(0, 60), source: a.source, kind: a.kind, w: a.w, h: a.h, ...(a.kind === "video" && { seconds: a.duration }), palette: a.palette })),
     voiceover: vo || null,
+    brand_kits: kits.map((k) => ({ name: k.name, style: k.style, default: !!k.isDefault, brand: (({ bg, fg, accent, muted, fontDisplay, fontBody, logo }) => ({ bg, fg, accent, muted, fontDisplay, fontBody, logo }))(k.brand) })),
     director_notes: currentNotes().slice(0, 10).map((n) => `[${n.level}] ${n.message}`),
   };
 }
@@ -148,7 +149,13 @@ export async function sendToAgent(text: string, attachments: ChatAttachment[] = 
       const directions = localDirections(brief, getState().project);
       return updateChat(replyId, (m) => ({ ...m, text: pre + "Three ways we could take it. Pick one and I'll build it.", directions, brief, pending: false }));
     }
+    // "use my Acme kit": the local director applies a saved kit named in the message.
+    const kit = getState().kits.find((k) => text.toLowerCase().includes(k.name.toLowerCase()));
+    if (kit) applyKit(kit.id);
     const r = localDirector(text, getState().project, getState().assets);
+    if (kit) r.style = undefined; // keep the kit's look rather than a preset named in passing
+    if (r.storyboard && kit) r.storyboard = { ...r.storyboard, style: undefined };
+    if (kit) r.reply = `Using your “${kit.name}” kit. ${r.reply}`;
     if (r.style || r.name) setBrand({ ...(r.style && { style: r.style }), ...(r.name && { name: r.name }) });
     if (r.settings && Object.keys(r.settings).length) updateProject((p) => ({ ...p, ...r.settings }));
     if (r.storyboard) applyStoryboard(r.storyboard);
@@ -265,6 +272,9 @@ function handle(ev: AgentEvent, id: string) {
       break;
     case "brand":
       setBrand(sanitizeBrand(ev.brand));
+      break;
+    case "kit":
+      applyKit(ev.name);
       break;
     case "settings":
       updateProject((p) => ({ ...p, ...ev.settings }));

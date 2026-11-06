@@ -312,3 +312,24 @@ test("video trim and speed survive cleaning and map scene time to clip time", as
   assert.equal(sanitizeScene({ template: "fullbleed", duration: 4, clipSpeed: 99 }).clipSpeed, 4);
   assert.equal(clipTimeAt(d, 1.5), 1.5);
 });
+
+// ---------------------------------------------------------------- brand kits
+import { kitFromProject, applyKitTo, sanitizeKit, findKit } from "./kits";
+
+test("brand kits capture a look, apply it, and survive bad storage", () => {
+  const p = { ...fallback, style: "swiss", brand: { ...brand, name: "Acme", logo: "asset:up_logo", fontDisplay: "Fraunces" } };
+  const kit = kitFromProject(p, "  Acme   main ");
+  assert.equal(kit.name, "Acme main");
+  assert.equal(kit.style, "swiss");
+  const other = applyKitTo({ ...fallback, style: "noir" }, kit, new Set(["asset:up_logo"]));
+  assert.deepEqual([other.style, other.brand.fontDisplay, other.brand.logo, other.brand.name], ["swiss", "Fraunces", "asset:up_logo", "Acme"]);
+  assert.equal(applyKitTo(fallback, kit, new Set()).brand.logo, undefined, "a logo missing from the library is dropped");
+  assert.equal(sanitizeKit(null), null);
+  assert.equal(sanitizeKit({ name: "" }), null);
+  const cleaned = sanitizeKit({ name: "X", style: "nope", brand: { accent: "red", bg: "#101010" }, isDefault: "yes" })!;
+  assert.deepEqual([cleaned.style, cleaned.brand.bg, cleaned.brand.accent.startsWith("#"), cleaned.isDefault], ["noir", "#101010", true, undefined]);
+  const kits = [kit, { ...kit, id: "k2", name: "Lumen" }];
+  assert.equal(findKit(kits, "lumen kit")?.id, "k2");
+  assert.equal(findKit(kits, "Acme")?.name, "Acme main");
+  assert.equal(findKit(kits, "Orbit"), undefined);
+});

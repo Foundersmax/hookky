@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useStudio, getState, setState, updateProject, setBrand, undo, redo, openProject, createProject, saveVersion, normalizeScene, fitToVoiceover, snapCutsToPauses } from "../store";
+import { useStudio, getState, setState, updateProject, setBrand, undo, redo, openProject, createProject, saveVersion, normalizeScene, fitToVoiceover, snapCutsToPauses, applyKit } from "../store";
 import { STYLE_PRESETS } from "../presets";
 import { STARTERS } from "../starters";
 import { TEMPLATES, type Aspect, type Scene } from "../types";
@@ -62,6 +62,7 @@ export function CommandPalette({ host }: { host: PaletteHost }) {
   const projects = useStudio((s) => s.projects);
   const project = useStudio((s) => s.project);
   const health = useStudio((s) => s.health);
+  const kits = useStudio((s) => s.kits);
   const [q, setQ] = useState("");
   const [active, setActive] = useState(0);
   const input = useRef<HTMLInputElement>(null);
@@ -109,6 +110,7 @@ export function CommandPalette({ host }: { host: PaletteHost }) {
       }
       for (const a of ["16:9", "9:16", "1:1", "4:5"] as Aspect[])
         if (a !== project.aspect) add("Format", `aspect-${a}`, `Format: ${{ "16:9": "landscape", "9:16": "vertical", "1:1": "square", "4:5": "portrait" }[a]} (${a})`, () => updateProject((p) => ({ ...p, aspect: a })), { hint: { "16:9": "YouTube, web", "9:16": "Reels, TikTok, Shorts", "1:1": "feed posts", "4:5": "Instagram feed" }[a] });
+      for (const k of kits) add("Brand kits", `kit-${k.id}`, `Apply kit: ${k.name}`, () => (applyKit(k.id), host.toast(`Applied “${k.name}”`)), { hint: k.isDefault ? "default for new projects" : undefined });
       for (const s of STYLE_PRESETS) if (s.id !== project.style) add("Style", `style-${s.id}`, `Style: ${s.label}`, () => setBrand({ style: s.id }), { hint: s.mood });
       for (const t of TEMPLATES)
         add("Add scene", `scene-${t}`, `Add ${TEMPLATE_NAMES[t] ?? t}`, () => {
@@ -126,7 +128,7 @@ export function CommandPalette({ host }: { host: PaletteHost }) {
     add("App", "theme", "Toggle light / dark theme", host.toggleTheme);
     add("App", "keys", "Keyboard shortcuts", host.showKeys, { keys: "?" });
     return c;
-  }, [view, projects, project.id, project.aspect, project.style, project.captions, project.grain, project.audio, health?.agent]);
+  }, [view, projects, project.id, project.aspect, project.style, project.captions, project.grain, project.audio, health?.agent, kits]);
 
   const query = q.trim().toLowerCase();
   const results = useMemo(() => {

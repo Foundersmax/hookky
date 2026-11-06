@@ -103,3 +103,14 @@ test("turnContent attaches valid contact sheets before the studio state and drop
   assert.deepEqual(kinds, ["text:Rendered frames, contact", "image", "text:Rendered frames, contact", "image", "text:<studio_state>\n{\"a\":1}\n<", "text:Visual review."]);
   assert.match((content[2] as { text: string }).text, /2 of 2/);
 });
+
+test("set_brand applies a saved brand kit by name and reports unknown ones", async () => {
+  const shadow = new Shadow({ ...clientState, brand_kits: [{ name: "Acme", style: "swiss", brand: { bg: "#F3F0E9", fg: "#111111", accent: "#FF4D1A", fontDisplay: "Fraunces" } }] });
+  const events: AgentEvent[] = [];
+  const out = await runTool("set_brand", { kit: "acme kit" }, (e) => events.push(e), shadow);
+  assert.deepEqual(events[0], { type: "kit", name: "Acme" });
+  assert.match(out, /Applied the "Acme" kit/);
+  assert.deepEqual([shadow.style, shadow.brand.accent, shadow.brand.fontDisplay], ["swiss", "#FF4D1A", "Fraunces"]);
+  const miss = await runTool("set_brand", { kit: "Orbit" }, () => {}, shadow);
+  assert.match(miss, /No brand kit called "Orbit" \(kits: Acme\)/);
+});

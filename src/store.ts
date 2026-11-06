@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
-import type { Asset, AudioTrack, Brand, ChatMessage, PatchOp, Project, Scene, StoryboardInput } from "./types";
+import type { Asset, AudioTrack, Brand, BrandKit, ChatMessage, PatchOp, Project, Scene, StoryboardInput } from "./types";
+import { kitFromProject, applyKitTo, sanitizeKit, findKit } from "./kits";
 import { TEMPLATES, TRANSITIONS, BACKGROUNDS } from "./types";
 import { presetById } from "./presets";
 import { uid, clamp } from "./engine/util";
@@ -23,6 +24,8 @@ export interface StudioState {
   notice?: string;
   /** dashboard list of every project */
   projects: ProjectMeta[];
+  /** saved brand kits, shared by every project */
+  kits: BrandKit[];
   /** what the app shows */
   view: "home" | "studio";
   health?: { agent: "claude" | "hosted" | "local"; transcription: string; connectors: { id: string; label: string; configured: boolean; kind: string; note: string }[] };
@@ -59,6 +62,7 @@ let state: StudioState = {
   conversationId: uid("c"),
   busy: false,
   projects: [],
+  kits: [],
   view: "studio",
 };
 
@@ -80,6 +84,7 @@ function revive(raw: any, audio?: Blob, music?: Blob): Project {
 export async function hydrate() {
   const ws = await db.loadWorkspace().catch(() => ({ projects: [], assets: [], durable: false, currentId: undefined }) as db.Workspace);
   const patch: Partial<StudioState> = { projects: ws.projects, assets: ws.assets };
+  patch.kits = (await db.loadKits().catch(() => [])).map(sanitizeKit).filter((k): k is BrandKit => !!k);
   if (ws.currentId) {
     const rec = await db.loadProject(ws.currentId).catch(() => ({ chat: [] as ChatMessage[] }) as Awaited<ReturnType<typeof db.loadProject>>);
     if (rec.project && Array.isArray(rec.project.scenes)) {
@@ -173,7 +178,10 @@ export async function openProject(id: string) {
 export async function createProject(starterId = "blank") {
   await flushSave();
   const starter = STARTERS.find((s) => s.id === starterId) ?? STARTERS[STARTERS.length - 1];
-  const project = starter.build();
+  const starter_ = starter.build();
+  // A default brand kit dresses every new project.
+  const kit = state.kits.find((k) => k.isDefault);
+  const project = kit ? applyKitTo(starter_, kit, new Set(state.assets.map((a) => a.id))) : starter_;
   resetHistory();
   setStateQuiet({ project, chat: [], selected: 0, conversationId: uid("c"), view: "studio" });
   await flushSave();
@@ -304,6 +312,41 @@ export function applyPatch(ops: PatchOp[]) {
 export function withStyle(p: Project, styleId: string): Project {
   const pr = presetById(styleId);
   return { ...p, style: pr.id, brand: brandWithStyle(p.brand, styleId) };
+}
+
+// ---------------------------------------------------------------- brand kits
+const storeKits = (kits: BrandKit[]) => {
+  setStateQuiet({ kits });
+  db.saveKits(kits).catch(() => setState({ notice: "Couldn't save brand kits in this browser." }));
+};
+
+/** Save the current look as a new kit, or over an existing one (by id). */
+export function saveKit(name: string, overId?: string): BrandKit {
+  const prev = state.kits.find((k) => k.id === overId);
+  const kit = { ...kitFromProject(state.project, name || prev?.name || "", prev?.id), ...(prev?.isDefault && { isDefault: true }) };
+  storeKits(prev ? state.kits.map((k) => (k.id === prev.id ? kit : k)) : [...state.kits, kit]);
+  return kit;
+}
+
+/** Dress the open project in a kit (undoable like any brand edit). */
+export function applyKit(idOrName: string): BrandKit | undefined {
+  const kit = state.kits.find((k) => k.id === idOrName) ?? findKit(state.kits, idOrName);
+  if (!kit) return;
+  const ids = new Set(state.assets.map((a) => a.id));
+  updateProject((p) => applyKitTo(p, kit, ids));
+  return kit;
+}
+
+export const renameKit = (id: string, name: string) => storeKits(state.kits.map((k) => (k.id === id && name.trim() ? { ...k, name: name.trim().slice(0, 40), updatedAt: Date.now() } : k)));
+export const deleteKit = (id: string) => storeKits(state.kits.filter((k) => k.id !== id));
+/** Make a kit the default for new projects (or clear the default with null). */
+export function setDefaultKit(id: string | null) {
+  storeKits(
+    state.kits.map((k) => {
+      const { isDefault: _was, ...rest } = k;
+      return k.id === id ? { ...rest, isDefault: true } : rest;
+    }),
+  );
 }
 
 export function setBrand(b: Partial<Brand> & { style?: string }) {
