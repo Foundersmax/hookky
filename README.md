@@ -1,3 +1,10 @@
+<p align="left">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/logo-dark.svg">
+    <img src="docs/logo-light.svg" alt="Hookky" height="48">
+  </picture>
+</p>
+
 # Hookky
 
 AI motion-graphics studio for product ads and launches. Chat with a creative agent on the left; watch the animation build live on the right.

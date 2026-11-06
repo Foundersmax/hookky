@@ -3,6 +3,7 @@ import { useStudio, addAssets, setAudio, getState } from "../store";
 import { sendToAgent, resetAgent } from "../agent/client";
 import type { Asset, ChatAttachment } from "../types";
 import { Icon } from "./Icon";
+import { LogoMark } from "./Logo";
 import { uid } from "../engine/util";
 import { extractPalette } from "../engine/images";
 import { ingestVoiceover } from "./VoicePanel";
@@ -103,7 +104,7 @@ export function ChatPanel() {
       <div className="messages" ref={listRef}>
         {!chat.length && (
           <div className="welcome">
-            <div className="tiny">HOOKKY</div>
+            <LogoMark size={36} />
             <h3>What are we launching?</h3>
             <p>Describe the product, drop references or a voice-over, or paste a link from Pinterest, Freepik, Envato — anywhere.</p>
             <div className="chips">

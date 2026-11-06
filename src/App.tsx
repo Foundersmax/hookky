@@ -9,6 +9,7 @@ import { BrandPanel } from "./components/BrandPanel";
 import { VoicePanel } from "./components/VoicePanel";
 import { ExportPanel } from "./components/ExportPanel";
 import { Icon } from "./components/Icon";
+import { Logo } from "./components/Logo";
 import { clock } from "./clock";
 import { images } from "./runtime";
 import { STYLE_PRESETS, FONT_CHOICES } from "./presets";
@@ -116,9 +117,9 @@ export function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <div className="brandmark">
-          <i /> hookky
-        </div>
+        <a className="brandmark" href="/" aria-label="Hookky home">
+          <Logo height={22} />
+        </a>
         <input className="title-input" value={project.title} onChange={(e) => setState((s) => ({ project: { ...s.project, title: e.target.value } }))} />
         <span className="spacer" />
         <div className="seg" role="tablist" aria-label="Aspect ratio">
