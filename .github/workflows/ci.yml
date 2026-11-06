@@ -9,6 +9,8 @@ jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      build: ${{ steps.build.outputs.build }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -21,9 +23,46 @@ jobs:
       - name: Unit tests (cleaning, storyboard ops, director's notes, URL safety)
         run: npm test
       - name: Build the app and the hosted page
+        id: build
         # The hosted page is a single-file build; the normal (code-split) build runs last so dist/ is the app.
-        run: npm run build:artifact && npm run build
+        run: |
+          npm run build:artifact && npm run build
+          echo "build=$(grep -o 'assets/index-[A-Za-z0-9_-]*\.js' dist/index.html | head -1)" >> "$GITHUB_OUTPUT"
       - name: Install Chromium for the engine test
         run: npx playwright install --with-deps chromium
       - name: Engine smoke test (every template × format × background, plus fuzzing)
         run: npm run test:engine
+
+  # Deploy to Render once the checks pass, through the service's deploy hook, then wait until
+  # app.rookker.com serves this commit's build. Skipped until the RENDER_DEPLOY_HOOK_URL secret exists.
+  deploy:
+    needs: check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: deploy
+      cancel-in-progress: true
+    env:
+      HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+      BUILD: ${{ needs.check.outputs.build }}
+      APP: https://app.rookker.com/
+    steps:
+      - name: Trigger the Render deploy
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "::notice::No RENDER_DEPLOY_HOOK_URL secret yet, so this push isn't deployed automatically. See the README (Deploy to Render)."
+            exit 0
+          fi
+          curl -fsS -X POST "$HOOK" -o /dev/null && echo "Deploy requested for $BUILD"
+      - name: Wait until the studio serves this build
+        if: env.HOOK != ''
+        run: |
+          for i in $(seq 1 90); do
+            # /api/health stays open when the studio is password-protected and reports the bundle it serves.
+            live=$(curl -fsS -m 15 "${APP}api/health" 2>/dev/null | jq -r '.build // empty' || true)
+            if [ "$live" = "$BUILD" ]; then echo "Live: $APP serves $BUILD"; exit 0; fi
+            echo "  waiting (live: ${live:-unreachable}, want: $BUILD)"; sleep 10
+          done
+          echo "::error::$APP still serves ${live:-nothing} after 15 minutes. Check the deploy in Render's Events tab."
+          exit 1

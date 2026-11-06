@@ -48,7 +48,9 @@ For production: `npm run build && npm start` serves the built app and API on `PO
 - `HOOKKY_PASSWORD`: set this. Everyone who opens the URL uses your API keys, so the app asks for this password via the browser's sign-in prompt (any username). `/api/health` stays open for Render's health check.
 - `ANTHROPIC_API_KEY` for the Claude agent, plus any connector or transcription keys from the table below. Leave the rest blank and add them later under **Environment**.
 
-The Blueprint uses the `starter` plan so the service stays awake. Change `plan` to `free` to try it at no cost; free services sleep when idle and take a while to wake. The repo is private, so connect your GitHub account to Render first. Pushes to `main` redeploy automatically.
+The Blueprint uses the `starter` plan so the service stays awake. Change `plan` to `free` to try it at no cost; free services sleep when idle and take a while to wake. The repo is private, so connect your GitHub account to Render first.
+
+**Deploys from CI.** Every push to `main` deploys once the checks pass: the CI workflow calls the service's deploy hook, then waits until `/api/health` reports the new build (it stays readable behind the password). One-time setup: in Render open the service's **Settings → Deploy Hook** and copy the URL; in GitHub open **Settings → Secrets and variables → Actions → New repository secret**, name it `RENDER_DEPLOY_HOOK_URL` and paste the URL there. Until the secret exists the deploy step is skipped with a notice. Treat the hook URL like a password: anyone with it can trigger deploys.
 
 ### Landing page on GitHub Pages
 

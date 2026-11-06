@@ -2,6 +2,7 @@ import "./env";
 import express from "express";
 import multer from "multer";
 import path from "node:path";
+import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { runAgentTurn, claudeConfigured, resetConversation } from "./agent";
@@ -11,6 +12,14 @@ import { safeFetch, readLimited, BlockedUrlError } from "./safeFetch";
 import { transcribe, transcriptionProvider } from "./transcribe";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+/** The app bundle this server serves (lets CI confirm a deploy without signing in). */
+const build = (() => {
+  try {
+    return fs.readFileSync(path.join(here, "..", "dist", "index.html"), "utf8").match(/assets\/index-[A-Za-z0-9_-]+\.js/)?.[0];
+  } catch {
+    return undefined;
+  }
+})();
 
 const app = express();
 app.set("trust proxy", 1);
@@ -36,7 +45,7 @@ app.use(express.json({ limit: "40mb" }));
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 60 * 1024 * 1024 } });
 
 app.get("/api/health", (_req, res) => {
-  res.json({ agent: claudeConfigured() ? "claude" : "local", transcription: transcriptionProvider(), connectors: listConnectors() });
+  res.json({ agent: claudeConfigured() ? "claude" : "local", transcription: transcriptionProvider(), connectors: listConnectors(), ...(build && { build }) });
 });
 
 app.post("/api/agent", async (req, res) => {
