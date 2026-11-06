@@ -1,6 +1,7 @@
 // Visual-source connectors. Each returns normalized Asset records.
 // Keys come from environment variables; sources without keys report "unconfigured".
 import type { Asset } from "../src/types";
+import { safeFetch, readLimited } from "./safeFetch";
 
 const UA = "Hookky/0.1 (+https://localhost)";
 const env = (k: string) => process.env[k]?.trim() || "";
@@ -136,14 +137,14 @@ export async function searchVisuals(query: string, sources: string[] | undefined
 
 // ---------- URL import: works for Pinterest pins, Behance, Dribbble, product pages, etc.
 export async function importFromUrl(pageUrl: string, max = 16): Promise<{ assets: Asset[]; title?: string }> {
-  const u = assertPublicUrl(pageUrl);
-  const res = await fetch(u, { headers: { "User-Agent": "Mozilla/5.0 (compatible; Hookky/0.1)", Accept: "text/html,image/*" }, signal: AbortSignal.timeout(15000), redirect: "follow" });
+  const { res, url: u } = await safeFetch(pageUrl, { headers: { "User-Agent": "Mozilla/5.0 (compatible; Hookky/0.1)", Accept: "text/html,image/*" } });
   if (!res.ok) throw new Error(`Page responded ${res.status}`);
   const type = res.headers.get("content-type") || "";
   if (type.startsWith("image/")) {
+    await res.body?.cancel().catch(() => {});
     return { assets: [{ id: nid("url"), title: u.pathname.split("/").pop() || "image", src: u.href, thumb: u.href, source: "web", link: u.href, kind: "image" }] };
   }
-  const html = (await res.text()).slice(0, 2_000_000);
+  const html = (await readLimited(res, 5_000_000)).toString("utf8");
   const title = html.match(/<title[^>]*>([^<]{0,200})/i)?.[1]?.trim();
   const found = new Map<string, number>();
   const add = (raw: string | undefined, score: number) => {
@@ -166,15 +167,6 @@ export async function importFromUrl(pageUrl: string, max = 16): Promise<{ assets
     .slice(0, max)
     .map(([src]) => ({ id: nid("url"), title: title || u.hostname, src, thumb: src, source: `web:${u.hostname.replace(/^www\./, "")}`, link: u.href, kind: "image" as const }));
   return { assets, title };
-}
-
-export function assertPublicUrl(raw: string): URL {
-  const u = new URL(raw);
-  if (!/^https?:$/.test(u.protocol)) throw new Error("Only http(s) URLs are supported");
-  const h = u.hostname;
-  if (/^(localhost|127\.|10\.|192\.168\.|169\.254\.|0\.|\[?::1\]?$)/.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h) || h.endsWith(".internal") || h.endsWith(".local"))
-    throw new Error("Private addresses are not allowed");
-  return u;
 }
 
 // ---------- Magnific upscaler (via Freepik API): async task

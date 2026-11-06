@@ -5,7 +5,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { runAgentTurn, claudeConfigured, resetConversation } from "./agent";
-import { listConnectors, searchVisuals, importFromUrl, assertPublicUrl, magnificUpscale } from "./connectors";
+import { listConnectors, searchVisuals, importFromUrl, magnificUpscale } from "./connectors";
+import { safeFetch, readLimited, BlockedUrlError } from "./safeFetch";
 import { transcribe, transcriptionProvider } from "./transcribe";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -94,23 +95,28 @@ app.post("/api/transcribe", upload.single("audio"), async (req, res) => {
 const cache = new Map<string, { type: string; body: Buffer }>();
 app.get("/api/img", async (req, res) => {
   try {
-    const u = assertPublicUrl(String(req.query.u ?? ""));
-    let hit = cache.get(u.href);
+    const raw = String(req.query.u ?? "");
+    let hit = cache.get(raw);
     if (!hit) {
-      const r = await fetch(u, { headers: { "User-Agent": "Mozilla/5.0 (compatible; Hookky/0.1)", Referer: u.origin }, signal: AbortSignal.timeout(20000) });
+      const origin = (() => { try { return new URL(raw).origin; } catch { return ""; } })();
+      const { res: r } = await safeFetch(raw, { headers: { "User-Agent": "Mozilla/5.0 (compatible; Hookky/0.1)", ...(origin && { Referer: origin }) }, timeoutMs: 20000 });
       const type = r.headers.get("content-type") || "";
-      if (!r.ok || !type.startsWith("image/")) throw new Error(`Not an image (${r.status})`);
-      hit = { type, body: Buffer.from(await r.arrayBuffer()) };
+      if (!r.ok || !/^image\/(png|jpe?g|webp|gif|avif)/i.test(type)) {
+        await r.body?.cancel().catch(() => {});
+        throw new Error(`Not an image (${r.status})`);
+      }
+      hit = { type, body: await readLimited(r, 15_000_000) };
       if (hit.body.length < 12_000_000) {
-        cache.set(u.href, hit);
+        cache.set(raw, hit);
         if (cache.size > 300) cache.delete(cache.keys().next().value!);
       }
     }
     res.setHeader("Content-Type", hit.type);
     res.setHeader("Cache-Control", "public, max-age=86400");
+    res.setHeader("X-Content-Type-Options", "nosniff");
     res.end(hit.body);
   } catch (e: any) {
-    res.status(502).send(e.message);
+    res.status(e instanceof BlockedUrlError ? 400 : 502).send(e.message);
   }
 });
 
