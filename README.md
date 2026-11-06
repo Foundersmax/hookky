@@ -7,6 +7,8 @@
 
 # Hookky
 
+[![CI](https://github.com/Foundersmax/hookky/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Foundersmax/hookky/actions/workflows/ci.yml)
+
 AI motion-graphics studio for product ads and launches. Chat with a creative agent on the right; watch the animation build live in the centre, with scene, library, brand, voice and export panels on the left.
 
 - **Chat agent console**: describe a product, upload references or a voice-over, paste any link. The agent (Claude) storyboards, art-directs, and edits scenes using tools.
