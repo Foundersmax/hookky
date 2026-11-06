@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useStudio, setState, getState, undo, redo, updateProject, setBrand } from "./store";
 import { ChatPanel } from "./components/ChatPanel";
 import { Stage } from "./components/Stage";
-import { Timeline } from "./components/Timeline";
+import { Timeline, moveScene } from "./components/Timeline";
 import { SceneInspector } from "./components/SceneInspector";
 import { LibraryPanel } from "./components/LibraryPanel";
 import { BrandPanel } from "./components/BrandPanel";
@@ -129,6 +129,10 @@ export function App() {
       } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
         e.preventDefault();
         e.shiftKey ? redo() : undo();
+      } else if (e.altKey && (e.key === "ArrowRight" || e.key === "ArrowLeft")) {
+        e.preventDefault();
+        const i = getState().selected;
+        moveScene(i, i + (e.key === "ArrowRight" ? 1 : -1));
       } else if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
         const tl = timeline(getState().project.scenes);
         const i = Math.max(0, Math.min(tl.length - 1, getState().selected + (e.key === "ArrowRight" ? 1 : -1)));

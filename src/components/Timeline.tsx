@@ -16,6 +16,21 @@ const TEMPLATE_COLORS: Record<string, string> = {
   "logo-sting": "#F5A3FF", "cta-end": "#FF4D1A",
 };
 
+/** Move a scene to a new position (undoable) and keep it selected. */
+export function moveScene(from: number, to: number) {
+  const { scenes } = getState().project;
+  if (from === to || from < 0 || to < 0 || from >= scenes.length || to >= scenes.length) return;
+  updateProject((p) => {
+    const next = [...p.scenes];
+    const [s] = next.splice(from, 1);
+    next.splice(to, 0, s);
+    return { ...p, scenes: next };
+  });
+  const start = timeline(getState().project.scenes)[to].start;
+  setState({ selected: to });
+  clock.seek(start + 0.001);
+}
+
 export function Timeline() {
   const project = useStudio((s) => s.project);
   const selected = useStudio((s) => s.selected);
@@ -140,6 +155,76 @@ export function Timeline() {
     clock.seek(((e.clientX - r.left) / r.width) * total);
   };
 
+  // ---- drag to reorder: click selects; moving 4px+ starts a drag. Others slide aside to preview the drop.
+  const [drag, setDrag] = useState<{ id: string; from: number; to: number; blockStart: number } | null>(null);
+  const startDrag = (ev: React.PointerEvent, index: number) => {
+    if (ev.button !== 0) return;
+    ev.stopPropagation();
+    const scenes = getState().project.scenes;
+    const entry = timeline(scenes)[index];
+    setState({ selected: index });
+    clock.seek(entry.start + 0.001);
+    // Touch: a sideways swipe should scroll the timeline, so tapping only selects (reorder via the Scene panel).
+    if (scenes.length < 2 || ev.pointerType === "touch") return;
+    const content = viewport.current!.firstElementChild as HTMLElement;
+    const timeAt = (clientX: number) => (clientX - content.getBoundingClientRect().left) / pxs;
+    const grab = timeAt(ev.clientX) - entry.start;
+    const startX = ev.clientX;
+    const dur = entry.scene.duration;
+    const total = scenes.reduce((a, s) => a + s.duration, 0);
+    let dragging = false;
+    let lastX = ev.clientX;
+    let current = { to: index, blockStart: entry.start };
+    const update = (clientX: number) => {
+      const pointer = timeAt(clientX);
+      const blockStart = Math.min(Math.max(0, pointer - grab), Math.max(0, total - dur));
+      // insertion slot = how many of the other scenes have their midpoint left of the pointer
+      let t = 0, to = 0;
+      scenes.forEach((s, i) => {
+        if (i === index) return;
+        if (t + s.duration / 2 < pointer) to++;
+        t += s.duration;
+      });
+      current = { to, blockStart };
+      setDrag({ id: entry.scene.id, from: index, to, blockStart });
+    };
+    // auto-scroll when dragging near the viewport edges (zoomed timelines)
+    const edgeTimer = window.setInterval(() => {
+      if (!dragging) return;
+      const vp = viewport.current!;
+      const r = vp.getBoundingClientRect();
+      const d = lastX < r.left + 40 ? -14 : lastX > r.right - 40 ? 14 : 0;
+      if (d) {
+        vp.scrollLeft += d;
+        update(lastX);
+      }
+    }, 16);
+    const move = (e: PointerEvent) => {
+      lastX = e.clientX;
+      if (!dragging && Math.abs(e.clientX - startX) < 4) return;
+      dragging = true;
+      document.body.classList.add("tl-dragging");
+      update(e.clientX);
+    };
+    const end = (commit: boolean) => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", cancel);
+      window.removeEventListener("keydown", esc);
+      clearInterval(edgeTimer);
+      document.body.classList.remove("tl-dragging");
+      setDrag(null);
+      if (commit && dragging && current.to !== index) moveScene(index, current.to);
+    };
+    const up = () => end(true);
+    const cancel = () => end(false);
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && end(false);
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", cancel);
+    window.addEventListener("keydown", esc);
+  };
+
   const startResize = (e: React.PointerEvent, index: number) => {
     e.stopPropagation();
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
@@ -161,12 +246,25 @@ export function Timeline() {
     window.addEventListener("pointerup", up);
   };
 
+  // While dragging, lay scenes out in the previewed order; the dragged block follows the pointer.
+  const layout = (() => {
+    if (!drag) return tl;
+    const order = tl.filter((e) => e.scene.id !== drag.id);
+    order.splice(drag.to, 0, tl[drag.from]);
+    let t = 0;
+    return order.map((e) => {
+      const start = e.scene.id === drag.id ? drag.blockStart : t;
+      t += e.scene.duration;
+      return { ...e, start };
+    });
+  })();
+
   const zoomPct = maxZoom > 1 ? Math.log(zoom) / Math.log(maxZoom) : 0;
   return (
     <div className="timeline">
       <div className="tl-head">
         <span className="label">Timeline</span>
-        <span className="tiny tl-hint">⌘/Ctrl + scroll to zoom · double-click a scene to zoom to it</span>
+        <span className="tiny tl-hint">Drag scenes to reorder · ⌘/Ctrl + scroll to zoom · double-click to zoom to a scene</span>
         <span className="spacer" />
         <div className="tl-zoom" role="group" aria-label="Timeline zoom">
           <button className="btn icon ghost" title="Zoom out (-)" aria-label="Zoom out" disabled={zoom <= 1} onClick={() => zoomTo(zoom / 1.5)}>
@@ -202,18 +300,14 @@ export function Timeline() {
           </div>
           <div className="tl-track" ref={track} onPointerDown={seekFromEvent}>
             {zoom > 1 && tickTimes.map((t) => <i key={t} className="tl-grid" style={{ left: t * pxs }} />)}
-            {tl.map((e) => (
+            {layout.map((e) => (
               <div
                 key={e.scene.id}
-                className={`tl-scene ${selected === e.index ? "sel" : ""}`}
+                className={`tl-scene ${selected === e.index ? "sel" : ""} ${drag?.id === e.scene.id ? "dragging" : drag ? "shifting" : ""}`}
                 style={{ left: e.start * pxs + 2, width: Math.max(8, e.scene.duration * pxs - 4) }}
-                onPointerDown={(ev) => {
-                  ev.stopPropagation();
-                  setState({ selected: e.index });
-                  clock.seek(e.start + 0.001);
-                }}
+                onPointerDown={(ev) => startDrag(ev, e.index)}
                 onDoubleClick={() => zoomToScene(e.index)}
-                title={`${e.scene.template} · ${e.scene.duration.toFixed(1)}s · double-click to zoom`}
+                title={`${e.scene.template} · ${e.scene.duration.toFixed(1)}s · drag to reorder, double-click to zoom`}
               >
                 <i className="sw" style={{ background: TEMPLATE_COLORS[e.scene.template] }} />
                 <b>{stripMarks(e.scene.headline || e.scene.kicker || e.scene.cta || e.scene.template)}</b>

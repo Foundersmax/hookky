@@ -92,7 +92,7 @@ Conversation history is kept server-side and only ever appended to, so prompt ca
 
 ## Shortcuts
 
-`Space` play/pause · `F` focus on the canvas (hide both sidebars) · `Esc` leave fullscreen preview · `=` / `-` zoom the timeline, `0` fit it (or ⌘/Ctrl + scroll; double-click a scene to zoom to it) · `←/→` previous/next scene · `⌘Z / ⇧⌘Z` undo/redo · `Home` restart
+`Space` play/pause · `F` focus on the canvas (hide both sidebars) · `Esc` leave fullscreen preview · `=` / `-` zoom the timeline, `0` fit it (or ⌘/Ctrl + scroll; double-click a scene to zoom to it) · drag scenes on the timeline to reorder, or `Alt + ←/→` to move the selected scene · `←/→` previous/next scene · `⌘Z / ⇧⌘Z` undo/redo · `Home` restart
 
 ## Notes
 
