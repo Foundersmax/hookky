@@ -24,6 +24,21 @@ export function App() {
   const assets = useStudio((s) => s.assets);
   const [tab, setTab] = useState<(typeof TABS)[number]>("Scene");
   const [toastMsg, setToast] = useState<string | null>(null);
+  // Desktop panel visibility: hide either sidebar to give the canvas more room.
+  const [panels, setPanels] = useState<{ left: boolean; right: boolean }>(() => {
+    try {
+      return { left: true, right: true, ...JSON.parse(localStorage.getItem("hookky.panels") || "{}") };
+    } catch {
+      return { left: true, right: true };
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem("hookky.panels", JSON.stringify(panels));
+    } catch {}
+  }, [panels]);
+  const focused = !panels.left && !panels.right;
+  const toggleFocus = () => setPanels(focused ? { left: true, right: true } : { left: false, right: false });
   const [theme, setTheme] = useState<"dark" | "light" | null>(() => {
     try {
       return (localStorage.getItem("hookky.theme") as "dark" | "light") || null;
@@ -117,6 +132,7 @@ export function App() {
         setState({ selected: i });
         clock.seek(tl[i].start + 0.001);
       } else if (e.key === "Home") clock.seek(0);
+      else if (e.key.toLowerCase() === "f" && !e.metaKey && !e.ctrlKey && !e.altKey) setPanels((p) => (!p.left && !p.right ? { left: true, right: true } : { left: false, right: false }));
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -144,6 +160,17 @@ export function App() {
             </option>
           ))}
         </select>
+        <div className="panel-toggles">
+          <button className={`btn icon ghost ${panels.left ? "on" : ""}`} title={panels.left ? "Hide panels" : "Show panels"} aria-pressed={panels.left} onClick={() => setPanels((p) => ({ ...p, left: !p.left }))}>
+            <Icon name="panelLeft" />
+          </button>
+          <button className={`btn icon ghost ${focused ? "on" : ""}`} title={focused ? "Exit focus (F)" : "Focus on the canvas (F)"} aria-pressed={focused} onClick={toggleFocus}>
+            <Icon name="focus" />
+          </button>
+          <button className={`btn icon ghost ${panels.right ? "on" : ""}`} title={panels.right ? "Hide chat" : "Show chat"} aria-pressed={panels.right} onClick={() => setPanels((p) => ({ ...p, right: !p.right }))}>
+            <Icon name="panelRight" />
+          </button>
+        </div>
         <button className="btn icon ghost" title="Undo (⌘Z)" onClick={undo}>
           <Icon name="undo" />
         </button>
@@ -157,7 +184,7 @@ export function App() {
           <Icon name="download" /> Export
         </button>
       </header>
-      <div className="main">
+      <div className={`main ${panels.left ? "" : "hide-left"} ${panels.right ? "" : "hide-right"}`}>
         <ChatPanel />
         <section className="workspace">
           <div className="center">

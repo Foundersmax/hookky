@@ -19,6 +19,9 @@ const paths: Record<string, string> = {
   sun: "M12 7a5 5 0 110 10 5 5 0 010-10zM12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4",
   up: "M12 19V5M6 11l6-6 6 6",
   down: "M12 5v14M6 13l6 6 6-6",
+  panelLeft: "M4 5h16v14H4zM9.5 5v14",
+  panelRight: "M4 5h16v14H4zM14.5 5v14",
+  focus: "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5",
   wand: "M15 4V2M15 10V8M11 6H9M21 6h-2M18 3l-1.5 1.5M18 9l-1.5-1.5M3 21l11-11",
 };
 

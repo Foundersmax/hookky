@@ -27,7 +27,7 @@ export function Stage() {
     const ro = new ResizeObserver(() => {
       const r = el.getBoundingClientRect();
       const narrow = window.innerWidth <= 900; // stacked layout: size from width, cap at 70% of the screen
-      const pad = narrow ? 24 : 48;
+      const pad = narrow ? 24 : 32;
       const availW = r.width - pad;
       const availH = narrow ? window.innerHeight * 0.7 : r.height - pad;
       const s = Math.min(availW / W, availH / H);
@@ -60,9 +60,6 @@ export function Stage() {
   return (
     <>
       <div className="stage" ref={wrap}>
-        <span className="badge">
-          {project.aspect} · {W}×{H} · scene {cur ? cur.index + 1 : 0}/{tl.length} · {cur?.scene.template}
-        </span>
         <canvas ref={canvas} style={{ width: box.w, height: box.h }} onClick={() => clock.toggle()} />
       </div>
       <div className="transport">
@@ -75,6 +72,9 @@ export function Stage() {
         <button className={`btn icon ghost`} title="Loop" style={{ color: c.loop ? "var(--text)" : "var(--text-3)" }} onClick={() => ((clock.loop = !clock.loop), clock.seek(clock.time))}>
           <Icon name="loop" />
         </button>
+        <span className="scene-info">
+          Scene {cur ? cur.index + 1 : 0}/{tl.length} · {cur?.scene.template} · {W}×{H}
+        </span>
         <span className="spacer" />
         <label className="toggle">
           <input type="checkbox" checked={project.captions} onChange={(e) => updateProject((p) => ({ ...p, captions: e.target.checked }))} />
