@@ -10,6 +10,7 @@ const paths: Record<string, string> = {
   download: "M12 4v11M7 10l5 5 5-5M5 20h14",
   sparkle: "M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z",
   plus: "M12 5v14M5 12h14",
+  minus: "M5 12h14",
   trash: "M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13",
   copy: "M8 8h11v11H8zM5 16V5h11",
   link: "M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1",

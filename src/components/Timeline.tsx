@@ -1,8 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useStudio, setState, getState, updateProject } from "../store";
 import { timeline, totalDuration } from "../engine/render";
 import { clock, useClock } from "../clock";
 import { stripMarks } from "../engine/text";
+import { Icon } from "./Icon";
+
+const TICK_STEPS = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120];
+const fmtTick = (t: number, step: number) =>
+  t >= 60 ? `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2, "0")}` : `${step < 1 ? +t.toFixed(2) : Math.round(t)}s`;
+const MAX_CANVAS_PX = 30000; // stay under browsers' canvas width limit
 
 const TEMPLATE_COLORS: Record<string, string> = {
   "title-reveal": "#8B6CFF", "kinetic-words": "#C8FF3D", "product-hero": "#FF8A3D", "split-feature": "#3DB8FF", "feature-list": "#3DFFB1",
@@ -16,23 +22,97 @@ export function Timeline() {
   const c = useClock();
   const track = useRef<HTMLDivElement>(null);
   const wave = useRef<HTMLCanvasElement>(null);
-  const [width, setWidth] = useState(800);
+  const viewport = useRef<HTMLDivElement>(null);
+  const [viewW, setViewW] = useState(800);
   const total = Math.max(totalDuration(project), project.audio?.duration ?? 0, 0.1);
-  const pxs = width / total;
   const tl = timeline(project.scenes);
 
+  // Zoom: 1 = whole project fits the view. Content gets wider and the view scrolls.
+  const dpr = window.devicePixelRatio || 1;
+  const maxZoom = Math.max(1, Math.min(40, MAX_CANVAS_PX / Math.max(1, viewW * dpr), (total * 300) / Math.max(1, viewW)));
+  const [zoomRaw, setZoomRaw] = useState(1);
+  const zoom = Math.min(Math.max(1, zoomRaw), maxZoom);
+  const width = Math.round(viewW * zoom);
+  const pxs = width / total;
+  const anchor = useRef<{ t: number; x: number } | null>(null);
+
   useEffect(() => {
-    const ro = new ResizeObserver(([e]) => setWidth(e.contentRect.width));
-    ro.observe(track.current!);
+    const ro = new ResizeObserver(([e]) => setViewW(e.contentRect.width));
+    ro.observe(viewport.current!);
     return () => ro.disconnect();
   }, []);
+
+  /** Zoom keeping time `t` under viewport x-offset `x` (defaults: playhead, or view centre). */
+  const zoomTo = (z: number, t?: number, x?: number) => {
+    const vp = viewport.current!;
+    const curPxs = width / total;
+    const ax = x ?? (t !== undefined ? vp.clientWidth / 2 : Math.min(Math.max(clock.time * curPxs - vp.scrollLeft, 0), vp.clientWidth) || vp.clientWidth / 2);
+    const at = t ?? (vp.scrollLeft + ax) / curPxs;
+    anchor.current = { t: at, x: ax };
+    setZoomRaw(Math.min(Math.max(1, z), maxZoom));
+  };
+  useLayoutEffect(() => {
+    const a = anchor.current;
+    if (!a || !viewport.current) return;
+    viewport.current.scrollLeft = Math.max(0, a.t * pxs - a.x);
+    anchor.current = null;
+  }, [pxs]);
+
+  // ⌘/Ctrl + wheel (and trackpad pinch) zooms around the cursor; needs a non-passive listener.
+  const zoomRef = useRef({ zoom, zoomTo });
+  zoomRef.current = { zoom, zoomTo };
+  useEffect(() => {
+    const vp = viewport.current!;
+    const onWheel = (e: WheelEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      e.preventDefault();
+      const x = e.clientX - vp.getBoundingClientRect().left;
+      const { zoom, zoomTo } = zoomRef.current;
+      zoomTo(zoom * Math.exp(-e.deltaY * 0.004), undefined, x);
+    };
+    vp.addEventListener("wheel", onWheel, { passive: false });
+    return () => vp.removeEventListener("wheel", onWheel);
+  }, []);
+
+  // = / - / 0 keys, ignored while typing
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement;
+      if (el.isContentEditable || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || (el.tagName === "INPUT" && !["range", "checkbox", "radio", "button", "color"].includes((el as HTMLInputElement).type))) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const { zoom, zoomTo } = zoomRef.current;
+      if (e.key === "=" || e.key === "+") zoomTo(zoom * 1.5);
+      else if (e.key === "-" || e.key === "_") zoomTo(zoom / 1.5);
+      else if (e.key === "0") zoomTo(1);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // Keep the playhead in view during playback when zoomed in.
+  useLayoutEffect(() => {
+    const vp = viewport.current;
+    if (!vp || zoom <= 1 || !c.playing) return;
+    const x = c.time * pxs;
+    if (x < vp.scrollLeft || x > vp.scrollLeft + vp.clientWidth - 24) vp.scrollLeft = Math.max(0, x - vp.clientWidth * 0.1);
+  });
+
+  const zoomToScene = (i: number) => {
+    const e = tl[i];
+    if (!e) return;
+    const z = (total / e.scene.duration) * 0.6;
+    zoomTo(z, e.start + e.scene.duration / 2);
+  };
+
+  // ruler: pick a tick step that keeps labels at least ~70px apart
+  const step = TICK_STEPS.find((s) => s * pxs >= 70) ?? TICK_STEPS[TICK_STEPS.length - 1];
+  const tickTimes = Array.from({ length: Math.floor(total / step) + 1 }, (_, i) => +(i * step).toFixed(3));
 
   // waveform
   useEffect(() => {
     const cv = wave.current;
     const a = project.audio;
     if (!cv || !a) return;
-    const dpr = window.devicePixelRatio || 1;
     cv.width = width * dpr;
     cv.height = 40 * dpr;
     const ctx = cv.getContext("2d")!;
@@ -53,7 +133,7 @@ export function Timeline() {
       ctx.fillStyle = css.getPropertyValue("--accent").trim() || "#c8ff3d";
       for (const w of a.words) ctx.fillRect(w.s * pxs, 36, Math.max(1, (w.e - w.s) * pxs - 1), 3);
     }
-  }, [project.audio, width, pxs]);
+  }, [project.audio, width, pxs, dpr]);
 
   const seekFromEvent = (e: React.PointerEvent | React.MouseEvent) => {
     const r = track.current!.getBoundingClientRect();
@@ -81,39 +161,74 @@ export function Timeline() {
     window.addEventListener("pointerup", up);
   };
 
-  const ticks = Math.min(12, Math.ceil(total / 5));
+  const zoomPct = maxZoom > 1 ? Math.log(zoom) / Math.log(maxZoom) : 0;
   return (
     <div className="timeline">
-      <div className="ruler">
-        {Array.from({ length: ticks + 1 }, (_, i) => (
-          <span key={i}>{((total / ticks) * i).toFixed(0)}s</span>
-        ))}
+      <div className="tl-head">
+        <span className="label">Timeline</span>
+        <span className="tiny tl-hint">⌘/Ctrl + scroll to zoom · double-click a scene to zoom to it</span>
+        <span className="spacer" />
+        <div className="tl-zoom" role="group" aria-label="Timeline zoom">
+          <button className="btn icon ghost" title="Zoom out (-)" aria-label="Zoom out" disabled={zoom <= 1} onClick={() => zoomTo(zoom / 1.5)}>
+            <Icon name="minus" />
+          </button>
+          <input
+            type="range"
+            aria-label="Zoom level"
+            min={0}
+            max={1}
+            step={0.001}
+            value={zoomPct}
+            disabled={maxZoom <= 1}
+            onChange={(e) => zoomTo(Math.pow(maxZoom, +e.target.value))}
+          />
+          <button className="btn icon ghost" title="Zoom in (=)" aria-label="Zoom in" disabled={zoom >= maxZoom} onClick={() => zoomTo(zoom * 1.5)}>
+            <Icon name="plus" />
+          </button>
+          <span className="tl-zoom-val">{zoom < 10 ? zoom.toFixed(1) : Math.round(zoom)}×</span>
+          <button className="btn ghost tl-fit" title="Fit the whole timeline (0)" disabled={zoom <= 1} onClick={() => zoomTo(1)}>
+            Fit
+          </button>
+        </div>
       </div>
-      <div className="tl-track" ref={track} onPointerDown={seekFromEvent}>
-        {tl.map((e) => (
-          <div
-            key={e.scene.id}
-            className={`tl-scene ${selected === e.index ? "sel" : ""}`}
-            style={{ left: e.start * pxs + 2, width: Math.max(8, e.scene.duration * pxs - 4) }}
-            onPointerDown={(ev) => {
-              ev.stopPropagation();
-              setState({ selected: e.index });
-              clock.seek(e.start + 0.001);
-            }}
-            title={`${e.scene.template} · ${e.scene.duration.toFixed(1)}s`}
-          >
-            <i className="sw" style={{ background: TEMPLATE_COLORS[e.scene.template] }} />
-            <b>{stripMarks(e.scene.headline || e.scene.kicker || e.scene.cta || e.scene.template)}</b>
-            <span>
-              {e.index + 1} · {e.scene.template} · {e.scene.duration.toFixed(1)}s
-            </span>
-            <div className="tl-handle" onPointerDown={(ev) => startResize(ev, e.index)} />
+      <div className="tl-viewport" ref={viewport}>
+        <div className="tl-content" style={{ width }}>
+          <div className="ruler" onPointerDown={seekFromEvent}>
+            {tickTimes.map((t) => (
+              <span key={t} style={{ left: t * pxs }} className={t === 0 ? "first" : ""}>
+                {fmtTick(t, step)}
+              </span>
+            ))}
           </div>
-        ))}
-        <div className="playhead" style={{ left: (c.time / total) * width - 1 }} />
-      </div>
-      <div className="tl-audio" onPointerDown={seekFromEvent}>
-        {project.audio ? <canvas ref={wave} /> : <div className="empty">Drop a voice-over in the chat or the Voice tab to sync the animation</div>}
+          <div className="tl-track" ref={track} onPointerDown={seekFromEvent}>
+            {zoom > 1 && tickTimes.map((t) => <i key={t} className="tl-grid" style={{ left: t * pxs }} />)}
+            {tl.map((e) => (
+              <div
+                key={e.scene.id}
+                className={`tl-scene ${selected === e.index ? "sel" : ""}`}
+                style={{ left: e.start * pxs + 2, width: Math.max(8, e.scene.duration * pxs - 4) }}
+                onPointerDown={(ev) => {
+                  ev.stopPropagation();
+                  setState({ selected: e.index });
+                  clock.seek(e.start + 0.001);
+                }}
+                onDoubleClick={() => zoomToScene(e.index)}
+                title={`${e.scene.template} · ${e.scene.duration.toFixed(1)}s · double-click to zoom`}
+              >
+                <i className="sw" style={{ background: TEMPLATE_COLORS[e.scene.template] }} />
+                <b>{stripMarks(e.scene.headline || e.scene.kicker || e.scene.cta || e.scene.template)}</b>
+                <span>
+                  {e.index + 1} · {e.scene.template} · {e.scene.duration.toFixed(1)}s
+                </span>
+                <div className="tl-handle" onPointerDown={(ev) => startResize(ev, e.index)} />
+              </div>
+            ))}
+            <div className="playhead" style={{ left: c.time * pxs - 1 }} />
+          </div>
+          <div className="tl-audio" onPointerDown={seekFromEvent}>
+            {project.audio ? <canvas ref={wave} style={{ width }} /> : <div className="empty">Drop a voice-over in the chat or the Voice tab to sync the animation</div>}
+          </div>
+        </div>
       </div>
     </div>
   );
