@@ -23,7 +23,7 @@ jobs:
           echo "== CAA"; dig +short CAA rookker.com @1.1.1.1
       - name: HTTP and HTTPS
         run: |
-          for u in http://rookker.com/ https://rookker.com/ https://www.rookker.com/ https://app.rookker.com/api/health https://hookky.onrender.com/api/health; do
+          for u in http://rookker.com/ https://rookker.com/ https://www.rookker.com/ https://app.rookker.com/ https://app.rookker.com/api/health https://hookky.onrender.com/api/health; do
             echo "== $u"
             curl -sS -m 20 -o body.txt -D headers.txt -w '  status %{http_code} · ip %{remote_ip} · redirect %{redirect_url}\n' "$u" || echo "  request failed (exit $?)"
             grep -iE '^(server|location|cf-ray|x-github-request-id):' headers.txt | sed 's/^/  /' || true
