@@ -33,6 +33,17 @@ It runs with **no keys at all**. Without `ANTHROPIC_API_KEY` a built-in *local d
 
 For production: `npm run build && npm start` serves the built app and API on `PORT`.
 
+### Deploy to Render
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Foundersmax/hookky)
+
+`render.yaml` defines one Node web service that builds the app and serves it with the API. Click the button (or in Render: **New → Blueprint** and pick this repo). Render asks for each secret when it creates the service:
+
+- `HOOKKY_PASSWORD`: set this. Everyone who opens the URL uses your API keys, so the app asks for this password via the browser's sign-in prompt (any username). `/api/health` stays open for Render's health check.
+- `ANTHROPIC_API_KEY` for the Claude agent, plus any connector or transcription keys from the table below. Leave the rest blank and add them later under **Environment**.
+
+The Blueprint uses the `starter` plan so the service stays awake. Change `plan` to `free` to try it at no cost; free services sleep when idle and take a while to wake. The repo is private, so connect your GitHub account to Render first. Pushes to `main` redeploy automatically.
+
 ### Hosted on claude.ai
 
 `npm run build:artifact` packs the app into one page (`dist-artifact/hookky.html`) that runs as a claude.ai Artifact with no server:
@@ -47,6 +58,7 @@ The app picks its mode at startup: Hookky server if `/api/health` answers, other
 
 | Variable | Unlocks |
 |---|---|
+| `HOOKKY_PASSWORD` | Password-protects a deploy (browser sign-in prompt, any username). Recommended on any public URL. |
 | `ANTHROPIC_API_KEY` | The Claude creative agent (default model `claude-opus-5-5`, override with `CLAUDE_MODEL`). It uses vision on your uploads and web search for research (`CLAUDE_WEB_SEARCH=off` to disable). |
 | `UNSPLASH_ACCESS_KEY`, `PEXELS_API_KEY` | Free stock photo search |
 | `FREEPIK_API_KEY` | Freepik stock search **and** the Magnific upscaler (Magnific's API is served through Freepik) |

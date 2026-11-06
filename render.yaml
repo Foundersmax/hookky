@@ -1,0 +1,43 @@
+# Render Blueprint for Hookky: one Node web service that serves the built app and the API.
+# Deploy: Render dashboard → New → Blueprint → pick this repo (or use the README button).
+# Render asks for every `sync: false` value when the Blueprint is first created;
+# leave optional ones blank and add them later under the service's Environment tab.
+services:
+  - type: web
+    name: hookky
+    runtime: node
+    # "free" sleeps after inactivity and has a cold start; "starter" stays up.
+    plan: starter
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # --- access: strongly recommended, since visitors spend your API credits
+      - key: HOOKKY_PASSWORD
+        sync: false
+      # --- the Claude creative agent (without it, the local director is used)
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: CLAUDE_MODEL
+        value: claude-opus-5-5
+      - key: CLAUDE_WEB_SEARCH
+        value: "on"
+      # --- visual sources (optional; Openverse and link import need no key)
+      - key: UNSPLASH_ACCESS_KEY
+        sync: false
+      - key: PEXELS_API_KEY
+        sync: false
+      - key: FREEPIK_API_KEY
+        sync: false
+      - key: ENVATO_TOKEN
+        sync: false
+      - key: PINTEREST_ACCESS_TOKEN
+        sync: false
+      # --- voice-over transcription (optional; otherwise paste the script)
+      - key: DEEPGRAM_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false

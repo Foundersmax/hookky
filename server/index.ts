@@ -3,6 +3,7 @@ import express from "express";
 import multer from "multer";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { runAgentTurn, claudeConfigured, resetConversation } from "./agent";
 import { listConnectors, searchVisuals, importFromUrl, assertPublicUrl, magnificUpscale } from "./connectors";
 import { transcribe, transcriptionProvider } from "./transcribe";
@@ -10,6 +11,25 @@ import { transcribe, transcriptionProvider } from "./transcribe";
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
+app.set("trust proxy", 1);
+
+// Optional password gate for public deploys: set HOOKKY_PASSWORD and the whole app
+// (pages and API) asks for it via the browser's sign-in prompt. Any username works.
+// The health check stays open so the host can probe it.
+const password = process.env.HOOKKY_PASSWORD?.trim();
+if (password) {
+  const digest = (v: string) => createHash("sha256").update(v).digest();
+  const expected = digest(password);
+  app.use((req, res, next) => {
+    if (req.path === "/api/health") return next();
+    const [scheme, encoded] = (req.headers.authorization ?? "").split(" ");
+    const given = scheme === "Basic" && encoded ? Buffer.from(encoded, "base64").toString("utf8").split(":").slice(1).join(":") : "";
+    if (given && timingSafeEqual(digest(given), expected)) return next();
+    res.setHeader("WWW-Authenticate", 'Basic realm="Hookky", charset="UTF-8"');
+    res.status(401).send("Sign in to use Hookky.");
+  });
+}
+
 app.use(express.json({ limit: "40mb" }));
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 60 * 1024 * 1024 } });
 
@@ -102,5 +122,6 @@ if (process.env.NODE_ENV === "production") {
 
 const port = Number(process.env.PORT || 8787);
 app.listen(port, () => {
+  if (process.env.NODE_ENV === "production" && !password) console.warn("HOOKKY_PASSWORD is not set: anyone with the URL can use this deploy and its API keys.");
   console.log(`Hookky API on http://localhost:${port}  ·  agent: ${claudeConfigured() ? "Claude" : "local director"}  ·  transcription: ${transcriptionProvider()}`);
 });
