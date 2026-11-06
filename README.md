@@ -7,7 +7,7 @@
 
 # Hookky
 
-AI motion-graphics studio for product ads and launches. Chat with a creative agent on the left; watch the animation build live on the right.
+AI motion-graphics studio for product ads and launches. Chat with a creative agent on the right; watch the animation build live in the centre, with scene, library, brand, voice and export panels on the left.
 
 - **Chat agent console**: describe a product, upload references or a voice-over, paste any link. The agent (Claude) storyboards, art-directs, and edits scenes using tools.
 - **Live workspace**: a custom canvas motion engine with 13 minimal, modern templates, 8 transitions, brand presets, a scrubbable timeline, and a scene inspector.
