@@ -6,6 +6,15 @@ import { sentences } from "../audio/analyze";
 import { localDirector } from "./localDirector";
 import { toAgentImage } from "../engine/images";
 import { hostedTurn } from "./hosted";
+import { sanitizeBrand } from "../sanitize";
+import { lintStoryboard } from "./lint";
+
+/** Director's notes for the current project. */
+export function currentNotes() {
+  const { project: p, assets } = getState();
+  const audio = p.audio && { duration: p.audio.duration, pauses: p.audio.pauses, hasWords: !!p.audio.words?.length };
+  return lintStoryboard({ scenes: p.scenes, brand: p.brand, assetIds: new Set(assets.map((a) => a.id)), audio });
+}
 
 /** Compact snapshot of the studio the agent sees each turn. */
 function studioState() {
@@ -22,6 +31,7 @@ function studioState() {
     scenes: p.scenes.map(({ id, ...s }, i) => ({ index: i, ...s })),
     assets: assets.slice(-60).map((a) => ({ id: a.id, title: a.title.slice(0, 60), source: a.source, kind: a.kind, w: a.w, h: a.h, palette: a.palette })),
     voiceover: vo || null,
+    director_notes: currentNotes().slice(0, 10).map((n) => `[${n.level}] ${n.message}`),
   };
 }
 
@@ -142,7 +152,7 @@ function handle(ev: AgentEvent, id: string) {
       applyPatch(ev.ops);
       break;
     case "brand":
-      setBrand(ev.brand);
+      setBrand(sanitizeBrand(ev.brand));
       break;
     case "settings":
       updateProject((p) => ({ ...p, ...ev.settings }));

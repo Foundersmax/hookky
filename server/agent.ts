@@ -6,6 +6,11 @@ import { TEMPLATES, TRANSITIONS, BACKGROUNDS } from "../src/types";
 import { STYLE_PRESETS } from "../src/presets";
 import { searchVisuals, importFromUrl } from "./connectors";
 import { directorPrompt } from "../src/agent/prompt";
+import { lintStoryboard, notesForAgent } from "../src/agent/lint";
+import { buildScenes, patchScenes, brandWithStyle, type Timing } from "../src/storyboard";
+import { sanitizeScene, sanitizeBrand } from "../src/sanitize";
+import { presetById } from "../src/presets";
+import type { Brand, Scene } from "../src/types";
 
 const MODEL = process.env.CLAUDE_MODEL || "claude-opus-5-5";
 let webSearchEnabled = (process.env.CLAUDE_WEB_SEARCH || "on").toLowerCase() !== "off";
@@ -158,6 +163,7 @@ export async function runAgentTurn(input: TurnInput, res: Response) {
   content.push({ type: "text", text: `<studio_state>\n${JSON.stringify(input.state)}\n</studio_state>` });
   content.push({ type: "text", text: input.text || "(no message)" });
   history.push({ role: "user", content });
+  const shadow = new Shadow(input.state);
 
   let closed = false;
   res.on("close", () => (closed = true));
@@ -181,7 +187,7 @@ export async function runAgentTurn(input: TurnInput, res: Response) {
       toolUses.map(async (tu): Promise<Anthropic.Beta.BetaToolResultBlockParam> => {
         if (truncated) return { type: "tool_result", tool_use_id: tu.id, is_error: true, content: "Output was truncated before this call finished. Retry with a more compact call." };
         try {
-          return { type: "tool_result", tool_use_id: tu.id, content: await runTool(tu.name, tu.input, send) };
+          return { type: "tool_result", tool_use_id: tu.id, content: await runTool(tu.name, tu.input, send, shadow) };
         } catch (e: any) {
           return { type: "tool_result", tool_use_id: tu.id, is_error: true, content: String(e?.message ?? e) };
         }
@@ -238,38 +244,83 @@ function toolLabel(name: string) {
   )[name] ?? name;
 }
 
-async function runTool(name: string, input: unknown, send: (e: AgentEvent) => void): Promise<string> {
+/**
+ * The server's copy of the storyboard for this turn. The browser applies the real edits; the
+ * server applies the same edits here so it can review the result and hand Claude its notes.
+ */
+class Shadow {
+  scenes: Scene[];
+  brand: Brand;
+  style: string;
+  assetIds: Set<string>;
+  audio?: Timing & { hasWords: boolean };
+
+  constructor(state: any) {
+    const st = state && typeof state === "object" ? state : {};
+    this.scenes = (Array.isArray(st.scenes) ? st.scenes : []).map((x: unknown) => sanitizeScene(x));
+    this.style = typeof st.project?.style === "string" ? st.project.style : "noir";
+    const preset = presetById(this.style);
+    this.brand = { name: "", ...preset.brand, ...sanitizeBrand(st.project?.brand) } as Brand;
+    this.assetIds = new Set((Array.isArray(st.assets) ? st.assets : []).map((a: any) => String(a?.id)));
+    const vo = st.voiceover;
+    if (vo && typeof vo.duration === "number") {
+      const pauses = (Array.isArray(vo.pauses) ? vo.pauses : []).filter((x: any) => Array.isArray(x)).map(([s, e]: number[]) => ({ s: Number(s), e: Number(e) }));
+      this.audio = { duration: vo.duration, pauses, hasWords: Array.isArray(vo.sentences) && vo.sentences.length > 0 };
+    }
+  }
+  review() {
+    return notesForAgent(lintStoryboard({ scenes: this.scenes, brand: this.brand, assetIds: this.assetIds, audio: this.audio }));
+  }
+}
+
+async function runTool(name: string, input: unknown, send: (e: AgentEvent) => void, shadow: Shadow): Promise<string> {
   const i = input as any;
   switch (name) {
     case "create_storyboard": {
       const p = ZStoryboard.safeParse(input);
       if (!p.success) throw new Error(`Invalid storyboard: ${p.error.issues.slice(0, 3).map((x) => `${x.path.join(".")} ${x.message}`).join("; ")}`);
       send({ type: "storyboard", storyboard: p.data as any });
-      const total = p.data.scenes.reduce((a, s) => a + s.duration, 0);
-      return `Storyboard applied: ${p.data.scenes.length} scenes, ${total.toFixed(1)}s${i.fit_to_voiceover ? " (fitted to voice-over)" : ""}. The user is previewing it now.`;
+      if (typeof i.style === "string") {
+        shadow.style = i.style;
+        shadow.brand = brandWithStyle(shadow.brand, i.style);
+      }
+      shadow.scenes = buildScenes(p.data as any, presetById(shadow.style).defaultBackground, shadow.audio);
+      const total = shadow.scenes.reduce((a, s) => a + s.duration, 0);
+      return `Storyboard applied: ${shadow.scenes.length} scenes, ${total.toFixed(1)}s${shadow.audio && i.fit_to_voiceover !== false ? " (fitted to the voice-over)" : ""}. The user is previewing it now.\n\n${shadow.review()}`;
     }
     case "update_scenes": {
       const p = ZPatch.safeParse(input);
       if (!p.success) throw new Error("Invalid ops");
       send({ type: "patch", ops: p.data.ops as any });
-      return `Applied ${p.data.ops.length} edit(s).`;
+      shadow.scenes = patchScenes(shadow.scenes, p.data.ops as any);
+      return `Applied ${p.data.ops.length} edit(s).\n\n${shadow.review()}`;
     }
     case "set_brand": {
       const { aspect, captions, ...brand } = i ?? {};
-      if (Object.keys(brand).length) send({ type: "brand", brand });
+      const clean = sanitizeBrand(brand);
+      if (Object.keys(clean).length) send({ type: "brand", brand: clean });
+      if (clean.style) {
+        shadow.style = clean.style;
+        shadow.brand = brandWithStyle(shadow.brand, clean.style);
+      }
+      const { style: _s, ...colours } = clean;
+      shadow.brand = { ...shadow.brand, ...colours };
       if (aspect || typeof captions === "boolean") send({ type: "settings", settings: { ...(aspect && { aspect }), ...(typeof captions === "boolean" && { captions }) } });
-      return "Brand updated.";
+      const ignored = Object.keys(brand).filter((k) => !(k in clean));
+      return `Brand updated.${ignored.length ? ` Ignored invalid values for: ${ignored.join(", ")} (colours must be #RGB or #RRGGBB hex).` : ""}\n\n${shadow.review()}`;
     }
     case "search_visuals": {
       const { assets, notes } = await searchVisuals(String(i.query ?? ""), i.sources, Math.min(24, i.count ?? 12));
       const tagged = assets.map((a) => ({ ...a, id: `asset:${a.id}` }));
       if (tagged.length) send({ type: "assets", assets: tagged });
+      for (const a of tagged) shadow.assetIds.add(a.id);
       return JSON.stringify({ found: tagged.map((a) => ({ id: a.id, title: a.title.slice(0, 80), source: a.source, w: a.w, h: a.h })), notes });
     }
     case "import_url": {
       const { assets, title } = await importFromUrl(String(i.url));
       const tagged = assets.map((a) => ({ ...a, id: `asset:${a.id}` }));
       if (tagged.length) send({ type: "assets", assets: tagged });
+      for (const a of tagged) shadow.assetIds.add(a.id);
       return JSON.stringify({ page: title, found: tagged.map((a) => ({ id: a.id, src: a.src.slice(0, 120) })) });
     }
   }
@@ -279,3 +330,6 @@ async function runTool(name: string, input: unknown, send: (e: AgentEvent) => vo
 export function resetConversation(id: string) {
   conversations.delete(id);
 }
+
+/** Internals exposed for unit tests only. */
+export const __test = { Shadow, runTool };

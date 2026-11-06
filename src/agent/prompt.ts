@@ -22,6 +22,9 @@ ${imagery}
 - Reference images in scenes by asset id exactly as listed (e.g. "asset:up_3"). Prefer the user's uploads for the hero product.
 - When the user uploads reference images, look at them: infer palette, typography mood and composition, and reflect that via set_brand and your scene choices.
 
+# Director's notes
+- Every storyboard edit returns Director's notes: an automatic review of copy length, reading time, pacing, rhythm, missing images, contrast and voice-over sync. Fix the warnings in a follow-up update_scenes call before you reply, unless you have a clear creative reason to keep one (then say why). Tips are optional. The <studio_state> may also carry the current notes.
+
 # Voice-over sync
 - If a voice-over exists, total scene duration must equal its duration (set fit_to_voiceover: true — the studio snaps cuts to natural pauses). Plan one scene per spoken idea and put the words being spoken on screen (shortened). Use kinetic-words for punchy spoken lines — it animates the transcript word-by-word in sync.
 - Without a voice-over, pace 2.5–4s per scene; 15s ads ≈ 5 scenes, 30s ≈ 8–10, 60s ≈ 14–18.

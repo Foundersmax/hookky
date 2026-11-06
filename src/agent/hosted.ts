@@ -7,8 +7,17 @@ import { getState, applyStoryboard, applyPatch, setBrand, updateProject } from "
 import { totalDuration } from "../engine/render";
 import { sampleCap, sampleLimits } from "../host";
 import { directorPrompt } from "./prompt";
+import { sanitizeBrand } from "../sanitize";
+import { lintStoryboard, notesForAgent } from "./lint";
 
 const SCENE_FIELDS = `Each scene: {template (${TEMPLATES.join("|")}), duration (s), kicker?, headline? (*word* = accent), subline?, items?: string[], stat?: {value, prefix?, suffix?, decimals?, label?}, image?: asset id, images?: asset ids, cta?, url?, author?, background? (${BACKGROUNDS.join("|")}), align? (left|center), transition? (${TRANSITIONS.join("|")}), motion? (calm|snappy|bouncy), accent? (hex)}`;
+
+/** Director's notes on the live project, for tool results. */
+function review() {
+  const { project: p, assets } = getState();
+  const audio = p.audio && { duration: p.audio.duration, pauses: p.audio.pauses, hasWords: !!p.audio.words?.length };
+  return notesForAgent(lintStoryboard({ scenes: p.scenes, brand: p.brand, assetIds: new Set(assets.map((a) => a.id)), audio }));
+}
 
 const asObj = (v: unknown) => (v && typeof v === "object" ? (v as Record<string, any>) : {});
 
@@ -32,7 +41,7 @@ export const hostedTools = (activity: (label: string) => void) => [
       const scenes = Array.isArray(input.scenes) ? input.scenes.map(asObj).filter((s) => s.template) : [];
       if (!scenes.length) throw new Error("scenes must be a non-empty array of scene objects with a template");
       applyStoryboard({ title: input.title as string, aspect: input.aspect as any, style: input.style as string, fit_to_voiceover: input.fit_to_voiceover as boolean, scenes: scenes as any });
-      return `Applied ${scenes.length} scenes, ${totalDuration(getState().project).toFixed(1)}s total.`;
+      return `Applied ${scenes.length} scenes, ${totalDuration(getState().project).toFixed(1)}s total.\n\n${review()}`;
     },
   },
   {
@@ -48,7 +57,7 @@ export const hostedTools = (activity: (label: string) => void) => [
       const ops = (Array.isArray(input.ops) ? input.ops : []).map(asObj).filter((o) => ["update", "insert", "delete", "move"].includes(o.op) && Number.isFinite(Number(o.index)));
       if (!ops.length) throw new Error("ops must contain at least one valid op");
       applyPatch(ops.map((o) => ({ ...o, index: Number(o.index), to: Number(o.to ?? 0), scene: asObj(o.scene) })) as any);
-      return `Applied ${ops.length} edit(s).`;
+      return `Applied ${ops.length} edit(s).\n\n${review()}`;
     },
   },
   {
@@ -66,10 +75,10 @@ export const hostedTools = (activity: (label: string) => void) => [
     execute(input: Record<string, unknown>) {
       activity("Setting brand");
       const { aspect, captions, ...brand } = input as Record<string, any>;
-      const clean = Object.fromEntries(Object.entries(brand).filter(([, v]) => typeof v === "string" && v));
+      const clean = sanitizeBrand(brand);
       if (Object.keys(clean).length) setBrand(clean);
       if (aspect || typeof captions === "boolean") updateProject((p) => ({ ...p, ...(aspect && { aspect }), ...(typeof captions === "boolean" && { captions }) }));
-      return "Brand updated.";
+      return `Brand updated.\n\n${review()}`;
     },
   },
 ];

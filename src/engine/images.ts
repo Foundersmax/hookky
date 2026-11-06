@@ -4,7 +4,12 @@ import type { Asset } from "../types";
 export class ImageStore {
   private cache = new Map<string, HTMLImageElement | "loading" | "error">();
   assets = new Map<string, Asset>();
-  onLoad: () => void = () => {};
+  private loadListeners = new Set<() => void>();
+  /** Subscribe to "an image finished loading". Returns an unsubscribe function. */
+  listen(fn: () => void) {
+    this.loadListeners.add(fn);
+    return () => void this.loadListeners.delete(fn);
+  }
 
   setAssets(list: Asset[]) {
     this.assets = new Map(list.map((a) => [a.id, a]));
@@ -30,7 +35,7 @@ export class ImageStore {
       im.decoding = "async";
       im.onload = () => {
         this.cache.set(src, im);
-        this.onLoad();
+        this.loadListeners.forEach((fn) => fn());
       };
       im.onerror = () => this.cache.set(src, "error");
       im.src = src;

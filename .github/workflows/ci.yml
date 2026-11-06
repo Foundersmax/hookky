@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Type-check
+        run: npm run typecheck
+      - name: Unit tests (cleaning, storyboard ops, director's notes, URL safety)
+        run: npm test
+      - name: Build the app and the hosted page
+        run: npm run build && node scripts/build-artifact.mjs
+      - name: Install Chromium for the engine test
+        run: npx playwright install --with-deps chromium
+      - name: Engine smoke test (every template × format × background, plus fuzzing)
+        run: npm run test:engine

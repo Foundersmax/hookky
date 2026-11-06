@@ -10,6 +10,8 @@ import { VoicePanel } from "./components/VoicePanel";
 import { ExportPanel } from "./components/ExportPanel";
 import { Icon } from "./components/Icon";
 import { Logo } from "./components/Logo";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+import { ShortcutsSheet } from "./components/ShortcutsSheet";
 import { clock } from "./clock";
 import { images } from "./runtime";
 import { STYLE_PRESETS, FONT_CHOICES } from "./presets";
@@ -24,6 +26,7 @@ export function App() {
   const assets = useStudio((s) => s.assets);
   const [tab, setTab] = useState<(typeof TABS)[number]>("Scene");
   const [toastMsg, setToast] = useState<string | null>(null);
+  const [showKeys, setShowKeys] = useState(false);
   // Desktop panel visibility: hide either sidebar to give the canvas more room.
   const [panels, setPanels] = useState<{ left: boolean; right: boolean }>(() => {
     try {
@@ -47,6 +50,12 @@ export function App() {
     }
   });
 
+  const notice = useStudio((s) => s.notice);
+  useEffect(() => {
+    if (!notice) return;
+    toast(notice);
+    setState({ notice: undefined });
+  }, [notice]);
   const toast = (s: string) => {
     setToast(s);
     window.clearTimeout((toast as any).t);
@@ -122,6 +131,11 @@ export function App() {
       const type = (e.target as HTMLInputElement).type;
       const typing = tag === "TEXTAREA" || tag === "SELECT" || (tag === "INPUT" && !["range", "checkbox", "radio", "button", "color"].includes(type)) || (e.target as HTMLElement).isContentEditable;
       if (typing) return;
+      if (e.key === "?") {
+        e.preventDefault();
+        setShowKeys(true);
+        return;
+      }
       if (e.code === "Space") {
         e.preventDefault();
         if (tag === "BUTTON" || tag === "INPUT") (e.target as HTMLElement).blur(); // stop the focused control also reacting on keyup
@@ -184,6 +198,9 @@ export function App() {
         <button className="btn icon ghost" title="Redo (⇧⌘Z)" onClick={redo}>
           <Icon name="redo" />
         </button>
+        <button className="btn icon ghost" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts" onClick={() => setShowKeys(true)}>
+          <Icon name="keyboard" />
+        </button>
         <button className="btn icon ghost" title="Toggle theme" onClick={() => setTheme((t) => ((t ?? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")) === "dark" ? "light" : "dark"))}>
           <Icon name="sun" />
         </button>
@@ -192,11 +209,17 @@ export function App() {
         </button>
       </header>
       <div className={`main ${panels.left ? "" : "hide-left"} ${panels.right ? "" : "hide-right"}`}>
-        <ChatPanel />
+        <ErrorBoundary area="chat" className="chat">
+          <ChatPanel />
+        </ErrorBoundary>
         <section className="workspace">
           <div className="center">
-            <Stage />
-            <Timeline />
+            <ErrorBoundary area="preview">
+              <Stage />
+            </ErrorBoundary>
+            <ErrorBoundary area="timeline">
+              <Timeline />
+            </ErrorBoundary>
           </div>
           <aside className="side">
             <nav className="tabs">
@@ -207,16 +230,19 @@ export function App() {
               ))}
             </nav>
             <div className="side-body">
-              {tab === "Scene" && <SceneInspector />}
-              {tab === "Library" && <LibraryPanel toast={toast} />}
-              {tab === "Brand" && <BrandPanel />}
-              {tab === "Voice" && <VoicePanel toast={toast} />}
-              {tab === "Export" && <ExportPanel toast={toast} />}
+              <ErrorBoundary area={`${tab} panel`} key={tab}>
+                {tab === "Scene" && <SceneInspector />}
+                {tab === "Library" && <LibraryPanel toast={toast} />}
+                {tab === "Brand" && <BrandPanel />}
+                {tab === "Voice" && <VoicePanel toast={toast} />}
+                {tab === "Export" && <ExportPanel toast={toast} />}
+              </ErrorBoundary>
             </div>
           </aside>
         </section>
       </div>
       {toastMsg && <div className="toast">{toastMsg}</div>}
+      {showKeys && <ShortcutsSheet onClose={() => setShowKeys(false)} />}
     </div>
   );
 }

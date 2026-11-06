@@ -93,9 +93,7 @@ export function Stage() {
   }, [box, W, H]);
 
   const draw = () => renderer.current?.render(getState().project, clock.time, images.get);
-  useEffect(() => {
-    images.onLoad = draw;
-  }, []);
+  useEffect(() => images.listen(draw), []);
   useEffect(() => {
     clock.duration = totalDuration(project);
     draw();

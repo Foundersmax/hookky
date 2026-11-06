@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
-import { useStudio, getState, setState, defaultProject } from "../store";
+import { useStudio, getState, setState, defaultProject, updateProject } from "../store";
+import { sanitizeProject } from "../sanitize";
 import type { Aspect, Project } from "../types";
 import { ASPECT_SIZE } from "../types";
 import { exportVideo, download, pickMime, posterPng } from "../export";
@@ -90,9 +91,10 @@ export function ExportPanel({ toast }: { toast: (s: string) => void }) {
           const f = e.target.files?.[0];
           if (!f) return;
           try {
-            const p = JSON.parse(await f.text()) as Project;
-            if (!Array.isArray(p.scenes)) throw new Error("Not a Hookky project");
-            setState({ project: { ...defaultProject(), ...p, audio: undefined } });
+            const p = JSON.parse(await f.text());
+            if (!Array.isArray(p?.scenes) || !p.scenes.length) throw new Error("That file isn't a Hookky project.");
+            updateProject(() => sanitizeProject(p, defaultProject()));
+            setState({ selected: 0 });
             toast("Project loaded");
           } catch (err: any) {
             toast(err.message);

@@ -68,11 +68,34 @@ The app picks its mode at startup: Hookky server if `/api/health` answers, other
 
 Openverse (800M+ openly licensed images) and URL import need no key.
 
+## Built to hold up
+
+- **Director's notes.** Every storyboard is reviewed automatically: copy length, reading time, pacing, a hook in the first 3 seconds, template repetition, missing images, contrast, and voice-over sync (total length and cuts that land mid-speech). Notes show in the Scene panel and on the timeline, Claude receives them after each edit and fixes the warnings itself, and **Fix with the agent** hands the rest over.
+- **Nothing the agent sends can break the preview.** Scenes from Claude, files and old saves pass through a strict cleaner (`src/sanitize.ts`), and a per-scene render guard turns any drawing error into a quiet placeholder instead of a frozen canvas.
+- **Crash recovery.** The chat, preview, timeline and each side panel have their own error boundary: a bug in one shows a "Reload this panel" card while the rest keeps working.
+- **Durable autosave.** The project, asset library, chat and the voice-over and music files are saved to IndexedDB (hundreds of MB, not the ~5 MB of localStorage) and restored on reload. Photos are stored as JPEG unless they have transparency. If the browser refuses to save, the studio says so.
+
+## Tests
+
+```bash
+npm test             # unit tests: cleaning, storyboard ops, timing, director's notes, server agent tools, URL safety
+```
+
+```bash
+npm run test:engine  # renders every template × format × background × motion × transition, plus 300 fuzzed scenes, in Chromium
+```
+
+GitHub Actions (`.github/workflows/ci.yml`) runs type-check, unit tests, both builds and the engine test on every push and pull request.
+
 ## How it works
 
 ```
 src/
-  engine/render.ts     canvas renderer: templates, transitions, backgrounds, captions, grain
+  engine/render.ts     canvas renderer: templates, transitions, backgrounds, captions, grain, render guard
+  sanitize.ts          strict cleaning of scenes, brands and projects from any source
+  storyboard.ts        pure storyboard ops (build, patch, fit/snap to voice-over), shared with the server
+  agent/lint.ts        Director's notes: the storyboard reviewer
+  persist.ts           IndexedDB autosave, including voice-over and music files
   engine/text.ts       rich-text layout (*emphasis*), auto-fit, masked line reveals
   audio/analyze.ts     waveform, pause detection, script→word alignment
   agent/client.ts      streams the agent (SSE) and applies its tool calls to the project
@@ -98,4 +121,4 @@ Conversation history is kept server-side and only ever appended to, so prompt ca
 
 - Remote images go through `/api/img` (same-origin proxy) so they can be drawn and exported. Only public http(s) hosts are allowed.
 - Check the licence of each reference before you publish. Each library card shows its source and links back to it.
-- Uploaded images persist in browser storage. Audio files do not persist; re-upload the VO after a reload.
+- Everything autosaves in this browser (IndexedDB). Use **Export → Save project** to move a project to another browser or machine; the voice-over and music aren't included in that file.

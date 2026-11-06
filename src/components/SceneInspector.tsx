@@ -1,4 +1,4 @@
-import { useStudio, updateProject, setState, normalizeScene } from "../store";
+import { useStudio, updateProject, setState, normalizeScene, editedScene } from "../store";
 import { TEMPLATES, TRANSITIONS, BACKGROUNDS, type Scene } from "../types";
 import { timeline } from "../engine/render";
 import { stripMarks } from "../engine/text";
@@ -6,6 +6,7 @@ import { clock } from "../clock";
 import { sendToAgent } from "../agent/client";
 import { uid } from "../engine/util";
 import { Icon } from "./Icon";
+import { DirectorNotes } from "./DirectorNotes";
 
 const USES: Record<string, (keyof Scene)[]> = {
   "title-reveal": ["kicker", "headline", "subline", "align"],
@@ -30,7 +31,7 @@ export function SceneInspector() {
   const scene = project.scenes[sel];
   const uses = USES[scene?.template] ?? [];
 
-  const edit = (patch: Partial<Scene>) => updateProject((p) => ({ ...p, scenes: p.scenes.map((s, i) => (i === sel ? normalizeScene({ ...s, ...patch }, s.id) : s)) }));
+  const edit = (patch: Partial<Scene>) => updateProject((p) => ({ ...p, scenes: p.scenes.map((s, i) => (i === sel ? editedScene({ ...s, ...patch }) : s)) }));
   const select = (i: number) => {
     setState({ selected: i });
     clock.seek(timeline(project.scenes)[i].start + 0.001);
@@ -49,6 +50,7 @@ export function SceneInspector() {
 
   return (
     <>
+      <DirectorNotes />
       <div className="scene-list">
         {project.scenes.map((s, i) => (
           <div key={s.id} className={`scene-row ${i === sel ? "on" : ""}`} onClick={() => select(i)}>

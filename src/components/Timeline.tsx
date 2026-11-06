@@ -4,6 +4,8 @@ import { timeline, totalDuration } from "../engine/render";
 import { clock, useClock } from "../clock";
 import { stripMarks } from "../engine/text";
 import { Icon } from "./Icon";
+import { useNotes } from "./DirectorNotes";
+import { useThumbs } from "./thumbs";
 
 const TICK_STEPS = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120];
 const fmtTick = (t: number, step: number) =>
@@ -41,6 +43,10 @@ export function Timeline() {
   const [viewW, setViewW] = useState(800);
   const total = Math.max(totalDuration(project), project.audio?.duration ?? 0, 0.1);
   const tl = timeline(project.scenes);
+  const notes = useNotes();
+  const { thumbs, width: thumbW } = useThumbs(project);
+  const sceneWarn = new Map<number, string>();
+  for (const n of notes) if (n.level === "warn" && n.scene !== null && !sceneWarn.has(n.scene)) sceneWarn.set(n.scene, n.message);
 
   // Zoom: 1 = whole project fits the view. Content gets wider and the view scrolls.
   const dpr = window.devicePixelRatio || 1;
@@ -377,13 +383,18 @@ export function Timeline() {
             {layout.map((e) => (
               <div
                 key={e.scene.id}
+                data-thumb={thumbs.has(e.scene.id) && e.scene.duration * pxs - 4 >= thumbW + 64 ? "" : undefined}
                 className={`tl-scene ${selected === e.index ? "sel" : ""} ${drag?.id === e.scene.id ? "dragging" : drag ? "shifting" : ""}`}
-                style={{ left: e.start * pxs + 2, width: Math.max(8, e.scene.duration * pxs - 4) }}
+                style={{ left: e.start * pxs + 2, width: Math.max(8, e.scene.duration * pxs - 4), ["--thumb-w" as string]: `${thumbW}px` }}
                 onPointerDown={(ev) => startDrag(ev, e.index)}
                 onDoubleClick={() => zoomToScene(e.index)}
                 title={`${e.scene.template} · ${e.scene.duration.toFixed(1)}s · drag to reorder, double-click to zoom`}
               >
                 <i className="sw" style={{ background: TEMPLATE_COLORS[e.scene.template] }} />
+                {thumbs.has(e.scene.id) && e.scene.duration * pxs - 4 >= thumbW + 64 && (
+                  <img className="tl-thumb" src={thumbs.get(e.scene.id)} alt="" draggable={false} style={{ width: thumbW }} />
+                )}
+                {sceneWarn.has(e.index) && <i className="tl-warn" title={sceneWarn.get(e.index)} aria-label="Has a director's note" />}
                 <b>{stripMarks(e.scene.headline || e.scene.kicker || e.scene.cta || e.scene.template)}</b>
                 <span>
                   {e.index + 1} · {e.scene.template} · {e.scene.duration.toFixed(1)}s

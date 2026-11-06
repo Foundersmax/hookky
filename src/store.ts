@@ -3,6 +3,9 @@ import type { Asset, AudioTrack, Brand, ChatMessage, PatchOp, Project, Scene, St
 import { TEMPLATES, TRANSITIONS, BACKGROUNDS } from "./types";
 import { presetById } from "./presets";
 import { uid, clamp } from "./engine/util";
+import { sanitizeScene, sanitizeProject } from "./sanitize";
+import { buildScenes, patchScenes, brandWithStyle } from "./storyboard";
+import { loadSaved, save as saveStudio, markRestored, requestPersistence } from "./persist";
 
 export interface StudioState {
   project: Project;
@@ -13,10 +16,11 @@ export interface StudioState {
   playing: boolean;
   conversationId: string;
   busy: boolean;
+  /** one-off message for the toast */
+  notice?: string;
   health?: { agent: "claude" | "hosted" | "local"; transcription: string; connectors: { id: string; label: string; configured: boolean; kind: string; note: string }[] };
 }
 
-const STORAGE_KEY = "hookky.v1";
 
 export function defaultProject(): Project {
   const preset = presetById("noir");
@@ -30,24 +34,12 @@ export function defaultProject(): Project {
     grain: true,
     scenes: [
       { id: uid(), template: "shape-burst", duration: 2.2, background: "dots", transition: "cut" },
-      { id: uid(), template: "title-reveal", duration: 3.2, kicker: "Introducing", headline: "Motion, *made simple.*", subline: "Describe your product. Drop a voice-over. Watch it move.", background: "dots", transition: "circle" },
-      { id: uid(), template: "feature-list", duration: 3.6, kicker: "How it works", headline: "Three steps", items: ["Chat your *brief*", "Pull references from anywhere", "Sync to your *voice-over*"], background: "solid", transition: "push-up" },
+      { id: uid(), template: "title-reveal", duration: 4.3, kicker: "Introducing", headline: "Motion, *made simple.*", subline: "Describe it. Add a voice-over. Watch it move.", background: "dots", transition: "circle" },
+      { id: uid(), template: "feature-list", duration: 5, kicker: "How it works", headline: "Three steps", items: ["Chat your *brief*", "Pull references from anywhere", "Sync to your *voice-over*"], background: "solid", transition: "push-up" },
       { id: uid(), template: "stat-counter", duration: 2.8, kicker: "Render time", stat: { value: 60, suffix: "s", label: "From idea to animated ad" }, background: "invert", transition: "wipe" },
       { id: uid(), template: "cta-end", duration: 3.4, headline: "Start *creating*", cta: "Open the studio", url: "hookky.app", background: "blobs", transition: "zoom" },
     ],
   };
-}
-
-function load(): Partial<StudioState> {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return {};
-    const s = JSON.parse(raw);
-    if (s.project?.audio) delete s.project.audio; // blob URLs don't survive reloads
-    return { project: s.project, assets: (s.assets ?? []).filter((a: Asset) => !a.src.startsWith("blob:")), chat: s.chat ?? [] };
-  } catch {
-    return {};
-  }
 }
 
 let state: StudioState = {
@@ -59,8 +51,30 @@ let state: StudioState = {
   playing: false,
   conversationId: uid("c"),
   busy: false,
-  ...load(),
 };
+
+/**
+ * Restore the last session before the first render: project (cleaned), assets, chat, and the
+ * voice-over / music files. Never throws; a damaged save falls back to the demo project.
+ */
+export async function hydrate() {
+  const { saved, audioBlob, musicBlob } = await loadSaved().catch(() => ({ saved: {} as Record<string, any>, audioBlob: undefined, musicBlob: undefined }));
+  const raw = (saved.project ?? null) as Record<string, any> | null;
+  const patch: Partial<StudioState> = {};
+  if (raw && Array.isArray(raw.scenes)) {
+    const project = sanitizeProject(raw, defaultProject());
+    if (audioBlob && raw.audio && typeof raw.audio.duration === "number") {
+      project.audio = { ...raw.audio, url: URL.createObjectURL(audioBlob) };
+    }
+    if (musicBlob && raw.music) project.music = { name: String(raw.music.name ?? "music"), volume: Number(raw.music.volume) || 0.25, url: URL.createObjectURL(musicBlob) };
+    patch.project = project;
+    markRestored(project.audio?.url, project.music?.url);
+  }
+  if (Array.isArray(saved.assets)) patch.assets = (saved.assets as Asset[]).filter((a) => a && typeof a.src === "string" && !a.src.startsWith("blob:"));
+  if (Array.isArray(saved.chat)) patch.chat = (saved.chat as ChatMessage[]).filter((m) => m && typeof m.text === "string");
+  state = { ...state, ...patch };
+  requestPersistence();
+}
 
 // ---------------------------------------------------------------- undo history (project only)
 const past: Project[] = [];
@@ -81,16 +95,24 @@ export function setState(patch: Partial<StudioState> | ((s: StudioState) => Part
   }
   state = { ...state, ...p };
   listeners.forEach((l) => l());
-  if (p.project || p.assets || p.chat) {
-    clearTimeout(saveTimer);
-    saveTimer = window.setTimeout(() => {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ project: state.project, assets: state.assets.slice(-200), chat: state.chat.slice(-60).map((m) => ({ ...m, pending: false })) }));
-      } catch {
-        /* storage full or blocked — non-fatal */
-      }
-    }, 400);
-  }
+  if (p.project || p.assets || p.chat) scheduleSave();
+}
+
+let saveFailed = false;
+function scheduleSave() {
+  clearTimeout(saveTimer);
+  saveTimer = window.setTimeout(() => {
+    saveStudio(state.project, state.assets, state.chat).then(
+      () => {
+        if (saveFailed) setState({ notice: "Saving works again." });
+        saveFailed = false;
+      },
+      () => {
+        if (!saveFailed) setState({ notice: "Couldn't save your project: this browser's storage is full or blocked. Save a copy from Export → Save project." });
+        saveFailed = true;
+      },
+    );
+  }, 500);
 }
 export function useStudio<T>(sel: (s: StudioState) => T): T {
   return useSyncExternalStore(
@@ -116,12 +138,15 @@ export function updateProject(fn: (p: Project) => Project) {
   setState((s) => ({ project: fn(s.project) }), { history: true });
 }
 
-export function normalizeScene(s: Partial<Scene>, keepId?: string): Scene {
+/** Strict clean for scenes from Claude, the local director, patches and files. */
+export const normalizeScene = (s: Partial<Scene> | unknown, keepId?: string): Scene => sanitizeScene(s, keepId);
+
+/** Light check for edits typed in the Scene panel: keeps spaces and blank lines while typing. */
+export function editedScene(s: Scene): Scene {
   return {
     ...s,
-    id: keepId ?? s.id ?? uid(),
-    template: (TEMPLATES as readonly string[]).includes(s.template as string) ? (s.template as Scene["template"]) : "title-reveal",
     duration: clamp(Number(s.duration) || 3, 0.8, 15),
+    template: (TEMPLATES as readonly string[]).includes(s.template) ? s.template : "title-reveal",
     transition: (TRANSITIONS as readonly string[]).includes(s.transition as string) ? s.transition : "fade",
     background: (BACKGROUNDS as readonly string[]).includes(s.background as string) ? s.background : undefined,
   };
@@ -131,35 +156,18 @@ export function applyStoryboard(sb: StoryboardInput) {
   updateProject((p) => {
     let next: Project = { ...p, title: sb.title ?? p.title, aspect: sb.aspect ?? p.aspect };
     if (sb.style) next = withStyle(next, sb.style);
-    const def = presetById(next.style).defaultBackground;
-    let scenes = sb.scenes.map((s) => normalizeScene({ background: def, ...s }));
-    if (scenes[0]) scenes[0].transition = "cut";
-    if (p.audio && sb.fit_to_voiceover !== false) scenes = fitToVoiceover(scenes, p.audio);
-    return { ...next, scenes };
+    return { ...next, scenes: buildScenes(sb, presetById(next.style).defaultBackground, p.audio) };
   });
   setState({ selected: 0, time: 0 });
 }
 
 export function applyPatch(ops: PatchOp[]) {
-  updateProject((p) => {
-    const scenes = [...p.scenes];
-    for (const o of ops) {
-      const i = clamp(Math.round(o.index), 0, Math.max(0, scenes.length - (o.op === "insert" ? 0 : 1)));
-      if (o.op === "update" && scenes[i]) scenes[i] = normalizeScene({ ...scenes[i], ...o.scene }, scenes[i].id);
-      else if (o.op === "insert") scenes.splice(i, 0, normalizeScene(o.scene as Scene));
-      else if (o.op === "delete" && scenes.length > 1) scenes.splice(i, 1);
-      else if (o.op === "move" && scenes[i]) {
-        const [s] = scenes.splice(i, 1);
-        scenes.splice(clamp(o.to, 0, scenes.length), 0, s);
-      }
-    }
-    return { ...p, scenes };
-  });
+  updateProject((p) => ({ ...p, scenes: patchScenes(p.scenes, ops) }));
 }
 
 export function withStyle(p: Project, styleId: string): Project {
   const pr = presetById(styleId);
-  return { ...p, style: pr.id, brand: { ...p.brand, ...pr.brand, name: p.brand.name, logo: p.brand.logo } };
+  return { ...p, style: pr.id, brand: brandWithStyle(p.brand, styleId) };
 }
 
 export function setBrand(b: Partial<Brand> & { style?: string }) {
@@ -171,51 +179,7 @@ export function setBrand(b: Partial<Brand> & { style?: string }) {
   });
 }
 
-/** Scale scenes to the VO length, then snap each cut to the nearest natural pause. */
-/** Points where a cut sounds natural: the middle of each pause, plus the end of the voice-over. */
-export function snapPoints(audio: AudioTrack): number[] {
-  return [...audio.pauses.map((p) => +((p.s + p.e) / 2).toFixed(2)), +audio.duration.toFixed(2)];
-}
-
-/** Move each cut onto the nearest pause within `maxShift` seconds, keeping scene order and roughly the same lengths. */
-export function snapCutsToPauses(scenes: Scene[], audio: AudioTrack, maxShift = 0.75): { scenes: Scene[]; moved: number } {
-  const points = snapPoints(audio);
-  let t = 0, prev = 0, moved = 0;
-  const out = scenes.map((s, i) => {
-    t += s.duration;
-    let end = t;
-    if (i < scenes.length - 1 || Math.abs(t - audio.duration) <= maxShift) {
-      let best = Infinity;
-      for (const m of points) if (Math.abs(m - t) <= maxShift && Math.abs(m - t) < Math.abs(best - t) && m - prev >= 0.8) best = m;
-      if (best !== Infinity && Math.abs(best - t) > 0.005) (end = best), moved++;
-    }
-    const d = +(end - prev).toFixed(2);
-    prev = end;
-    return { ...s, duration: d };
-  });
-  return { scenes: out, moved };
-}
-
-export function fitToVoiceover(scenes: Scene[], audio: AudioTrack): Scene[] {
-  const total = scenes.reduce((a, s) => a + s.duration, 0) || 1;
-  const k = audio.duration / total;
-  let t = 0;
-  const cuts = scenes.map((s) => (t += s.duration * k));
-  const mids = audio.pauses.map((p) => (p.s + p.e) / 2);
-  const snapped = cuts.map((c, i) => {
-    if (i === cuts.length - 1) return audio.duration;
-    let best = c, bd = 0.7;
-    for (const m of mids) if (Math.abs(m - c) < bd) (bd = Math.abs(m - c)), (best = m);
-    return best;
-  });
-  let prev = 0;
-  return scenes.map((s, i) => {
-    const end = Math.max(prev + 0.8, snapped[i]);
-    const d = +(end - prev).toFixed(2);
-    prev = end;
-    return { ...s, duration: d };
-  });
-}
+export { snapPoints, snapCutsToPauses, fitToVoiceover } from "./storyboard";
 
 export function addAssets(list: Asset[]) {
   setState((s) => {

@@ -149,10 +149,31 @@ export class Renderer {
     ctx.beginPath();
     ctx.rect(0, 0, W, H);
     ctx.clip();
-    drawBackground(g);
-    (TEMPLATES[scene.template] ?? TEMPLATES["title-reveal"])(g);
+    try {
+      drawBackground(g);
+      (TEMPLATES[scene.template] ?? TEMPLATES["title-reveal"])(g);
+    } catch (err) {
+      // One broken scene must never stop the preview or an export: draw a quiet placeholder.
+      // A template that threw may have left saves/clips unbalanced, so clear all state where supported.
+      const c2 = ctx as CanvasRenderingContext2D & { reset?: () => void };
+      if (c2.reset) c2.reset();
+      else ctx.restore();
+      ctx.save();
+      ctx.setTransform(this.scale, 0, 0, this.scale, 0, 0);
+      ctx.fillStyle = p.brand.bg;
+      ctx.fillRect(0, 0, W, H);
+      drawLabel(ctx, "This scene couldn't be drawn. Edit it or ask the agent to rebuild it.", { family: p.brand.fontBody, weight: 500, size: 26 * g.u }, W / 2, H / 2, "center", p.brand.muted);
+      reportOnce(scene, err);
+    }
     ctx.restore();
   }
+}
+
+const reported = new WeakSet<Scene>();
+function reportOnce(scene: Scene, err: unknown) {
+  if (reported.has(scene)) return;
+  reported.add(scene);
+  console.error(`Hookky: scene "${scene.id}" (${scene.template}) failed to render`, err);
 }
 
 // ---------------------------------------------------------------- colours per scene

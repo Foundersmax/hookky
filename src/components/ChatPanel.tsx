@@ -43,10 +43,22 @@ async function downscaleToDataUrl(f: File, max: number): Promise<string> {
     c.width = Math.round(im.naturalWidth * s);
     c.height = Math.round(im.naturalHeight * s);
     c.getContext("2d")!.drawImage(im, 0, 0, c.width, c.height);
-    // keep transparency for PNG/SVG (logos, cut-out products)
-    return /png|svg|webp/.test(f.type) ? c.toDataURL("image/png") : c.toDataURL("image/jpeg", 0.9);
+    // Keep PNG only when the image really has transparent areas (logos, cut-out products);
+    // photos become high-quality JPEG, several times smaller to store and to send to Claude.
+    return /png|svg|webp|gif/.test(f.type) && hasTransparency(c) ? c.toDataURL("image/png") : c.toDataURL("image/jpeg", 0.9);
   } finally {
     URL.revokeObjectURL(url);
+  }
+}
+
+function hasTransparency(c: HTMLCanvasElement) {
+  try {
+    const step = Math.max(1, Math.floor(Math.max(c.width, c.height) / 128));
+    const d = c.getContext("2d")!.getImageData(0, 0, c.width, c.height).data;
+    for (let y = 0; y < c.height; y += step) for (let x = 0; x < c.width; x += step) if (d[(y * c.width + x) * 4 + 3] < 250) return true;
+    return false;
+  } catch {
+    return true; // can't inspect: keep PNG to be safe
   }
 }
 
