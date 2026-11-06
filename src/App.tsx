@@ -15,6 +15,7 @@ import { images } from "./runtime";
 import { STYLE_PRESETS, FONT_CHOICES } from "./presets";
 import type { Aspect } from "./types";
 import { timeline } from "./engine/render";
+import { sampleCap } from "./host";
 
 const TABS = ["Scene", "Library", "Brand", "Voice", "Export"] as const;
 
@@ -23,11 +24,11 @@ export function App() {
   const assets = useStudio((s) => s.assets);
   const [tab, setTab] = useState<(typeof TABS)[number]>("Scene");
   const [toastMsg, setToast] = useState<string | null>(null);
-  const [theme, setTheme] = useState<"dark" | "light">(() => {
+  const [theme, setTheme] = useState<"dark" | "light" | null>(() => {
     try {
-      return (localStorage.getItem("hookky.theme") as "dark" | "light") || "dark";
+      return (localStorage.getItem("hookky.theme") as "dark" | "light") || null;
     } catch {
-      return "dark";
+      return null;
     }
   });
 
@@ -38,6 +39,7 @@ export function App() {
   };
 
   useEffect(() => {
+    if (!theme) return; // follow the system / host theme
     document.documentElement.dataset.theme = theme;
     try {
       localStorage.setItem("hookky.theme", theme);
@@ -49,11 +51,17 @@ export function App() {
     fetch("/api/health")
       .then((r) => r.json())
       .then((health) => setState({ health }))
-      .catch(() => setState({ health: { agent: "local", transcription: "none", connectors: [] } }));
+      .catch(async () => {
+        // No Hookky server: on claude.ai the page can still call Claude itself.
+        const sample = await sampleCap;
+        setState({ health: { agent: sample ? "hosted" : "local", transcription: "none", connectors: [] } });
+      });
   }, []);
 
-  // load all canvas fonts, then redraw
+  // load all canvas fonts, then redraw. Open a moment into the first scene so the stage starts on a composed frame.
   useEffect(() => {
+    clock.duration = Math.max(clock.duration, 1.2);
+    clock.seek(1.2);
     Promise.all(FONT_CHOICES.flatMap((f) => [document.fonts.load(`400 40px "${f}"`), document.fonts.load(`700 40px "${f}"`)])).then(() => clock.seek(clock.time));
   }, []);
 
@@ -142,7 +150,7 @@ export function App() {
         <button className="btn icon ghost" title="Redo (⇧⌘Z)" onClick={redo}>
           <Icon name="redo" />
         </button>
-        <button className="btn icon ghost" title="Toggle theme" onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}>
+        <button className="btn icon ghost" title="Toggle theme" onClick={() => setTheme((t) => ((t ?? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")) === "dark" ? "light" : "dark"))}>
           <Icon name="sun" />
         </button>
         <button className="btn primary" onClick={() => setTab("Export")}>

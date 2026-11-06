@@ -12,7 +12,8 @@ const STARTERS = [
   { t: "30s launch ad for a minimalist smartwatch", s: "\"Orbit\" — titanium, 10-day battery, sleep coaching. Swiss style, pre-order CTA." },
   { t: "Vertical reel for a skincare drop", s: "Blush style, 9:16, soft and premium, captions on." },
   { t: "Turn my voice-over into motion graphics", s: "Upload a 30–60s VO and I'll storyboard it in sync." },
-  { t: "Find references on Pinterest & Freepik", s: "Moodboard for matte-black audio gear, studio lighting." },
+  { t: "Find references on Pinterest & Freepik", s: "Moodboard for matte-black audio gear, studio lighting.", server: true },
+  { t: "15s teaser for a coffee subscription", s: "\"Ritual\" — beans roasted weekly, delivered fresh. Editorial style, square format.", server: false },
 ];
 
 export async function fileToUploadAsset(f: File): Promise<Asset> {
@@ -60,7 +61,7 @@ export function ChatPanel() {
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
+    if (chat.length) listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
   }, [chat]);
 
   async function addFiles(files: FileList | File[]) {
@@ -91,9 +92,9 @@ export function ChatPanel() {
       <div className="chat-head">
         <h2>Creative agent</h2>
         <div className="row" style={{ flex: "none", gap: 6 }}>
-          <span className={`pill ${health?.agent === "claude" ? "ok" : ""}`} title={health?.agent === "claude" ? "Claude is directing" : "No API key — using the built-in local director"}>
+          <span className={`pill ${health && health.agent !== "local" ? "ok" : ""}`} title={health?.agent === "local" ? "Claude isn't available here, so the built-in local director writes drafts" : "Claude is directing"}>
             <span className="dot" />
-            {health ? (health.agent === "claude" ? "Claude" : "Local director") : "…"}
+            {health ? (health.agent === "local" ? "Local director" : "Claude") : "…"}
           </span>
           <button className="btn icon ghost" title="New conversation" onClick={resetAgent}>
             <Icon name="reset" />
@@ -108,7 +109,7 @@ export function ChatPanel() {
             <h3>What are we launching?</h3>
             <p>Describe the product, drop references or a voice-over, or paste a link from Pinterest, Freepik, Envato — anywhere.</p>
             <div className="chips">
-              {STARTERS.map((s) => (
+              {STARTERS.filter((s) => s.server === undefined || s.server === !!health?.connectors.length).map((s) => (
                 <button key={s.t} className="chip" onClick={() => submit(`${s.t}. ${s.s}`)}>
                   {s.t}
                   <small>{s.s}</small>

@@ -85,7 +85,7 @@ export function localDirector(text: string, p: Project, assets: Asset[]): LocalR
 
   return {
     name: name !== p.brand.name && name !== "Your product" ? name : undefined,
-    reply: `Here's a first cut for ${name}: a geometric hook, title reveal, ${productImg ? "product hero, " : ""}${scenes.length - 3} story beats and an end card${p.audio ? ", fitted to your voice-over" : ""}. (Local director — add an Anthropic key for the full Claude creative agent.)`,
+    reply: `Here's a first cut for ${name}: a geometric hook, title reveal, ${productImg ? "product hero, " : ""}${scenes.length - 3} story beats and an end card${p.audio ? ", fitted to your voice-over" : ""}. (Drafted by the built-in local director. Connect Claude for the full creative agent.)`,
     storyboard: { title: `${name} — launch`, style, aspect: settings.aspect, fit_to_voiceover: !!p.audio, scenes },
     style,
     settings,

@@ -26,7 +26,10 @@ export function Stage() {
     const el = wrap.current!;
     const ro = new ResizeObserver(() => {
       const r = el.getBoundingClientRect();
-      const availW = r.width - 48, availH = r.height - 48;
+      const narrow = window.innerWidth <= 900; // stacked layout: size from width, cap at 70% of the screen
+      const pad = narrow ? 24 : 48;
+      const availW = r.width - pad;
+      const availH = narrow ? window.innerHeight * 0.7 : r.height - pad;
       const s = Math.min(availW / W, availH / H);
       setBox({ w: Math.max(100, Math.floor(W * s)), h: Math.max(100, Math.floor(H * s)) });
     });

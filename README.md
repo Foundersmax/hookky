@@ -33,6 +33,16 @@ It runs with **no keys at all**. Without `ANTHROPIC_API_KEY` a built-in *local d
 
 For production: `npm run build && npm start` serves the built app and API on `PORT`.
 
+### Hosted on claude.ai
+
+`npm run build:artifact` packs the app into one page (`dist-artifact/hookky.html`) that runs as a claude.ai Artifact with no server:
+
+- The creative director runs on the viewer's own Claude account through the page's `sample` capability, and edits the storyboard through tools that run in the page. Viewers are asked to allow it on first use.
+- Exports and saves go through the viewer's save prompt (`downloads` capability).
+- Image search, link import and transcription need the Express server, so the hosted page asks for uploads instead and aligns a pasted script to the voice-over.
+
+The app picks its mode at startup: Hookky server if `/api/health` answers, otherwise Claude through the host if available, otherwise the local director.
+
 ## Keys (`.env`)
 
 | Variable | Unlocks |

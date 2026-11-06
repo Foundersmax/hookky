@@ -6,6 +6,7 @@ import { Renderer, totalDuration } from "./engine/render";
 import { images } from "./runtime";
 import { speechRegions } from "./audio/analyze";
 import { Muxer, ArrayBufferTarget } from "mp4-muxer";
+import { downloadsCap, isHosted } from "./host";
 
 export function pickMime(): { mime: string; ext: string } {
   const cands = [
@@ -241,12 +242,25 @@ async function exportRealtime(
   return { blob: new Blob(chunks, { type: mime || "video/webm" }), ext };
 }
 
-export function download(blob: Blob, name: string) {
+/** Save a file: through the viewer's save prompt on claude.ai, a plain download elsewhere. */
+export async function download(blob: Blob, name: string): Promise<boolean> {
+  const dl = await downloadsCap;
+  if (dl) {
+    try {
+      await dl.save({ filename: name, data: blob });
+      return true;
+    } catch (e: any) {
+      if (e?.code === "declined") return false;
+      if (!["unavailable", "not_granted", "capability_disabled", "capability_removed"].includes(e?.code)) throw new Error(e?.message || "Couldn't save the file");
+      if (isHosted) throw new Error("Saving files isn't available in this view.");
+    }
+  }
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = name;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  return true;
 }
 
 export async function posterPng(project: Project, t: number): Promise<Blob> {

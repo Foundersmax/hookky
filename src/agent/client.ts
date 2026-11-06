@@ -5,6 +5,7 @@ import { totalDuration } from "../engine/render";
 import { sentences } from "../audio/analyze";
 import { localDirector } from "./localDirector";
 import { toAgentImage } from "../engine/images";
+import { hostedTurn } from "./hosted";
 
 /** Compact snapshot of the studio the agent sees each turn. */
 function studioState() {
@@ -41,6 +42,33 @@ export async function sendToAgent(text: string, attachments: ChatAttachment[] = 
   };
 
   try {
+    if (s.health?.agent === "hosted") {
+      const activity: string[] = [];
+      try {
+        const r = await hostedTurn(text, attachments, studioState(), {
+          onText: (t) => updateChat(replyId, (m) => ({ ...m, text: t })),
+          onActivity: (label) => (activity.push(label), updateChat(replyId, (m) => ({ ...m, activity: [...activity] }))),
+        });
+        updateChat(replyId, (m) => ({ ...m, text: r.text.trim() || "Done — have a look at the preview.", pending: false }));
+      } catch (e: any) {
+        const code = e?.code ?? "upstream_error";
+        if (["not_granted", "sampling_disabled", "not_declared", "capability_disabled", "capability_removed", "tools_unavailable"].includes(code)) {
+          setState((st) => ({ health: st.health && { ...st.health, agent: "local" } }));
+          runLocal("Claude isn't enabled for this page, so the local director made this draft. Allow Claude when the page asks to get the full creative agent.");
+        } else if (code === "cancelled") updateChat(replyId, (m) => ({ ...m, text: e.text || "Stopped.", pending: false }));
+        else {
+          const copy: Record<string, string> = {
+            rate_limited: "You've hit a usage limit for now. Try again in a little while.",
+            session_expired: "Your Claude session expired. Sign in again, then resend.",
+            refused: "Claude declined that request. Try rephrasing the brief.",
+            prompt_too_large: "That was too much to send at once. Try a shorter brief or fewer images.",
+            image_rejected: "One of the images couldn't be used. Try a JPEG or PNG under 20 MB.",
+          };
+          updateChat(replyId, (m) => ({ ...m, text: (e.text ? e.text + "\n\n" : "") + (copy[code] ?? "Claude couldn't finish that. Send it again to retry."), error: !e.text, pending: false }));
+        }
+      }
+      return;
+    }
     if (s.health?.agent !== "claude") {
       await new Promise((r) => setTimeout(r, 450));
       runLocal();

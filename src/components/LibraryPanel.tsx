@@ -87,8 +87,16 @@ export function LibraryPanel({ toast }: { toast: (s: string) => void }) {
     }
   }
 
+  const hasServer = connectors.length > 0;
   return (
     <>
+      {!hasServer && (
+        <div className="card">
+          <h4>Upload your visuals</h4>
+          <span className="muted">Searching Pinterest, Freepik, Envato and other sources, and importing from links, need the self-hosted Hookky server. Here, upload product shots, logos and references.</span>
+        </div>
+      )}
+      {hasServer && (<>
       <div className="field">
         <label>Search visual sources</label>
         <div className="row" style={{ gap: 6 }}>
@@ -125,6 +133,7 @@ export function LibraryPanel({ toast }: { toast: (s: string) => void }) {
           </button>
         </div>
       </div>
+      </>)}
       <div className="drop" onClick={() => fileRef.current?.click()}>
         <Icon name="image" /> Upload product shots, logos, references
         <input ref={fileRef} type="file" hidden multiple accept="image/*" onChange={async (e) => {

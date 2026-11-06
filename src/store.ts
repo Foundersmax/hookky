@@ -13,7 +13,7 @@ export interface StudioState {
   playing: boolean;
   conversationId: string;
   busy: boolean;
-  health?: { agent: "claude" | "local"; transcription: string; connectors: { id: string; label: string; configured: boolean; kind: string; note: string }[] };
+  health?: { agent: "claude" | "hosted" | "local"; transcription: string; connectors: { id: string; label: string; configured: boolean; kind: string; note: string }[] };
 }
 
 const STORAGE_KEY = "hookky.v1";

@@ -15,6 +15,14 @@ export function ExportPanel({ toast }: { toast: (s: string) => void }) {
   const [progress, setProgress] = useState<{ label: string; p: number } | null>(null);
   const abort = useRef<AbortController | null>(null);
   const jsonRef = useRef<HTMLInputElement>(null);
+  const [confirmNew, setConfirmNew] = useState(false);
+  const save = async (fn: () => Promise<boolean>) => {
+    try {
+      if (!(await fn())) toast("Save cancelled");
+    } catch (e: any) {
+      toast(e.message);
+    }
+  };
   const ext = typeof VideoEncoder !== "undefined" ? "mp4" : pickMime().ext;
   const slug = (project.title || "hookky").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
@@ -25,7 +33,11 @@ export function ExportPanel({ toast }: { toast: (s: string) => void }) {
       for (const a of formats) {
         setProgress({ label: `Rendering ${a}`, p: 0 });
         const { blob, ext } = await exportVideo(getState().project, a, { onProgress: (p) => setProgress({ label: `Rendering ${a}`, p }), signal: abort.current.signal });
-        download(blob, `${slug}-${a.replace(":", "x")}.${ext}`);
+        const saved = await download(blob, `${slug}-${a.replace(":", "x")}.${ext}`);
+        if (!saved) {
+          toast("Save cancelled");
+          return;
+        }
       }
       toast("Export complete");
     } catch (e: any) {
@@ -69,8 +81,8 @@ export function ExportPanel({ toast }: { toast: (s: string) => void }) {
 
       <div className="card">
         <h4>Stills & project</h4>
-        <button className="btn" onClick={async () => download(await posterPng(getState().project, clock.time), `${slug}-frame.png`)}>Current frame as PNG</button>
-        <button className="btn" onClick={() => download(new Blob([JSON.stringify({ ...getState().project, audio: undefined, music: undefined }, null, 2)], { type: "application/json" }), `${slug}.hookky.json`)}>
+        <button className="btn" onClick={() => save(async () => download(await posterPng(getState().project, clock.time), `${slug}-frame.png`))}>Current frame as PNG</button>
+        <button className="btn" onClick={() => save(() => download(new Blob([JSON.stringify({ ...getState().project, audio: undefined, music: undefined }, null, 2)], { type: "application/json" }), `${slug}.hookky.json`))}>
           Save project (.json)
         </button>
         <button className="btn" onClick={() => jsonRef.current?.click()}>Open project…</button>
@@ -86,7 +98,14 @@ export function ExportPanel({ toast }: { toast: (s: string) => void }) {
             toast(err.message);
           }
         }} />
-        <button className="btn ghost" onClick={() => confirm("Start a new project? The current one will be replaced.") && setState({ project: defaultProject(), selected: 0 })}>New project</button>
+        {confirmNew ? (
+          <div className="row" style={{ gap: 6 }}>
+            <button className="btn" onClick={() => (setState({ project: defaultProject(), selected: 0 }), setConfirmNew(false), toast("Started a new project"))}>Replace current project</button>
+            <button className="btn ghost" onClick={() => setConfirmNew(false)}>Keep it</button>
+          </div>
+        ) : (
+          <button className="btn ghost" onClick={() => setConfirmNew(true)}>New project</button>
+        )}
       </div>
     </>
   );
