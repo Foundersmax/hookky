@@ -410,3 +410,104 @@ kbd { font: 10.5px var(--mono); border: 1px solid var(--line-2); border-bottom-w
 .palette-foot { display: flex; gap: 16px; padding: 9px 16px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--text-3); }
 @media (max-width: 1180px) { .cmdk { min-width: 0; } .cmdk span, .cmdk kbd { display: none; } }
 @media (max-width: 640px) { .palette-backdrop { padding-top: 12px; } .palette-foot { display: none; } }
+
+/* =====================================================================
+   Production refresh. Hookky's identity: the lime hook on near-black.
+   Layered last so it refines the look without touching layout.
+   --brand fills primary actions (lime in both themes, ink text);
+   --accent draws thin lines and text, deepened to olive on light so it stays legible.
+   ===================================================================== */
+:root {
+  --bg: #f4f4f1; --panel: #ffffff; --panel-2: #f0f0ec; --line: #e6e5e0; --line-2: #d6d5cf;
+  --text: #141413; --text-2: #5b5a55; --text-3: #95938c; --stage: #e8e7e2;
+  --accent: #4f7d00; --accent-ink: #0b0b0c; --brand: #c8ff3d; --brand-hover: #d4ff63;
+  --shadow: 0 1px 2px rgba(20, 20, 19, .05), 0 12px 32px rgba(20, 20, 19, .08);
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #09090a; --panel: #0f0f11; --panel-2: #16161a; --line: #1e1e23; --line-2: #2a2a30;
+    --text: #ededea; --text-2: #a3a39d; --text-3: #67675f; --stage: #050506;
+    --accent: #c8ff3d; --accent-ink: #0b0b0c; --brand: #c8ff3d; --brand-hover: #d4ff63;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 16px 40px rgba(0, 0, 0, .45);
+    --logo-edge: #2a2a30;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #09090a; --panel: #0f0f11; --panel-2: #16161a; --line: #1e1e23; --line-2: #2a2a30;
+  --text: #ededea; --text-2: #a3a39d; --text-3: #67675f; --stage: #050506;
+  --accent: #c8ff3d; --accent-ink: #0b0b0c; --brand: #c8ff3d; --brand-hover: #d4ff63;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 16px 40px rgba(0, 0, 0, .45);
+  --logo-edge: #2a2a30;
+}
+
+body { font-size: 13.5px; letter-spacing: -0.003em; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { border-width: 2px; }
+
+/* buttons */
+.btn { height: 30px; border-radius: 8px; padding: 0 11px; font-size: 12.5px; border-color: var(--line); background: transparent; }
+.btn:hover { background: var(--panel-2); border-color: var(--line-2); }
+.btn.icon { width: 30px; }
+.btn.ghost { border-color: transparent; }
+.btn.primary { background: var(--brand); color: #0b0b0c; border-color: transparent; font-weight: 600; }
+.btn.primary:hover { background: var(--brand-hover); filter: none; }
+.btn.primary:disabled { opacity: .35; }
+select.sel { height: 30px; border-radius: 8px; background: transparent; font-size: 12.5px; }
+.seg { background: transparent; border-color: var(--line); border-radius: 9px; }
+.seg button { font-size: 12px; padding: 3px 9px; border-radius: 7px; }
+.seg button.on { background: var(--panel-2); box-shadow: none; }
+
+/* top bar */
+.app { grid-template-rows: 50px 1fr; }
+.topbar { gap: 8px; padding: 0 12px; background: var(--bg); }
+.title-input { font-weight: 550; letter-spacing: -0.01em; }
+.crumb { font-size: 13px; }
+.cmdk { background: transparent; }
+
+/* panels */
+.chat, .side, .timeline, .transport { background: var(--bg); }
+.tabs { padding: 6px 8px; gap: 0; }
+.tabs button { font-size: 12px; color: var(--text-3); border-radius: 7px; }
+.tabs button.on { color: var(--text); background: var(--panel-2); }
+.field > label, .label { font-size: 10.5px; letter-spacing: .08em; color: var(--text-3); }
+.field input[type="text"], .field input[type="number"], .field input[type="url"], .field textarea, .field select { background: var(--panel); border-color: var(--line); border-radius: 8px; }
+.scene-row { background: transparent; border-color: transparent; border-radius: 8px; }
+.scene-row:hover { background: var(--panel-2); }
+.scene-row.on { background: var(--panel-2); border-color: var(--line-2); }
+.card, .notes { background: var(--panel); }
+.drop { border-color: var(--line-2); background: var(--panel); }
+
+/* chat: assistant replies read as plain text; your messages sit in a soft panel */
+.chat-head { padding: 10px 14px; }
+.chat-head h2 { font-size: 12px; letter-spacing: .02em; color: var(--text-2); font-weight: 600; }
+.messages { gap: 18px; padding: 18px 16px 10px; }
+.msg.user .bubble { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 14px; border-bottom-right-radius: 5px; }
+.msg.assistant .bubble { background: none; border: 0; padding: 0 2px; max-width: 100%; line-height: 1.55; }
+.msg.assistant { position: relative; padding-left: 26px; }
+.msg.assistant::before { content: ""; position: absolute; left: 4px; top: 7px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.msg.assistant.error .bubble { color: var(--danger); }
+.activity span { background: transparent; border-color: var(--line); font-size: 11px; }
+.composer { border-top: 0; padding: 8px 12px 12px; }
+.composer-box { background: var(--panel); border-color: var(--line-2); border-radius: 14px; box-shadow: var(--shadow); }
+.chip { background: var(--panel); border-color: var(--line); border-radius: 12px; }
+.welcome h3 { font: 650 22px/1.2 "Inter Tight", var(--sans); letter-spacing: -0.025em; }
+.pill { border-color: var(--line); font-size: 11px; }
+
+/* stage: a quiet spotlight on the canvas */
+.stage { background: radial-gradient(70% 70% at 50% 45%, color-mix(in srgb, var(--stage) 70%, var(--panel-2)) 0%, var(--stage) 72%); }
+.stage canvas { border-radius: 6px; box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 8%, transparent), 0 24px 70px rgba(0, 0, 0, .35); }
+.transport { border-top-color: var(--line); }
+.transport .btn.primary { width: 32px; height: 32px; border-radius: 50%; }
+
+/* timeline */
+.tl-track, .tl-audio { background: var(--panel); border-color: var(--line); }
+.tl-scene { background: var(--panel-2); border-color: var(--line); border-radius: 7px; }
+.tl-scene.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+
+/* projects home */
+.home { background: var(--bg); }
+.pcard-media, .starter { background: var(--panel); }
+.starter-frame { background: var(--stage); }
+.pcard-badge { background: var(--brand); color: #0b0b0c; }
