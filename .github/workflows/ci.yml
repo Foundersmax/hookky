@@ -21,7 +21,8 @@ jobs:
       - name: Unit tests (cleaning, storyboard ops, director's notes, URL safety)
         run: npm test
       - name: Build the app and the hosted page
-        run: npm run build && node scripts/build-artifact.mjs
+        # The hosted page is a single-file build; the normal (code-split) build runs last so dist/ is the app.
+        run: npm run build:artifact && npm run build
       - name: Install Chromium for the engine test
         run: npx playwright install --with-deps chromium
       - name: Engine smoke test (every template × format × background, plus fuzzing)
