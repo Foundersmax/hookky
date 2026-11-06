@@ -2,7 +2,7 @@
 // Keys come from environment variables; sources without keys report "unconfigured".
 import type { Asset } from "../src/types";
 
-const UA = "MotifStudio/0.1 (+https://localhost)";
+const UA = "Hookky/0.1 (+https://localhost)";
 const env = (k: string) => process.env[k]?.trim() || "";
 
 export interface ConnectorInfo {
@@ -137,7 +137,7 @@ export async function searchVisuals(query: string, sources: string[] | undefined
 // ---------- URL import: works for Pinterest pins, Behance, Dribbble, product pages, etc.
 export async function importFromUrl(pageUrl: string, max = 16): Promise<{ assets: Asset[]; title?: string }> {
   const u = assertPublicUrl(pageUrl);
-  const res = await fetch(u, { headers: { "User-Agent": "Mozilla/5.0 (compatible; MotifStudio/0.1)", Accept: "text/html,image/*" }, signal: AbortSignal.timeout(15000), redirect: "follow" });
+  const res = await fetch(u, { headers: { "User-Agent": "Mozilla/5.0 (compatible; Hookky/0.1)", Accept: "text/html,image/*" }, signal: AbortSignal.timeout(15000), redirect: "follow" });
   if (!res.ok) throw new Error(`Page responded ${res.status}`);
   const type = res.headers.get("content-type") || "";
   if (type.startsWith("image/")) {

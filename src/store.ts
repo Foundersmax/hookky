@@ -16,7 +16,7 @@ export interface StudioState {
   health?: { agent: "claude" | "local"; transcription: string; connectors: { id: string; label: string; configured: boolean; kind: string; note: string }[] };
 }
 
-const STORAGE_KEY = "motif.studio.v1";
+const STORAGE_KEY = "hookky.v1";
 
 export function defaultProject(): Project {
   const preset = presetById("noir");
@@ -33,7 +33,7 @@ export function defaultProject(): Project {
       { id: uid(), template: "title-reveal", duration: 3.2, kicker: "Introducing", headline: "Motion, *made simple.*", subline: "Describe your product. Drop a voice-over. Watch it move.", background: "dots", transition: "circle" },
       { id: uid(), template: "feature-list", duration: 3.6, kicker: "How it works", headline: "Three steps", items: ["Chat your *brief*", "Pull references from anywhere", "Sync to your *voice-over*"], background: "solid", transition: "push-up" },
       { id: uid(), template: "stat-counter", duration: 2.8, kicker: "Render time", stat: { value: 60, suffix: "s", label: "From idea to animated ad" }, background: "invert", transition: "wipe" },
-      { id: uid(), template: "cta-end", duration: 3.4, headline: "Start *creating*", cta: "Open the studio", url: "motif.studio", background: "blobs", transition: "zoom" },
+      { id: uid(), template: "cta-end", duration: 3.4, headline: "Start *creating*", cta: "Open the studio", url: "hookky.app", background: "blobs", transition: "zoom" },
     ],
   };
 }

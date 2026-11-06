@@ -1,4 +1,4 @@
-// Motif motion engine — renders a Project at time t onto a 2D canvas.
+// Hookky motion engine — renders a Project at time t onto a 2D canvas.
 import type { Project, Scene, Brand, Word, TransitionId } from "../types";
 import { clamp, ease, lerp, win, rgba, mix, contrast, hash } from "./util";
 import { layoutText, drawLayout, drawLabel, displayWeight, displayTracking, stripMarks, measure, type FontSpec } from "./text";

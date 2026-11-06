@@ -24,7 +24,7 @@ export function App() {
   const [toastMsg, setToast] = useState<string | null>(null);
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     try {
-      return (localStorage.getItem("motif.theme") as "dark" | "light") || "dark";
+      return (localStorage.getItem("hookky.theme") as "dark" | "light") || "dark";
     } catch {
       return "dark";
     }
@@ -39,7 +39,7 @@ export function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     try {
-      localStorage.setItem("motif.theme", theme);
+      localStorage.setItem("hookky.theme", theme);
     } catch {}
   }, [theme]);
 
@@ -117,7 +117,7 @@ export function App() {
     <div className="app">
       <header className="topbar">
         <div className="brandmark">
-          <i /> motif
+          <i /> hookky
         </div>
         <input className="title-input" value={project.title} onChange={(e) => setState((s) => ({ project: { ...s.project, title: e.target.value } }))} />
         <span className="spacer" />

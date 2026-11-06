@@ -16,7 +16,7 @@ export function ExportPanel({ toast }: { toast: (s: string) => void }) {
   const abort = useRef<AbortController | null>(null);
   const jsonRef = useRef<HTMLInputElement>(null);
   const ext = typeof VideoEncoder !== "undefined" ? "mp4" : pickMime().ext;
-  const slug = (project.title || "motif").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const slug = (project.title || "hookky").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
   async function run() {
     clock.pause();
@@ -70,7 +70,7 @@ export function ExportPanel({ toast }: { toast: (s: string) => void }) {
       <div className="card">
         <h4>Stills & project</h4>
         <button className="btn" onClick={async () => download(await posterPng(getState().project, clock.time), `${slug}-frame.png`)}>Current frame as PNG</button>
-        <button className="btn" onClick={() => download(new Blob([JSON.stringify({ ...getState().project, audio: undefined, music: undefined }, null, 2)], { type: "application/json" }), `${slug}.motif.json`)}>
+        <button className="btn" onClick={() => download(new Blob([JSON.stringify({ ...getState().project, audio: undefined, music: undefined }, null, 2)], { type: "application/json" }), `${slug}.hookky.json`)}>
           Save project (.json)
         </button>
         <button className="btn" onClick={() => jsonRef.current?.click()}>Open project…</button>
@@ -79,7 +79,7 @@ export function ExportPanel({ toast }: { toast: (s: string) => void }) {
           if (!f) return;
           try {
             const p = JSON.parse(await f.text()) as Project;
-            if (!Array.isArray(p.scenes)) throw new Error("Not a Motif project");
+            if (!Array.isArray(p.scenes)) throw new Error("Not a Hookky project");
             setState({ project: { ...defaultProject(), ...p, audio: undefined } });
             toast("Project loaded");
           } catch (err: any) {

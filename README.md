@@ -1,4 +1,4 @@
-# Motif Studio
+# Hookky
 
 AI motion-graphics studio for product ads and launches. Chat with a creative agent on the left; watch the animation build live on the right.
 
@@ -35,7 +35,7 @@ For production: `npm run build && npm start` serves the built app and API on `PO
 | `FREEPIK_API_KEY` | Freepik stock search **and** the Magnific upscaler (Magnific's API is served through Freepik) |
 | `ENVATO_TOKEN` | Envato **Market** search (GraphicRiver). Envato Elements has no public API, so use URL import for Elements pages. |
 | `PINTEREST_ACCESS_TOKEN` | Searches **your own** pins and boards (Pinterest API v5 has no public global search). Any public pin URL also imports with no key. |
-| `DEEPGRAM_API_KEY` or `OPENAI_API_KEY` | Automatic VO transcription with exact word timings. Without either, paste the script and Motif aligns it to the detected speech. |
+| `DEEPGRAM_API_KEY` or `OPENAI_API_KEY` | Automatic VO transcription with exact word timings. Without either, paste the script and Hookky aligns it to the detected speech. |
 
 Openverse (800M+ openly licensed images) and URL import need no key.
 

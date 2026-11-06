@@ -77,7 +77,7 @@ app.get("/api/img", async (req, res) => {
     const u = assertPublicUrl(String(req.query.u ?? ""));
     let hit = cache.get(u.href);
     if (!hit) {
-      const r = await fetch(u, { headers: { "User-Agent": "Mozilla/5.0 (compatible; MotifStudio/0.1)", Referer: u.origin }, signal: AbortSignal.timeout(20000) });
+      const r = await fetch(u, { headers: { "User-Agent": "Mozilla/5.0 (compatible; Hookky/0.1)", Referer: u.origin }, signal: AbortSignal.timeout(20000) });
       const type = r.headers.get("content-type") || "";
       if (!r.ok || !type.startsWith("image/")) throw new Error(`Not an image (${r.status})`);
       hit = { type, body: Buffer.from(await r.arrayBuffer()) };
@@ -102,5 +102,5 @@ if (process.env.NODE_ENV === "production") {
 
 const port = Number(process.env.PORT || 8787);
 app.listen(port, () => {
-  console.log(`Motif Studio API on http://localhost:${port}  ·  agent: ${claudeConfigured() ? "Claude" : "local director"}  ·  transcription: ${transcriptionProvider()}`);
+  console.log(`Hookky API on http://localhost:${port}  ·  agent: ${claudeConfigured() ? "Claude" : "local director"}  ·  transcription: ${transcriptionProvider()}`);
 });

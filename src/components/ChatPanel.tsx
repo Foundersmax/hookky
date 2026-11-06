@@ -103,7 +103,7 @@ export function ChatPanel() {
       <div className="messages" ref={listRef}>
         {!chat.length && (
           <div className="welcome">
-            <div className="tiny">MOTIF STUDIO</div>
+            <div className="tiny">HOOKKY</div>
             <h3>What are we launching?</h3>
             <p>Describe the product, drop references or a voice-over, or paste a link from Pinterest, Freepik, Envato — anywhere.</p>
             <div className="chips">
