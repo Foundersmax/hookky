@@ -5,7 +5,8 @@ import type { Aspect, Project } from "./types";
 import { ASPECT_SIZE } from "./types";
 import { Renderer, totalDuration } from "./engine/render";
 import { images } from "./runtime";
-import { projectImageRefs } from "./export";
+import { projectImageRefs, renderExact } from "./export";
+import { VideoSeeker } from "./engine/videos";
 import { gifDelays } from "./gifTiming";
 
 export { estimateGifBytes } from "./gifTiming";
@@ -35,8 +36,9 @@ export async function exportGif(project: Project, aspect: Aspect, opts: GifOpts)
   const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
   await document.fonts.ready;
   await images.preload(projectImageRefs(p));
-  const frameAt = (i: number) => {
-    r.render(p, Math.min(to - 0.001, from + i / opts.fps), images.get);
+  const seeker = new VideoSeeker();
+  const frameAt = async (i: number) => {
+    await renderExact(r, p, Math.min(to - 0.001, from + i / opts.fps), seeker);
     return ctx.getImageData(0, 0, w, h).data;
   };
   const yieldNow = () => new Promise((res) => setTimeout(res, 0));
@@ -51,7 +53,7 @@ export async function exportGif(project: Project, aspect: Aspect, opts: GifOpts)
   const pool = new Uint8Array(per * samples * 4);
   for (let k = 0; k < samples; k++) {
     cancelled();
-    const d = frameAt(Math.floor((k + 0.5) * (frames / samples)));
+    const d = await frameAt(Math.floor((k + 0.5) * (frames / samples)));
     for (let i = 0, o = k * per * 4; i < w * h; i += stride, o += 4) pool.set(d.subarray(i * 4, i * 4 + 4), o);
     opts.onProgress?.(0.1 * ((k + 1) / samples));
     await yieldNow();
@@ -62,13 +64,14 @@ export async function exportGif(project: Project, aspect: Aspect, opts: GifOpts)
   const delays = gifDelays(frames, opts.fps);
   for (let i = 0; i < frames; i++) {
     cancelled();
-    const index = applyPalette(frameAt(i), palette, "rgb565");
+    const index = applyPalette(await frameAt(i), palette, "rgb565");
     gif.writeFrame(index, w, h, { ...(i === 0 && { palette, repeat: 0 }), delay: delays[i] });
     if (i % 4 === 0) {
       opts.onProgress?.(0.1 + 0.9 * (i / frames));
       await yieldNow();
     }
   }
+  seeker.dispose();
   gif.finish();
   opts.onProgress?.(1);
   return new Blob([gif.bytesView()], { type: "image/gif" });

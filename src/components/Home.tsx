@@ -37,7 +37,7 @@ function useHoverPreview(meta: ProjectMeta) {
       const t0 = performance.now();
       const loop = () => {
         if (stopped) return;
-        r.render({ ...p, audio: undefined }, ((performance.now() - t0) / 1000) % total, images.get);
+        r.render({ ...p, audio: undefined }, ((performance.now() - t0) / 1000) % total, images.still);
         raf = requestAnimationFrame(loop);
       };
       loop();

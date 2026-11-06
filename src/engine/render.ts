@@ -3,7 +3,8 @@ import type { Project, Scene, Brand, Word, TransitionId } from "../types";
 import { clamp, ease, lerp, win, rgba, mix, contrast, hash } from "./util";
 import { layoutText, drawLayout, drawLabel, displayWeight, displayTracking, stripMarks, measure, type FontSpec, type Layout } from "./text";
 
-export type ImageGetter = (ref?: string) => HTMLImageElement | undefined;
+/** Looks up a drawable by asset ref; `t` is the scene-local time (video clips use it). */
+export type ImageGetter = (ref?: string, t?: number) => HTMLImageElement | undefined;
 
 interface Colors {
   bg: string;
@@ -60,6 +61,23 @@ export function timeline(scenes: Scene[]): TimelineEntry[] {
     return e;
   });
 }
+/** The scenes drawn at time t and their local times (two during a transition). */
+export function visibleAt(project: Project, t: number): { entry: TimelineEntry; lt: number }[] {
+  const tl = timeline(project.scenes);
+  if (!tl.length) return [];
+  const total = tl[tl.length - 1].end;
+  const tt = clamp(t, 0, Math.max(0, total - 1e-4));
+  let i = tl.findIndex((e) => tt >= e.start && tt < e.end);
+  if (i < 0) i = tl.length - 1;
+  const cur = tl[i];
+  const lt = tt - cur.start;
+  const tr = cur.scene.transition ?? "fade";
+  const td = i > 0 ? Math.min(TRANSITION_DUR[tr] ?? 0.5, cur.scene.duration * 0.5) : 0;
+  const out = [{ entry: cur, lt }];
+  if (i > 0 && td > 0 && lt < td) out.push({ entry: tl[i - 1], lt: tl[i - 1].scene.duration + lt });
+  return out;
+}
+
 export const totalDuration = (p: Project) => p.scenes.reduce((a, s) => a + s.duration, 0);
 
 /** Motion presets: the easing every element uses, and how long animations take (multiplier). */
@@ -169,7 +187,7 @@ export class Renderer {
       t: lt,
       dur: scene.duration,
       abs: e.start,
-      img,
+      img: (ref) => img(ref, lt),
       words: p.audio?.words,
       E: MOTION[motion]?.E ?? ease.outExpo,
       sp: MOTION[motion]?.sp ?? 0.9,

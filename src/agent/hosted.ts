@@ -121,7 +121,8 @@ export async function hostedTurn(text: string, attachments: ChatAttachment[], st
   if (limits?.images) {
     for (const a of imgAtts.slice(0, limits.images.maxCount)) {
       const asset = assets.find((x) => x.id === a.assetId);
-      if (asset?.src.startsWith("data:")) images.push(await dataUrlToBlob(asset.src));
+      const still = asset?.kind === "video" ? asset.thumb : asset?.src;
+      if (still?.startsWith("data:")) images.push(await dataUrlToBlob(still));
     }
   }
   const refCount = images.length;

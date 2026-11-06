@@ -5,7 +5,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { runAgentTurn, claudeConfigured, resetConversation } from "./agent";
-import { listConnectors, searchVisuals, importFromUrl, magnificUpscale } from "./connectors";
+import { listConnectors, searchVisuals, searchVideos, importFromUrl, magnificUpscale, type Orientation } from "./connectors";
+import { proxyVideo } from "./videoProxy";
 import { safeFetch, readLimited, BlockedUrlError } from "./safeFetch";
 import { transcribe, transcriptionProvider } from "./transcribe";
 
@@ -60,7 +61,13 @@ app.post("/api/agent/reset", (req, res) => {
 app.get("/api/search", async (req, res) => {
   try {
     const sources = req.query.sources ? String(req.query.sources).split(",").filter(Boolean) : undefined;
-    res.json(await searchVisuals(String(req.query.q ?? ""), sources, Number(req.query.count ?? 18)));
+    const q = String(req.query.q ?? "");
+    const count = Math.min(30, Math.max(1, Number(req.query.count ?? 18) || 18));
+    if (req.query.type === "video") {
+      const o = String(req.query.orientation ?? "");
+      return void res.json(await searchVideos(q, sources, count, ["landscape", "portrait", "square"].includes(o) ? (o as Orientation) : undefined));
+    }
+    res.json(await searchVisuals(q, sources, count));
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }
@@ -119,6 +126,9 @@ app.get("/api/img", async (req, res) => {
     res.status(e instanceof BlockedUrlError ? 400 : 502).send(e.message);
   }
 });
+
+// Same-origin stream for stock video, so clips can be drawn on (and exported from) the canvas.
+app.get("/api/video", (req, res) => proxyVideo(req, res));
 
 if (process.env.NODE_ENV === "production") {
   const dist = path.join(here, "..", "dist");

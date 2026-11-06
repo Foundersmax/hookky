@@ -53,7 +53,7 @@ function imageRefs(p: Project) {
 /** Wait (briefly) for the scenes' images so the sheet shows what the viewer will see. */
 async function preload(p: Project, timeoutMs = 2500) {
   const refs = imageRefs(p).filter((r) => images.resolve(r));
-  const missing = () => refs.filter((r) => !images.get(r));
+  const missing = () => refs.filter((r) => !images.still(r));
   if (!missing().length) return;
   await new Promise<void>((done) => {
     const t = setTimeout(finish, timeoutMs);
@@ -98,7 +98,7 @@ export async function contactSheets(p: Project, maxSheets = 2): Promise<Sheet[]>
       g.fillStyle = "#a1a1aa";
       g.fillText(`${s.template} · ${s.duration.toFixed(1)}s`, x + 22, y + LABEL / 2 - 2);
       try {
-        renderer!.render({ ...p, scenes: [{ ...s, transition: "cut" }], captions: false, grain: false }, settledMoment(s), images.get);
+        renderer!.render({ ...p, scenes: [{ ...s, transition: "cut" }], captions: false, grain: false }, settledMoment(s), images.still);
         g.drawImage(tile, x, y + LABEL, L.w, L.h);
       } catch {
         g.fillStyle = "#3f3f46";

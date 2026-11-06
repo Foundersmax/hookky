@@ -2,7 +2,8 @@
 // the voice-over and music play into a MediaStreamDestination, then records both with MediaRecorder.
 import type { Aspect, Project } from "./types";
 import { ASPECT_SIZE } from "./types";
-import { Renderer, totalDuration } from "./engine/render";
+import { Renderer, totalDuration, visibleAt } from "./engine/render";
+import { VideoSeeker } from "./engine/videos";
 import { images } from "./runtime";
 import { speechRegions } from "./audio/analyze";
 import { Muxer, ArrayBufferTarget } from "mp4-muxer";
@@ -17,6 +18,26 @@ export function pickMime(): { mime: string; ext: string } {
     { mime: "video/webm", ext: "webm" },
   ];
   return cands.find((c) => typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(c.mime)) ?? { mime: "", ext: "webm" };
+}
+
+/** Video clips on screen at time t, and the clip time each should show. */
+export function videoTargets(p: Project, t: number): Map<string, number> {
+  const m = new Map<string, number>();
+  // Previous scene first, so the incoming scene wins if both use the same clip.
+  for (const { entry, lt } of visibleAt(p, t).reverse())
+    for (const ref of [entry.scene.image, ...(entry.scene.images ?? [])]) {
+      const a = images.asset(ref);
+      const src = a && images.videoSrc(a);
+      if (src) m.set(src, lt);
+    }
+  return m;
+}
+
+/** Render one frame exactly: seek any clips on screen, then draw. */
+export async function renderExact(r: Renderer, p: Project, t: number, seeker: VideoSeeker) {
+  const wanted = videoTargets(p, t);
+  if (wanted.size) await seeker.prepare(wanted);
+  r.render(p, t, images.exact(seeker));
 }
 
 export function projectImageRefs(p: Project) {
@@ -141,24 +162,29 @@ async function exportWebCodecs(project: Project, aspect: Aspect, vc: { codec: st
   venc.configure({ codec: vc.codec, width: W, height: H, bitrate: opts.bitrate ?? videoBitrate(W, H, fps), framerate: fps, ...(vc.mux === "avc" && { avc: { format: "avc" as const } }) });
 
   const frames = Math.ceil(duration * fps);
-  for (let i = 0; i < frames; i++) {
-    if (opts.signal?.aborted) {
-      venc.close();
-      throw new DOMException("Export cancelled", "AbortError");
+  const seeker = new VideoSeeker();
+  try {
+    for (let i = 0; i < frames; i++) {
+      if (opts.signal?.aborted) {
+        venc.close();
+        throw new DOMException("Export cancelled", "AbortError");
+      }
+      if (failure) throw failure;
+      await renderExact(r, p, i / fps, seeker);
+      const frame = new VideoFrame(canvas, { timestamp: Math.round((i * 1e6) / fps), duration: Math.round(1e6 / fps) });
+      venc.encode(frame, { keyFrame: i % (fps * 2) === 0 });
+      frame.close();
+      while (venc.encodeQueueSize > 8) await new Promise((res) => setTimeout(res, 2));
+      if (i % 6 === 0) {
+        opts.onProgress?.((i / frames) * (audioOk ? 0.92 : 1));
+        await new Promise((res) => setTimeout(res, 0)); // keep UI responsive
+      }
     }
-    if (failure) throw failure;
-    r.render(p, i / fps, images.get);
-    const frame = new VideoFrame(canvas, { timestamp: Math.round((i * 1e6) / fps), duration: Math.round(1e6 / fps) });
-    venc.encode(frame, { keyFrame: i % (fps * 2) === 0 });
-    frame.close();
-    while (venc.encodeQueueSize > 8) await new Promise((res) => setTimeout(res, 2));
-    if (i % 6 === 0) {
-      opts.onProgress?.((i / frames) * (audioOk ? 0.92 : 1));
-      await new Promise((res) => setTimeout(res, 0)); // keep UI responsive
-    }
+    await venc.flush();
+    venc.close();
+  } finally {
+    seeker.dispose();
   }
-  await venc.flush();
-  venc.close();
 
   if (ac && audio) {
     const aenc = new AudioEncoder({ output: (c, m) => muxer.addAudioChunk(c, m), error: (e) => (failure = e as Error) });
@@ -249,6 +275,7 @@ async function exportRealtime(
     const tick = () => {
       if (opts.signal?.aborted) return reject(new DOMException("Export cancelled", "AbortError"));
       const t = ac.currentTime - t0;
+      images.videos.playing = true;
       r.render(p, Math.max(0, t), images.get);
       opts.onProgress?.(Math.min(1, Math.max(0, t / duration)));
       if (t >= duration) return resolve();
@@ -295,7 +322,12 @@ export async function posterPng(project: Project, t: number, opts: { aspect?: As
   const r = new Renderer(c, ...ASPECT_SIZE[p.aspect], opts.scale ?? 1);
   await document.fonts.ready;
   await images.preload(projectImageRefs(p));
-  r.render(p, t, images.get);
+  const seeker = new VideoSeeker();
+  try {
+    await renderExact(r, p, t, seeker);
+  } finally {
+    seeker.dispose();
+  }
   return new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error("Couldn't draw the frame"))), opts.type ?? "image/png", 0.92));
 }
 

@@ -1,7 +1,11 @@
 import type { Asset } from "../types";
 
 /** Lazily loads images for the canvas. Remote URLs go through the same-origin proxy so exports aren't tainted. */
+import { VideoStore, VideoSeeker } from "./videos";
+
 export class ImageStore {
+  /** Live clips for the preview. */
+  videos = new VideoStore();
   private cache = new Map<string, HTMLImageElement | "loading" | "error">();
   assets = new Map<string, Asset>();
   private loadListeners = new Set<() => void>();
@@ -23,7 +27,47 @@ export class ImageStore {
     return /^https?:/.test(src) ? `/api/img?u=${encodeURIComponent(src)}` : src;
   }
 
-  get = (ref?: string): HTMLImageElement | undefined => {
+  asset(ref?: string): Asset | undefined {
+    if (!ref) return;
+    return this.assets.get(ref) ?? this.assets.get(`asset:${ref}`) ?? this.assets.get(ref.replace(/^asset:/, ""));
+  }
+
+  /** Playable URL of a video asset (remote clips stream through the same-origin proxy). */
+  videoSrc(a: Asset): string | undefined {
+    if (a.kind !== "video" || !a.src) return;
+    return /^https?:/.test(a.src) ? `/api/video?u=${encodeURIComponent(a.src)}` : a.src;
+  }
+
+  /**
+   * The drawable for a ref. Images ignore `t`; a video asset returns its clip at scene-local time
+   * `t` (live preview), or its poster frame when no time is given.
+   */
+  get = (ref?: string, t?: number): HTMLImageElement | undefined => {
+    const a = this.asset(ref);
+    if (a?.kind === "video") {
+      const src = this.videoSrc(a);
+      if (src && t !== undefined) return this.videos.frame(src, t) ?? (a.thumb ? this.get(a.thumb) : undefined);
+      return a.thumb ? this.get(a.thumb) : undefined;
+    }
+    return this.image(ref);
+  };
+
+  /** Stills only: video assets show their poster frame (thumbnails, contact sheets, dashboards). */
+  still = (ref?: string): HTMLImageElement | undefined => this.get(ref);
+
+  /** A getter for exports: video assets come from `seeker`, already on the exact frame. */
+  exact(seeker: VideoSeeker) {
+    return (ref?: string, t?: number): HTMLImageElement | undefined => {
+      const a = this.asset(ref);
+      if (a?.kind === "video") {
+        const src = this.videoSrc(a);
+        return (src && seeker.frame(src)) || this.get(ref);
+      }
+      return this.image(ref, t);
+    };
+  }
+
+  private image = (ref?: string, _t?: number): HTMLImageElement | undefined => {
     const src = this.resolve(ref);
     if (!src) return;
     const hit = this.cache.get(src);
@@ -49,6 +93,7 @@ export class ImageStore {
       refs.filter(Boolean).map(
         (r) =>
           new Promise<void>((res) => {
+            if (this.asset(r)?.kind === "video") return res();
             const src = this.resolve(r);
             if (!src) return res();
             const hit = this.cache.get(src);

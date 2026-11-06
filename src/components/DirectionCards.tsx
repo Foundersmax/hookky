@@ -33,7 +33,7 @@ function Preview({ d }: { d: Direction }) {
     const proj = previewProject(project, d);
     const still = () => {
       try {
-        r.render(proj, SETTLED, images.get);
+        r.render(proj, SETTLED, images.still);
       } catch {
         /* a preview that can't draw stays blank */
       }
@@ -45,7 +45,7 @@ function Preview({ d }: { d: Direction }) {
       cancelAnimationFrame(raf.current);
       const tick = (now: number) => {
         try {
-          r.render(proj, ((now - t0) / 1000) % LOOP, images.get);
+          r.render(proj, ((now - t0) / 1000) % LOOP, images.still);
         } catch {
           return;
         }

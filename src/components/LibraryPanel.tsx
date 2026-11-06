@@ -2,11 +2,27 @@ import { useRef, useState } from "react";
 import { useStudio, addAssets, updateProject, setBrand, setState, getState } from "../store";
 import type { Asset } from "../types";
 import { Icon } from "./Icon";
-import { fileToUploadAsset } from "./ChatPanel";
+import { fileToUploadAsset, fileToVideoAsset, isVideoFile } from "./ChatPanel";
+import { images } from "../runtime";
 import { extractPalette } from "../engine/images";
 import { luminance } from "../engine/util";
 
-const SEARCH_IDS = ["pinterest", "freepik", "envato", "unsplash", "pexels", "openverse"];
+const SEARCH_IDS = ["pinterest", "freepik", "envato", "unsplash", "pexels", "pixabay", "openverse"];
+const VIDEO_IDS = ["pexels", "pixabay"];
+
+const clock = (s?: number) => (s === undefined ? "" : `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`);
+
+/** Library card media: the poster, and for clips a muted preview that plays on hover. */
+function Thumb({ a, hover }: { a: Asset; hover: boolean }) {
+  const src = a.kind === "video" ? images.videoSrc(a) : undefined;
+  return (
+    <div className="lib-media">
+      <img src={a.thumb ?? a.src} alt={a.title} loading="lazy" referrerPolicy="no-referrer" />
+      {src && hover && <video src={src} muted autoPlay loop playsInline crossOrigin="anonymous" aria-hidden="true" />}
+      {a.kind === "video" && <span className="dur"><Icon name="play" size={9} /> {clock(a.duration)}</span>}
+    </div>
+  );
+}
 
 export function LibraryPanel({ toast }: { toast: (s: string) => void }) {
   const assets = useStudio((s) => s.assets);
@@ -16,6 +32,9 @@ export function LibraryPanel({ toast }: { toast: (s: string) => void }) {
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [sources, setSources] = useState<string[]>([]);
+  const [media, setMedia] = useState<"photo" | "video">("photo");
+  const [hoverId, setHoverId] = useState<string | null>(null);
+  const aspect = useStudio((s) => s.project.aspect);
   const fileRef = useRef<HTMLInputElement>(null);
   const connectors = health?.connectors ?? [];
   const configured = (id: string) => connectors.find((c) => c.id === id)?.configured;
@@ -24,9 +43,12 @@ export function LibraryPanel({ toast }: { toast: (s: string) => void }) {
     if (!q.trim()) return;
     setBusy(true);
     try {
-      const r = await fetch(`/api/search?q=${encodeURIComponent(q)}&count=18${sources.length ? `&sources=${sources.join(",")}` : ""}`).then((r) => r.json());
+      const ids = media === "video" ? sources.filter((s) => VIDEO_IDS.includes(s)) : sources;
+      const orientation = aspect === "9:16" || aspect === "4:5" ? "portrait" : aspect === "1:1" ? "square" : "landscape";
+      const r = await fetch(`/api/search?q=${encodeURIComponent(q)}&count=18${ids.length ? `&sources=${ids.join(",")}` : ""}${media === "video" ? `&type=video&orientation=${orientation}` : ""}`).then((r) => r.json());
+      if (r.error) throw new Error(r.error);
       addAssets((r.assets ?? []).map((a: Asset) => ({ ...a, id: `asset:${a.id}` })));
-      toast(`${r.assets?.length ?? 0} results${r.notes?.length ? ` · ${r.notes.join(" · ")}` : ""}`);
+      toast(`${r.assets?.length ?? 0} ${media === "video" ? "clips" : "results"}${r.notes?.length ? ` · ${r.notes.join(" · ")}` : ""}`);
     } catch (e: any) {
       toast(e.message);
     } finally {
@@ -60,7 +82,7 @@ export function LibraryPanel({ toast }: { toast: (s: string) => void }) {
     }));
 
   async function brandFrom(a: Asset) {
-    const pal = a.palette?.length ? a.palette : await extractPalette(a.src);
+    const pal = a.palette?.length ? a.palette : await extractPalette(a.kind === "video" ? a.thumb ?? "" : a.src);
     if (pal.length < 2) return;
     const byLum = [...pal].sort((x, y) => luminance(x) - luminance(y));
     const dark = byLum[0], light = byLum[byLum.length - 1];
@@ -98,15 +120,24 @@ export function LibraryPanel({ toast }: { toast: (s: string) => void }) {
       )}
       {hasServer && (<>
       <div className="field">
-        <label>Search visual sources</label>
+        <div className="row" style={{ justifyContent: "space-between" }}>
+          <label>Search {media === "video" ? "stock video" : "visual sources"}</label>
+          <div className="seg opt-seg" role="radiogroup" aria-label="Media type">
+            {(["photo", "video"] as const).map((m) => (
+              <button key={m} role="radio" aria-checked={media === m} className={media === m ? "on" : ""} onClick={() => setMedia(m)}>
+                {m === "photo" ? "Photos" : "Videos"}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="row" style={{ gap: 6 }}>
-          <input type="text" placeholder="e.g. matte black earbuds, studio light" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && search()} />
+          <input type="text" placeholder={media === "video" ? "e.g. slow pour of coffee, macro" : "e.g. matte black earbuds, studio light"} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && search()} />
           <button className="btn icon primary" onClick={search} disabled={busy} style={{ flex: "none" }}>
             <Icon name="search" />
           </button>
         </div>
         <div className="sources">
-          {SEARCH_IDS.map((id) => {
+          {(media === "video" ? VIDEO_IDS : SEARCH_IDS).map((id) => {
             const c = connectors.find((x) => x.id === id);
             const on = sources.includes(id);
             return (
@@ -122,7 +153,10 @@ export function LibraryPanel({ toast }: { toast: (s: string) => void }) {
             );
           })}
         </div>
-        <span className="tiny">Green = connected. Unselected = search all connected sources. Keys go in <code>.env</code>.</span>
+        <span className="tiny">
+          Green = connected. Unselected = search all connected sources. Keys go in <code>.env</code>.
+          {media === "video" && ` Clips match your ${aspect} format where the source supports it.`}
+        </span>
       </div>
       <div className="field">
         <label>Import from any link</label>
@@ -135,14 +169,24 @@ export function LibraryPanel({ toast }: { toast: (s: string) => void }) {
       </div>
       </>)}
       <div className="drop" onClick={() => fileRef.current?.click()}>
-        <Icon name="image" /> Upload product shots, logos, references
-        <input ref={fileRef} type="file" hidden multiple accept="image/*" onChange={async (e) => {
+        <Icon name="image" /> Upload product shots, logos, references, video clips
+        <input ref={fileRef} type="file" hidden multiple accept="image/*,video/*" onChange={async (e) => {
           const files = [...(e.target.files ?? [])];
-          addAssets(await Promise.all(files.map(fileToUploadAsset)));
+          e.target.value = "";
+          for (const f of files) {
+            try {
+              addAssets([isVideoFile(f) ? await fileToVideoAsset(f) : await fileToUploadAsset(f)]);
+            } catch (err: any) {
+              toast(err.message);
+            }
+          }
         }} />
       </div>
       <div className="row">
-        <span className="label">{assets.filter((a) => a.kind !== "font").length} assets</span>
+        <span className="label">
+          {assets.filter((a) => a.kind !== "font").length} assets
+          {assets.some((a) => a.kind === "video") && ` · ${assets.filter((a) => a.kind === "video").length} videos`}
+        </span>
         {!!assets.length && <button className="btn ghost" style={{ flex: "none" }} onClick={() => setState({ assets: [] })}>Clear</button>}
       </div>
       <div className="lib-grid">
@@ -151,18 +195,20 @@ export function LibraryPanel({ toast }: { toast: (s: string) => void }) {
             className="lib-item"
             key={a.id}
             draggable
+            onPointerEnter={() => setHoverId(a.id)}
+            onPointerLeave={() => setHoverId((h) => (h === a.id ? null : h))}
             onDragStart={(e) => {
               e.dataTransfer.setData("application/x-hookky-asset", a.id);
               e.dataTransfer.effectAllowed = "copy";
             }}
             title={`${a.title}${a.author ? ` — ${a.author}` : ""}${a.license ? ` (${a.license})` : ""}`}>
-            <img src={a.thumb ?? a.src} alt={a.title} loading="lazy" referrerPolicy="no-referrer" />
+            <Thumb a={a} hover={hoverId === a.id} />
             <span className="src">{a.source}</span>
             <div className="acts">
               <button onClick={() => useInScene(a)}>Use in scene {sel + 1}</button>
-              <button onClick={() => (setBrand({ logo: a.id }), toast("Logo set"))}>Set as logo</button>
+              {a.kind !== "video" && <button onClick={() => (setBrand({ logo: a.id }), toast("Logo set"))}>Set as logo</button>}
               <button onClick={() => brandFrom(a)}>Brand colours from this</button>
-              {configured("magnific") && <button onClick={() => enhance(a)}>Enhance (Magnific)</button>}
+              {configured("magnific") && a.kind !== "video" && <button onClick={() => enhance(a)}>Enhance (Magnific)</button>}
               {a.link && <button onClick={() => window.open(a.link, "_blank", "noopener")}>Open source ↗</button>}
             </div>
           </div>

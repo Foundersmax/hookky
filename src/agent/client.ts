@@ -30,7 +30,7 @@ function studioState() {
   return {
     project: { title: p.title, aspect: p.aspect, style: p.style, brand: p.brand, captions: p.captions, total_seconds: +totalDuration(p).toFixed(2) },
     scenes: p.scenes.map(({ id, ...s }, i) => ({ index: i, ...s })),
-    assets: assets.slice(-60).map((a) => ({ id: a.id, title: a.title.slice(0, 60), source: a.source, kind: a.kind, w: a.w, h: a.h, palette: a.palette })),
+    assets: assets.slice(-60).filter((a) => a.kind !== "font").map((a) => ({ id: a.id, title: a.title.slice(0, 60), source: a.source, kind: a.kind, w: a.w, h: a.h, ...(a.kind === "video" && { seconds: a.duration }), palette: a.palette })),
     voiceover: vo || null,
     director_notes: currentNotes().slice(0, 10).map((n) => `[${n.level}] ${n.message}`),
   };
@@ -195,7 +195,8 @@ export async function sendToAgent(text: string, attachments: ChatAttachment[] = 
         .filter((a) => a.kind === "image" && a.assetId)
         .map(async (a) => {
           const asset = getState().assets.find((x) => x.id === a.assetId);
-          const img = await toAgentImage(asset!.src);
+          // Video clips are shown to Claude as their poster frame.
+          const img = await toAgentImage(asset!.kind === "video" ? asset!.thumb ?? "" : asset!.src);
           return { assetId: a.assetId!, ...img };
         }),
     );

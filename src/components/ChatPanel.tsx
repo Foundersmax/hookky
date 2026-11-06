@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useStudio, addAssets, setAudio, getState } from "../store";
+import { useStudio, addAssets, setAudio, getState, pushChat } from "../store";
 import { sendToAgent, resetAgent, reviewFrames, askForDirections } from "../agent/client";
 import { DirectionCards } from "./DirectionCards";
 import type { Asset, ChatAttachment } from "../types";
@@ -8,6 +8,7 @@ import { LogoMark } from "./Logo";
 import { uid } from "../engine/util";
 import { extractPalette } from "../engine/images";
 import { ingestVoiceover } from "./VoicePanel";
+import { VideoStore } from "../engine/videos";
 
 const STARTERS: { t: string; s: string; server?: boolean; directions?: boolean }[] = [
   { t: "Pitch me 3 directions", s: "Type your product below first, and I'll sketch three different looks to pick from.", directions: true },
@@ -29,6 +30,23 @@ export async function fileToUploadAsset(f: File): Promise<Asset> {
   const palette = await extractPalette(dataUrl).catch(() => []);
   const isLogo = /logo|mark|brand/i.test(f.name) || f.type === "image/svg+xml";
   return { id: `asset:up_${uid("").slice(1)}`, title: f.name, src: dataUrl, thumb: dataUrl, source: "upload", w: dims[0], h: dims[1], palette, kind: isLogo ? "logo" : "image" };
+}
+
+export const isVideoFile = (f: File) => f.type.startsWith("video/") || /\.(mp4|webm|mov|m4v)$/i.test(f.name);
+const MAX_VIDEO = 250e6;
+
+/** A video clip from the user's computer, kept as a blob in the library (saved to IndexedDB). */
+export async function fileToVideoAsset(f: File): Promise<Asset> {
+  if (f.size > MAX_VIDEO) throw new Error(`${f.name} is over 250 MB. Trim it or export a smaller copy first.`);
+  const src = URL.createObjectURL(f);
+  try {
+    const m = await VideoStore.probe(src);
+    const palette = await extractPalette(m.poster).catch(() => []);
+    return { id: `asset:vid_${uid("").slice(1)}`, title: f.name, src, thumb: m.poster, source: "upload", w: m.w, h: m.h, duration: +m.duration.toFixed(2), palette, kind: "video" };
+  } catch (e) {
+    URL.revokeObjectURL(src);
+    throw e;
+  }
 }
 
 async function downscaleToDataUrl(f: File, max: number): Promise<string> {
@@ -81,7 +99,15 @@ export function ChatPanel() {
 
   async function addFiles(files: FileList | File[]) {
     for (const f of Array.from(files)) {
-      if (f.type.startsWith("image/")) {
+      if (isVideoFile(f)) {
+        try {
+          const a = await fileToVideoAsset(f);
+          addAssets([a]);
+          setPending((p) => [...p, { kind: "image", name: f.name, assetId: a.id, preview: a.thumb }]);
+        } catch (e: any) {
+          pushChat({ id: uid("m"), role: "assistant", text: e.message, error: true });
+        }
+      } else if (f.type.startsWith("image/")) {
         const a = await fileToUploadAsset(f);
         addAssets([a]);
         setPending((p) => [...p, { kind: "image", name: f.name, assetId: a.id, preview: a.thumb }]);
@@ -224,7 +250,7 @@ export function ChatPanel() {
             <button className="btn icon ghost" title="Attach images or a voice-over" onClick={() => fileRef.current?.click()}>
               <Icon name="clip" />
             </button>
-            <input ref={fileRef} type="file" hidden multiple accept="image/*,audio/*" onChange={(e) => e.target.files && addFiles(e.target.files)} />
+            <input ref={fileRef} type="file" hidden multiple accept="image/*,audio/*,video/*" onChange={(e) => e.target.files && addFiles(e.target.files)} />
             <span className="tiny" style={{ flex: 1 }}>Images · voice-over · links</span>
             <button className="btn primary" disabled={busy || (!text.trim() && !pending.length)} onClick={() => submit()}>
               <Icon name="send" size={14} /> {busy ? "Working" : "Send"}

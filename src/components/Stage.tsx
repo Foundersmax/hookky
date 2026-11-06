@@ -103,8 +103,12 @@ export function Stage() {
     draw();
   }, [box, W, H]);
 
-  const draw = () => renderer.current?.render(getState().project, clock.time, images.get);
+  const draw = () => {
+    images.videos.playing = clock.playing;
+    renderer.current?.render(getState().project, clock.time, images.get);
+  };
   useEffect(() => images.listen(draw), []);
+  useEffect(() => images.videos.listen(draw), []);
   useEffect(() => {
     clock.duration = totalDuration(project);
     draw();

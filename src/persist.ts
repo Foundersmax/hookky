@@ -6,6 +6,7 @@
 //   kv "project:<id>"    { project, chat, savedAt }
 //   kv "versions:<id>"   Version[]       (named snapshots)
 //   blobs "audio:<id>" / "music:<id>"    the voice-over and music files
+//   blobs "clip:<assetId>"               uploaded video clips in the library
 //
 // Older single-project saves (kv "studio", or localStorage "hookky.v1") migrate on first load.
 // Where IndexedDB is unavailable, the open project and chat fall back to localStorage.
@@ -140,7 +141,20 @@ export async function loadWorkspace(): Promise<Workspace> {
   if (!(await get("index"))) await migrate().catch(() => {});
   const projects = ((await get<ProjectMeta[]>("index")) ?? []).filter((m) => m && typeof m.id === "string");
   const currentId = await get<string>("current");
-  const assets = ((await get<Asset[]>("library")) ?? []).filter((a) => a && typeof a.src === "string" && !a.src.startsWith("blob:"));
+  const stored = ((await get<Asset[]>("library")) ?? []).filter((a) => a && typeof a.src === "string" && !a.src.startsWith("blob:"));
+  // Uploaded video clips live as blobs; give each a fresh object URL for this session.
+  const assets = (
+    await Promise.all(
+      stored.map(async (a) => {
+        if (!a.src.startsWith(CLIP)) return a;
+        const blob = await get<Blob>(`clip:${a.id}`, "blobs");
+        if (!blob) return null;
+        const src = URL.createObjectURL(blob);
+        savedClips.set(a.id, src);
+        return { ...a, src };
+      }),
+    )
+  ).filter((a): a is Asset => !!a);
   return { projects, currentId: projects.some((p) => p.id === currentId) ? currentId : projects[0]?.id, assets, durable: true };
 }
 
@@ -195,8 +209,27 @@ export async function saveProject(project: Project, chat: ChatMessage[], thumb?:
   await put("current", project.id);
 }
 
+const CLIP = "idb:clip";
+/** Uploaded clips already in IndexedDB: asset id → the object URL they were saved from. */
+const savedClips = new Map<string, string>();
+
+/** Save the shared asset library. Uploaded video clips are stored once each as blobs. */
 export async function saveLibrary(assets: Asset[]) {
-  if (await db()) await put("library", assets);
+  if (!(await db())) return;
+  const keep = new Set<string>();
+  for (const a of assets) {
+    if (a.kind !== "video" || !a.src.startsWith("blob:")) continue;
+    keep.add(a.id);
+    if (savedClips.get(a.id) === a.src) continue;
+    await put(`clip:${a.id}`, await (await fetch(a.src)).blob(), "blobs");
+    savedClips.set(a.id, a.src);
+  }
+  for (const id of [...savedClips.keys()])
+    if (!keep.has(id)) {
+      await del(`clip:${id}`, "blobs");
+      savedClips.delete(id);
+    }
+  await put("library", assets.map((a) => (keep.has(a.id) ? { ...a, src: CLIP } : a)));
 }
 
 export async function setCurrent(id: string) {

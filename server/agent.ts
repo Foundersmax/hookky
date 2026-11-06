@@ -4,7 +4,7 @@ import type { Response } from "express";
 import type { AgentEvent } from "../src/types";
 import { TEMPLATES, TRANSITIONS, BACKGROUNDS, MOTIONS, PACES } from "../src/types";
 import { STYLE_PRESETS } from "../src/presets";
-import { searchVisuals, importFromUrl } from "./connectors";
+import { searchVisuals, searchVideos, importFromUrl, type Orientation } from "./connectors";
 import { directorPrompt } from "../src/agent/prompt";
 import { lintStoryboard, notesForAgent } from "../src/agent/lint";
 import { buildScenes, patchScenes, brandWithStyle, type Timing } from "../src/storyboard";
@@ -157,6 +157,19 @@ const tools: Anthropic.Beta.BetaToolUnion[] = [
     },
   },
   {
+    name: "search_videos",
+    description: "Search stock video (Pexels, Pixabay) for motion b-roll: textures, lifestyle, product-in-use, macro shots. Clips are added to the library and returned with asset ids, sizes and lengths. Use a clip id anywhere an image id goes (fullbleed, split-feature, product-hero, device-mockup, image-mosaic, before-after, or background: \"image\"); it plays from the start of its scene and loops if shorter.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "concrete and filmable: \"slow pour of cold brew over ice, macro\", not \"coffee\"" },
+        orientation: { type: "string", enum: ["landscape", "portrait", "square"], description: "match the project's format" },
+        count: { type: "integer", minimum: 3, maximum: 12 },
+      },
+      required: ["query"],
+    },
+  },
+  {
     name: "import_url",
     description: "Pull images from any web page or image URL (Pinterest pin, Behance, Dribbble, product page) into the library.",
     input_schema: { type: "object", properties: { url: { type: "string" } }, required: ["url"] },
@@ -283,7 +296,7 @@ async function streamOnce(history: Msg[], send: (e: AgentEvent) => void): Promis
 
 function toolLabel(name: string) {
   return (
-    { propose_directions: "Sketching directions", create_storyboard: "Composing storyboard", update_scenes: "Editing scenes", set_brand: "Setting brand", search_visuals: "Searching visual sources", import_url: "Importing from URL" } as Record<string, string>
+    { propose_directions: "Sketching directions", create_storyboard: "Composing storyboard", update_scenes: "Editing scenes", set_brand: "Setting brand", search_visuals: "Searching visual sources", search_videos: "Searching stock video", import_url: "Importing from URL" } as Record<string, string>
   )[name] ?? name;
 }
 
@@ -364,6 +377,14 @@ async function runTool(name: string, input: unknown, send: (e: AgentEvent) => vo
       if (tagged.length) send({ type: "assets", assets: tagged });
       for (const a of tagged) shadow.assetIds.add(a.id);
       return JSON.stringify({ found: tagged.map((a) => ({ id: a.id, title: a.title.slice(0, 80), source: a.source, w: a.w, h: a.h })), notes });
+    }
+    case "search_videos": {
+      const o = ["landscape", "portrait", "square"].includes(i.orientation) ? (i.orientation as Orientation) : undefined;
+      const { assets, notes } = await searchVideos(String(i.query ?? ""), undefined, Math.min(12, Math.max(3, i.count ?? 6)), o);
+      const tagged = assets.map((a) => ({ ...a, id: `asset:${a.id}` }));
+      if (tagged.length) send({ type: "assets", assets: tagged });
+      for (const a of tagged) shadow.assetIds.add(a.id);
+      return JSON.stringify({ found: tagged.map((a) => ({ id: a.id, title: a.title.slice(0, 80), source: a.source, w: a.w, h: a.h, seconds: a.duration })), notes });
     }
     case "import_url": {
       const { assets, title } = await importFromUrl(String(i.url));

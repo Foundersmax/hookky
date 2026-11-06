@@ -125,7 +125,9 @@ export interface Asset {
   w?: number;
   h?: number;
   palette?: string[];
-  kind: "image" | "logo" | "font";
+  kind: "image" | "logo" | "font" | "video";
+  /** videos only: length in seconds */
+  duration?: number;
   /** fonts only: the family name it registers, and its weight */
   family?: string;
   weight?: number;

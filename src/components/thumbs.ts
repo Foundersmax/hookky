@@ -21,7 +21,7 @@ function renderThumb(p: Project, s: Scene): string {
   const canvas = renderer?.canvas ?? document.createElement("canvas");
   if (!renderer) renderer = new Renderer(canvas, W, H, scale);
   else renderer.resize(W, H, scale);
-  renderer.render({ ...p, scenes: [{ ...s, transition: "cut" }], captions: false, grain: false }, momentFor(s), images.get);
+  renderer.render({ ...p, scenes: [{ ...s, transition: "cut" }], captions: false, grain: false }, momentFor(s), images.still);
   return canvas.toDataURL("image/jpeg", 0.82);
 }
 
@@ -82,6 +82,6 @@ export function posterFor(p: Project, height = 180): string {
   if (!posterRenderer) posterRenderer = new Renderer(document.createElement("canvas"), W, H, scale);
   else posterRenderer.resize(W, H, scale);
   const s = p.scenes[Math.min(1, p.scenes.length - 1)];
-  posterRenderer.render({ ...p, scenes: [{ ...s, transition: "cut" }], captions: false, grain: false }, momentFor(s), images.get);
+  posterRenderer.render({ ...p, scenes: [{ ...s, transition: "cut" }], captions: false, grain: false }, momentFor(s), images.still);
   return posterRenderer.canvas.toDataURL("image/jpeg", 0.8);
 }

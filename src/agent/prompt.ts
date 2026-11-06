@@ -4,9 +4,10 @@ import { TRANSITIONS, BACKGROUNDS, MOTIONS } from "../types";
 import { STYLE_PRESETS } from "../presets";
 
 const IMAGERY = {
-  server: `- Need imagery? Call search_visuals (Pinterest, Freepik/Magnific, Envato, Unsplash, Pexels, Openverse) with concrete, art-directable queries ("matte black wireless earbuds on stone, studio light", not "earbuds"). If the user pastes a link, call import_url. Use web_search to research a product, brand or competitor when you need facts or inspiration, then import_url on the most useful page.`,
+  server: `- Need imagery? Call search_visuals (Pinterest, Freepik/Magnific, Envato, Unsplash, Pexels, Openverse) with concrete, art-directable queries ("matte black wireless earbuds on stone, studio light", not "earbuds"). If the user pastes a link, call import_url. Use web_search to research a product, brand or competitor when you need facts or inspiration, then import_url on the most useful page.
+- Motion footage? Call search_videos for stock b-roll (Pexels, Pixabay) with a filmable query and the project's orientation. A clip's asset id works anywhere an image id does and plays in sync with its scene; use clips for 1–3 atmosphere beats (fullbleed, split-feature, background "image"), keep type on top short, and prefer the user's own product shots for the hero.`,
   hosted:
-    "- Imagery comes from the user's uploads in the asset library (this hosted studio cannot search the web or image sites). If a scene needs a picture that isn't there, use a typographic or shape-based template instead and tell the user which image to upload.",
+    "- Imagery comes from the user's uploads in the asset library, including video clips (kind \"video\"; their id works anywhere an image id does and plays with the scene). This hosted studio cannot search the web, image sites or stock video. If a scene needs a picture or clip that isn't there, use a typographic or shape-based template instead and tell the user what to upload.",
 };
 
 export function directorPrompt(mode: "server" | "hosted") {

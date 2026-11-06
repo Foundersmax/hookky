@@ -18,7 +18,8 @@ export function listConnectors(): ConnectorInfo[] {
   return [
     { id: "openverse", label: "Openverse (open web, CC)", configured: true, kind: "search", note: "Free, no key. 800M+ openly licensed images." },
     { id: "unsplash", label: "Unsplash", configured: !!env("UNSPLASH_ACCESS_KEY"), kind: "search", note: "Set UNSPLASH_ACCESS_KEY" },
-    { id: "pexels", label: "Pexels", configured: !!env("PEXELS_API_KEY"), kind: "search", note: "Set PEXELS_API_KEY" },
+    { id: "pexels", label: "Pexels", configured: !!env("PEXELS_API_KEY"), kind: "search", note: "Set PEXELS_API_KEY (free photos and stock video)" },
+    { id: "pixabay", label: "Pixabay", configured: !!env("PIXABAY_API_KEY"), kind: "search", note: "Set PIXABAY_API_KEY (free photos and stock video)" },
     { id: "freepik", label: "Freepik", configured: !!env("FREEPIK_API_KEY"), kind: "search", note: "Set FREEPIK_API_KEY (stock vectors, photos, PSD)" },
     { id: "envato", label: "Envato", configured: !!env("ENVATO_TOKEN"), kind: "search", note: "Set ENVATO_TOKEN (Envato Market API)" },
     { id: "pinterest", label: "Pinterest", configured: !!env("PINTEREST_ACCESS_TOKEN"), kind: "search", note: "Set PINTEREST_ACCESS_TOKEN to search your pins. Pin URLs import without a key." },
@@ -108,7 +109,98 @@ async function pinterest(q: string, n: number): Promise<Asset[]> {
     .filter(Boolean);
 }
 
-const SEARCHERS: Record<string, (q: string, n: number) => Promise<Asset[]>> = { openverse, unsplash, pexels, freepik, envato, pinterest };
+async function pixabay(q: string, n: number): Promise<Asset[]> {
+  const d = await getJSON(`https://pixabay.com/api/?key=${encodeURIComponent(env("PIXABAY_API_KEY"))}&q=${encodeURIComponent(q.slice(0, 100))}&per_page=${Math.max(3, n)}&safesearch=true&image_type=photo`);
+  return (d.hits ?? []).map((r: any) => ({
+    id: nid("pb"), title: r.tags || q, src: r.largeImageURL || r.webformatURL, thumb: r.webformatURL || r.previewURL, source: "pixabay",
+    link: r.pageURL, author: r.user, license: "Pixabay", w: r.imageWidth, h: r.imageHeight, kind: "image",
+  }));
+}
+
+const SEARCHERS: Record<string, (q: string, n: number) => Promise<Asset[]>> = { openverse, unsplash, pexels, pixabay, freepik, envato, pinterest };
+
+// ---------- stock video
+export type Orientation = "landscape" | "portrait" | "square";
+/** Largest edge we fetch: crisp in a 1080p export, light enough to scrub and seek smoothly. */
+const VIDEO_EDGE = 1920;
+
+/** Pick the rendition to stream: the largest MP4 whose long edge fits VIDEO_EDGE, else the smallest. */
+export function pickVideoFile<T extends { width?: number; height?: number; link?: string; url?: string; file_type?: string }>(files: T[], maxEdge = VIDEO_EDGE): T | undefined {
+  const usable = files.filter((f) => (f.link || f.url) && f.width && f.height && (!f.file_type || /mp4|webm/i.test(f.file_type)));
+  const edge = (f: T) => Math.max(f.width!, f.height!);
+  const fits = usable.filter((f) => edge(f) <= maxEdge).sort((a, b) => edge(b) - edge(a));
+  return fits[0] ?? usable.sort((a, b) => edge(a) - edge(b))[0];
+}
+
+export function mapPexelsVideos(d: any, q: string): Asset[] {
+  return (d?.videos ?? [])
+    .map((v: any): Asset | null => {
+      const f = pickVideoFile(Array.isArray(v.video_files) ? v.video_files : []);
+      if (!f) return null;
+      return {
+        id: nid("pxv"), title: q, src: f.link!, thumb: v.image, source: "pexels", link: v.url, author: v.user?.name, license: "Pexels",
+        w: f.width, h: f.height, duration: v.duration, kind: "video",
+      };
+    })
+    .filter(Boolean) as Asset[];
+}
+
+export function mapPixabayVideos(d: any, q: string): Asset[] {
+  return (d?.hits ?? [])
+    .map((v: any): Asset | null => {
+      const renditions = Object.values(v.videos ?? {}) as { url?: string; width?: number; height?: number; thumbnail?: string }[];
+      const f = pickVideoFile(renditions);
+      if (!f) return null;
+      const thumb = renditions.find((r) => r.thumbnail)?.thumbnail || (v.picture_id ? `https://i.vimeocdn.com/video/${v.picture_id}_640x360.jpg` : undefined);
+      return {
+        id: nid("pbv"), title: v.tags || q, src: f.url!, thumb, source: "pixabay", link: v.pageURL, author: v.user, license: "Pixabay",
+        w: f.width, h: f.height, duration: v.duration, kind: "video",
+      };
+    })
+    .filter(Boolean) as Asset[];
+}
+
+const orientationOf = (a: Asset): Orientation => (!a.w || !a.h ? "landscape" : a.h > a.w * 1.1 ? "portrait" : a.w > a.h * 1.1 ? "landscape" : "square");
+
+const VIDEO_SEARCHERS: Record<string, (q: string, n: number, o?: Orientation) => Promise<Asset[]>> = {
+  pexels: async (q, n, o) => mapPexelsVideos(await getJSON(`https://api.pexels.com/videos/search?query=${encodeURIComponent(q)}&per_page=${n}${o ? `&orientation=${o}` : ""}`, { Authorization: env("PEXELS_API_KEY") }), q),
+  pixabay: async (q, n) => mapPixabayVideos(await getJSON(`https://pixabay.com/api/videos/?key=${encodeURIComponent(env("PIXABAY_API_KEY"))}&q=${encodeURIComponent(q.slice(0, 100))}&per_page=${Math.max(3, n)}&safesearch=true`), q),
+};
+
+/** Search stock video. Clips matching the project's orientation come first. */
+export async function searchVideos(query: string, sources: string[] | undefined, count = 12, orientation?: Orientation) {
+  const configured = new Set(listConnectors().filter((c) => c.configured && VIDEO_SEARCHERS[c.id]).map((c) => c.id));
+  const wanted = (sources?.length ? sources : [...configured]).filter((s) => VIDEO_SEARCHERS[s]);
+  const notes: string[] = [];
+  if (!wanted.length || ![...wanted].some((s) => configured.has(s))) notes.push("No stock video source is connected. Add PEXELS_API_KEY or PIXABAY_API_KEY (both free).");
+  const per = Math.max(4, Math.ceil(count / Math.max(1, wanted.length)));
+  const results = await Promise.all(
+    wanted.map(async (s) => {
+      if (!configured.has(s)) return [];
+      try {
+        return await VIDEO_SEARCHERS[s](query, per, orientation);
+      } catch (e: any) {
+        notes.push(`${s}: ${e.message}`);
+        return [];
+      }
+    }),
+  );
+  const out: Asset[] = [];
+  for (let i = 0; out.length < count * 2 && results.some((r) => r[i]); i++) for (const r of results) if (r[i]) out.push(r[i]);
+  if (orientation) out.sort((a, b) => Number(orientationOf(b) === orientation) - Number(orientationOf(a) === orientation));
+  return { assets: out.filter((a) => a.src).slice(0, count), notes };
+}
+
+/** Hosts the video proxy will stream from (the stock sources' CDNs). Redirects are still SSRF-checked. */
+export const VIDEO_HOSTS = [/(^|\.)pexels\.com$/, /(^|\.)pixabay\.com$/, /(^|\.)vimeo\.com$/, /(^|\.)vimeocdn\.com$/];
+export function videoHostAllowed(raw: string) {
+  try {
+    const u = new URL(raw);
+    return u.protocol === "https:" && VIDEO_HOSTS.some((re) => re.test(u.hostname));
+  } catch {
+    return false;
+  }
+}
 
 export async function searchVisuals(query: string, sources: string[] | undefined, count = 12) {
   const configured = new Set(listConnectors().filter((c) => c.configured && c.kind === "search").map((c) => c.id));
