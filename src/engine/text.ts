@@ -4,17 +4,23 @@ import { clamp, ease, win } from "./util";
 export interface Token {
   text: string;
   em: boolean;
+  /** attaches to the previous token with no space, e.g. the "." in "*move*." */
+  glue?: boolean;
 }
 
 export function tokenize(src: string): Token[] {
   const out: Token[] = [];
   let em = false;
+  let lastEndedWithSpace = true;
   for (const part of src.split(/(\*)/)) {
     if (part === "*") {
       em = !em;
       continue;
     }
-    for (const w of part.split(/\s+/).filter(Boolean)) out.push({ text: w, em });
+    if (!part) continue;
+    const words = part.split(/\s+/).filter(Boolean);
+    words.forEach((w, i) => out.push({ text: w, em, ...(i === 0 && out.length && !lastEndedWithSpace && !/^\s/.test(part) ? { glue: true } : {}) }));
+    lastEndedWithSpace = /\s$/.test(part);
   }
   return out;
 }
@@ -81,8 +87,8 @@ export function layoutText(
     for (const t of tokens) {
       const w = ctx.measureText(t.text).width;
       if (w > maxW) tooWide = true;
-      const nw = cur.length ? curW + spaceW + w : w;
-      if (nw > maxW && cur.length) {
+      const nw = cur.length ? curW + (t.glue ? 0 : spaceW) + w : w;
+      if (nw > maxW && cur.length && !t.glue) {
         lines.push({ tokens: cur, width: curW });
         cur = [t];
         curW = w;
@@ -146,7 +152,8 @@ export function drawLayout(ctx: CanvasRenderingContext2D, L: Layout, o: DrawText
       ctx.globalAlpha *= lp;
     }
     ctx.globalAlpha *= o.alpha ?? 1;
-    for (const tok of line.tokens) {
+    line.tokens.forEach((tok, ti) => {
+      if (ti > 0 && !tok.glue) x += L.spaceW;
       const f = tok.em && o.emItalic ? { ...L.font, italic: true } : L.font;
       setFont(ctx, f);
       const w = ctx.measureText(tok.text).width;
@@ -159,9 +166,9 @@ export function drawLayout(ctx: CanvasRenderingContext2D, L: Layout, o: DrawText
       ctx.fillStyle = tok.em ? o.emColor : o.color;
       ctx.fillText(tok.text, x, baseline);
       ctx.restore();
-      x += w + L.spaceW;
+      x += w;
       wordIndex++;
-    }
+    });
     ctx.restore();
   });
   ctx.restore();

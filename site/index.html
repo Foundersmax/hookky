@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Hookky · AI motion graphics for product launches</title>
+    <meta name="description" content="Turn a brief, your references and a voice-over into a minimal animated ad, then export it in every format. Directed by Claude." />
+    <meta name="theme-color" content="#0B0B0C" />
+    <meta property="og:title" content="Hookky · AI motion graphics for product launches" />
+    <meta property="og:description" content="Turn a brief and a voice-over into a launch ad, in every format." />
+    <meta property="og:image" content="/og.png" />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500..800&family=Inter:wght@400..600&family=JetBrains+Mono:wght@400..600&family=Space+Grotesk:wght@400..700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="nav">
+      <div class="wrap nav-row">
+        <a class="nav-logo" href="/" aria-label="Hookky home"><img src="/logo-dark.svg" alt="Hookky" height="30" /></a>
+        <nav class="nav-links" aria-label="Sections">
+          <a href="#how">How it works</a>
+          <a href="#formats">Formats</a>
+          <a href="#features">Features</a>
+          <a href="https://github.com/Foundersmax/hookky">GitHub</a>
+        </nav>
+        <a class="btn btn-primary btn-sm" data-studio href="#">Open the studio</a>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero">
+        <div class="wrap hero-grid">
+          <div class="hero-copy">
+            <p class="eyebrow">AI motion graphics for product launches</p>
+            <h1>Turn a brief and a voice-over into a launch ad.</h1>
+            <p class="lede">Describe the product, drop in references and a 30–60 second voice-over. Hookky's creative director storyboards it, cuts on the pauses in your voice-over, and exports minimal, modern motion in every format.</p>
+            <div class="cta-row">
+              <a class="btn btn-primary" data-studio href="#">Open the studio</a>
+              <a class="btn btn-ghost" href="#how">See how it works</a>
+            </div>
+            <p class="fine">Directed by Claude · MP4 in 16:9, 9:16, 1:1 and 4:5</p>
+          </div>
+          <figure class="hero-stage">
+            <div class="screen">
+              <canvas id="hero-canvas" aria-label="A Hookky promo animation playing live"></canvas>
+            </div>
+            <figcaption>
+              <span class="live-dot" aria-hidden="true"></span>
+              Rendered live in your browser by the Hookky engine
+              <button id="hero-toggle" class="chip" type="button" aria-pressed="true">Pause</button>
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section id="how" class="band">
+        <div class="wrap">
+          <p class="eyebrow">How it works</p>
+          <h2>Three steps from idea to export.</h2>
+          <ol class="steps">
+            <li>
+              <span class="step-n">01</span>
+              <h3>Describe it</h3>
+              <p>Tell the creative director what you're launching: the name, what it does, two or three benefits and a call to action. Paste a Pinterest, Behance or product link for references.</p>
+            </li>
+            <li>
+              <span class="step-n">02</span>
+              <h3>Add your voice-over</h3>
+              <p>Upload a 30–60 second voice-over. Hookky finds the natural pauses, aligns the words, and builds scenes that cut where you breathe, with kinetic type that follows the speech.</p>
+            </li>
+            <li>
+              <span class="step-n">03</span>
+              <h3>Refine and export</h3>
+              <p>Drag scenes, snap cuts to pauses, swap styles, and let the director's notes catch what's too long or too fast. Export frame-accurate MP4s in every format at once.</p>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section id="formats" class="band band-alt">
+        <div class="wrap">
+          <p class="eyebrow">One storyboard, every format</p>
+          <h2>Laid out for each screen automatically.</h2>
+          <p class="section-lede">These four players run the same storyboard. Every layout is computed from the frame, so YouTube, Reels, the feed and square posts all come out composed.</p>
+          <div class="formats">
+            <figure><div class="screen"><canvas data-aspect="16:9" aria-label="The promo in 16:9"></canvas></div><figcaption>16:9 · 1920×1080</figcaption></figure>
+            <figure><div class="screen"><canvas data-aspect="9:16" aria-label="The promo in 9:16"></canvas></div><figcaption>9:16 · 1080×1920</figcaption></figure>
+            <figure><div class="screen"><canvas data-aspect="1:1" aria-label="The promo in 1:1"></canvas></div><figcaption>1:1 · 1080×1080</figcaption></figure>
+            <figure><div class="screen"><canvas data-aspect="4:5" aria-label="The promo in 4:5"></canvas></div><figcaption>4:5 · 1080×1350</figcaption></figure>
+          </div>
+        </div>
+      </section>
+
+      <section id="features" class="band">
+        <div class="wrap">
+          <p class="eyebrow">In the studio</p>
+          <h2>Everything a launch cut needs.</h2>
+          <div class="features">
+            <article><h3>A creative director in the chat</h3><p>Claude writes the storyboard, picks templates and transitions, looks at your references, and edits scenes when you ask.</p></article>
+            <article><h3>Voice-over sync</h3><p>Pause detection, word alignment and snap-to-pause cuts keep every scene on the beat of the voice.</p></article>
+            <article><h3>Director's notes</h3><p>An automatic review flags long headlines, text that's on screen too briefly, missing images and weak contrast, and the agent fixes them.</p></article>
+            <article><h3>Visual sources</h3><p>Search Pinterest, Freepik, Envato, Unsplash and Pexels, upscale with Magnific, or import images from any link.</p></article>
+            <article><h3>13 templates, 7 styles</h3><p>Title reveals, kinetic type, product heroes, stat counters, mosaics and end cards in Swiss, Noir, Editorial and more.</p></article>
+            <article><h3>Frame-accurate export</h3><p>H.264 MP4 rendered frame by frame with your voice-over and music, faster than real time, in four formats at once.</p></article>
+          </div>
+        </div>
+      </section>
+
+      <section class="final">
+        <div class="wrap final-inner">
+          <h2>Your next launch, in motion.</h2>
+          <a class="btn btn-primary" data-studio href="#">Open the studio</a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <div class="wrap foot-row">
+        <img src="/logo-mark.svg" alt="" width="22" height="22" />
+        <span>© <span data-year></span> Hookky</span>
+        <a href="https://github.com/Foundersmax/hookky">Source on GitHub</a>
+      </div>
+    </footer>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

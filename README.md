@@ -46,6 +46,24 @@ For production: `npm run build && npm start` serves the built app and API on `PO
 
 The Blueprint uses the `starter` plan so the service stays awake. Change `plan` to `free` to try it at no cost; free services sleep when idle and take a while to wake. The repo is private, so connect your GitHub account to Render first. Pushes to `main` redeploy automatically.
 
+### Landing page on GitHub Pages
+
+`site/` is the marketing page: it plays a live promo with the real Hookky engine (in the hero, and in all four formats side by side). Its **Open the studio** buttons point to `app.` on whatever domain serves the page, so `yourdomain.com` links to `app.yourdomain.com` with no configuration.
+
+- `npm run dev:site` to work on it, `npm run build:site` to build `dist-site/`.
+- `.github/workflows/pages.yml` publishes it on every push that touches the page or the engine.
+- One-time setup: **Settings → Pages → Build and deployment → Source: GitHub Actions**, then add your custom domain on the same page.
+
+### Domain setup
+
+| Address | Serves | DNS record (at your domain provider) |
+|---|---|---|
+| `yourdomain.com` | Landing page (GitHub Pages) | `A` records to `185.199.108.153`, `185.199.109.153`, `185.199.110.153`, `185.199.111.153` |
+| `www.yourdomain.com` | Redirects to the landing page | `CNAME` → `foundersmax.github.io` |
+| `app.yourdomain.com` | The studio (Render) | `CNAME` → your Render service's `….onrender.com` address |
+
+Add `app.yourdomain.com` under the Render service's **Settings → Custom Domains** and the bare domain under GitHub **Settings → Pages → Custom domain**; both issue HTTPS certificates automatically once DNS resolves.
+
 ### Hosted on claude.ai
 
 `npm run build:artifact` packs the app into one page (`dist-artifact/hookky.html`) that runs as a claude.ai Artifact with no server:

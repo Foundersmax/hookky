@@ -6,6 +6,7 @@ import { sanitizeScene, sanitizeBrand, sanitizeProject } from "./sanitize";
 import { buildScenes, patchScenes, fitToVoiceover, snapCutsToPauses, snapPoints, brandWithStyle } from "./storyboard";
 import { lintStoryboard, notesForAgent } from "./agent/lint";
 import { TEMPLATES, type Project, type Scene } from "./types";
+import { tokenize } from "./engine/text";
 
 const brand = { name: "Orbit", bg: "#0B0B0C", fg: "#F4F4EF", accent: "#C8FF3D", muted: "#6E6E6A", fontDisplay: "Inter", fontBody: "Inter", radius: 8 };
 const fallback: Project = { id: "p1", title: "Fallback", aspect: "16:9", style: "noir", brand, captions: false, grain: true, scenes: [{ id: "f1", template: "title-reveal", duration: 3 }] };
@@ -173,4 +174,13 @@ test("warnings sort before tips and agent text is capped", () => {
   const text = notesForAgent(notes, 5);
   assert.equal((text.match(/^\d+\. /gm) ?? []).length, 5);
   assert.match(text, /more\)/);
+});
+
+// ---------------------------------------------------------------- text
+test("tokenize keeps punctuation and word parts glued to accent words", () => {
+  const t = tokenize("Ads that *move*.");
+  assert.deepEqual(t.map((x) => [x.text, x.em, !!x.glue]), [["Ads", false, false], ["that", false, false], ["move", true, false], [".", false, true]]);
+  assert.deepEqual(tokenize("re*brand* now").map((x) => [x.text, !!x.glue]), [["re", false], ["brand", true], ["now", false]]);
+  assert.deepEqual(tokenize("*Done.* Next").map((x) => [x.text, x.em, !!x.glue]), [["Done.", true, false], ["Next", false, false]]);
+  assert.deepEqual(tokenize("a * b").map((x) => x.text), ["a", "b"]);
 });

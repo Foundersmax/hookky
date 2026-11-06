@@ -11,7 +11,9 @@
     "typecheck": "tsc --noEmit",
     "build:artifact": "vite build && node scripts/build-artifact.mjs",
     "test": "tsx --test server/*.test.ts src/*.test.ts",
-    "test:engine": "node scripts/smoke.mjs"
+    "test:engine": "node scripts/smoke.mjs",
+    "build:site": "vite build --config vite.site.config.ts",
+    "dev:site": "vite --config vite.site.config.ts --port 5174"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.6.0",
