@@ -1,6 +1,5 @@
 import { useRef, useState } from "react";
-import { useStudio, getState, setState, defaultProject, updateProject } from "../store";
-import { sanitizeProject } from "../sanitize";
+import { useStudio, getState, importProject, createProject } from "../store";
 import type { Aspect, Project } from "../types";
 import { ASPECT_SIZE } from "../types";
 import { exportVideo, download, pickMime, posterPng } from "../export";
@@ -16,7 +15,6 @@ export function ExportPanel({ toast }: { toast: (s: string) => void }) {
   const [progress, setProgress] = useState<{ label: string; p: number } | null>(null);
   const abort = useRef<AbortController | null>(null);
   const jsonRef = useRef<HTMLInputElement>(null);
-  const [confirmNew, setConfirmNew] = useState(false);
   const save = async (fn: () => Promise<boolean>) => {
     try {
       if (!(await fn())) toast("Save cancelled");
@@ -86,28 +84,20 @@ export function ExportPanel({ toast }: { toast: (s: string) => void }) {
         <button className="btn" onClick={() => save(() => download(new Blob([JSON.stringify({ ...getState().project, audio: undefined, music: undefined }, null, 2)], { type: "application/json" }), `${slug}.hookky.json`))}>
           Save project (.json)
         </button>
-        <button className="btn" onClick={() => jsonRef.current?.click()}>Open project…</button>
+        <button className="btn" onClick={() => jsonRef.current?.click()}>Import a project file…</button>
         <input ref={jsonRef} type="file" hidden accept=".json,application/json" onChange={async (e) => {
           const f = e.target.files?.[0];
           if (!f) return;
           try {
             const p = JSON.parse(await f.text());
             if (!Array.isArray(p?.scenes) || !p.scenes.length) throw new Error("That file isn't a Hookky project.");
-            updateProject(() => sanitizeProject(p, defaultProject()));
-            setState({ selected: 0 });
-            toast("Project loaded");
+            await importProject(p);
+            toast("Imported as a new project");
           } catch (err: any) {
             toast(err.message);
           }
         }} />
-        {confirmNew ? (
-          <div className="row" style={{ gap: 6 }}>
-            <button className="btn" onClick={() => (setState({ project: defaultProject(), selected: 0 }), setConfirmNew(false), toast("Started a new project"))}>Replace current project</button>
-            <button className="btn ghost" onClick={() => setConfirmNew(false)}>Keep it</button>
-          </div>
-        ) : (
-          <button className="btn ghost" onClick={() => setConfirmNew(true)}>New project</button>
-        )}
+        <button className="btn ghost" onClick={() => createProject("blank")}>New blank project</button>
       </div>
     </>
   );

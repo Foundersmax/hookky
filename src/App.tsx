@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useStudio, setState, getState, undo, redo, updateProject, setBrand } from "./store";
+import { useStudio, setState, getState, undo, redo, updateProject, setBrand, createProject, flushSave } from "./store";
 import { ChatPanel } from "./components/ChatPanel";
 import { Stage } from "./components/Stage";
 import { Timeline, moveScene } from "./components/Timeline";
@@ -12,6 +12,8 @@ import { Icon } from "./components/Icon";
 import { Logo } from "./components/Logo";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ShortcutsSheet } from "./components/ShortcutsSheet";
+import { Home } from "./components/Home";
+import { Versions } from "./components/Versions";
 import { clock } from "./clock";
 import { images } from "./runtime";
 import { STYLE_PRESETS, FONT_CHOICES } from "./presets";
@@ -50,6 +52,12 @@ export function App() {
     }
   });
 
+  const view = useStudio((s) => s.view);
+  const goHome = () => {
+    clock.pause();
+    flushSave();
+    setState({ view: "home" });
+  };
   const notice = useStudio((s) => s.notice);
   useEffect(() => {
     if (!notice) return;
@@ -136,6 +144,7 @@ export function App() {
         setShowKeys(true);
         return;
       }
+      if (getState().view === "home") return; // studio shortcuts only apply in the studio
       if (e.code === "Space") {
         e.preventDefault();
         if (tag === "BUTTON" || tag === "INPUT") (e.target as HTMLElement).blur(); // stop the focused control also reacting on keyup
@@ -162,11 +171,22 @@ export function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <a className="brandmark" href="/" aria-label="Hookky home">
+        <button className="brandmark" onClick={goHome} aria-label="All projects">
           <Logo height={22} />
-        </a>
-        <input className="title-input" value={project.title} onChange={(e) => setState((s) => ({ project: { ...s.project, title: e.target.value } }))} />
+        </button>
+        <nav className="crumbs" aria-label="Breadcrumb">
+          <button className={`crumb ${view === "home" ? "on" : ""}`} onClick={goHome} aria-current={view === "home" ? "page" : undefined}>
+            Projects
+          </button>
+          {view === "studio" && (
+            <>
+              <span className="crumb-sep" aria-hidden>/</span>
+              <input className="title-input" value={project.title} aria-label="Project name" onChange={(e) => setState((s) => ({ project: { ...s.project, title: e.target.value } }))} />
+            </>
+          )}
+        </nav>
         <span className="spacer" />
+        {view === "studio" && (<>
         <div className="seg" role="tablist" aria-label="Aspect ratio">
           {(["16:9", "9:16", "1:1", "4:5"] as Aspect[]).map((a) => (
             <button key={a} className={project.aspect === a ? "on" : ""} onClick={() => updateProject((p) => ({ ...p, aspect: a }))}>
@@ -198,16 +218,29 @@ export function App() {
         <button className="btn icon ghost" title="Redo (⇧⌘Z)" onClick={redo}>
           <Icon name="redo" />
         </button>
+        <Versions toast={toast} />
+        </>)}
         <button className="btn icon ghost" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts" onClick={() => setShowKeys(true)}>
           <Icon name="keyboard" />
         </button>
         <button className="btn icon ghost" title="Toggle theme" onClick={() => setTheme((t) => ((t ?? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")) === "dark" ? "light" : "dark"))}>
           <Icon name="sun" />
         </button>
-        <button className="btn primary" onClick={() => setTab("Export")}>
-          <Icon name="download" /> Export
-        </button>
+        {view === "studio" ? (
+          <button className="btn primary" onClick={() => setTab("Export")}>
+            <Icon name="download" /> Export
+          </button>
+        ) : (
+          <button className="btn primary" onClick={() => createProject("blank")}>
+            <Icon name="plus" /> New project
+          </button>
+        )}
       </header>
+      {view === "home" ? (
+        <ErrorBoundary area="projects page">
+          <Home />
+        </ErrorBoundary>
+      ) : (
       <div className={`main ${panels.left ? "" : "hide-left"} ${panels.right ? "" : "hide-right"}`}>
         <ErrorBoundary area="chat" className="chat">
           <ChatPanel />
@@ -241,6 +274,7 @@ export function App() {
           </aside>
         </section>
       </div>
+      )}
       {toastMsg && <div className="toast">{toastMsg}</div>}
       {showKeys && <ShortcutsSheet onClose={() => setShowKeys(false)} />}
     </div>

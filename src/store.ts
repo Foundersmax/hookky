@@ -5,7 +5,10 @@ import { presetById } from "./presets";
 import { uid, clamp } from "./engine/util";
 import { sanitizeScene, sanitizeProject } from "./sanitize";
 import { buildScenes, patchScenes, brandWithStyle } from "./storyboard";
-import { loadSaved, save as saveStudio, markRestored, requestPersistence } from "./persist";
+import * as db from "./persist";
+import type { ProjectMeta, Version } from "./persist";
+import { STARTERS } from "./starters";
+import { posterFor } from "./components/thumbs";
 
 export interface StudioState {
   project: Project;
@@ -18,6 +21,10 @@ export interface StudioState {
   busy: boolean;
   /** one-off message for the toast */
   notice?: string;
+  /** dashboard list of every project */
+  projects: ProjectMeta[];
+  /** what the app shows */
+  view: "home" | "studio";
   health?: { agent: "claude" | "hosted" | "local"; transcription: string; connectors: { id: string; label: string; configured: boolean; kind: string; note: string }[] };
 }
 
@@ -51,29 +58,38 @@ let state: StudioState = {
   playing: false,
   conversationId: uid("c"),
   busy: false,
+  projects: [],
+  view: "studio",
 };
 
+/** Turn a stored record into a clean, playable project (restoring voice-over and music files). */
+function revive(raw: any, audio?: Blob, music?: Blob): Project {
+  const project = sanitizeProject(raw, defaultProject());
+  if (typeof raw?.id === "string" && raw.id) project.id = raw.id.slice(0, 40);
+  if (audio && raw?.audio && typeof raw.audio.duration === "number") project.audio = { ...raw.audio, url: URL.createObjectURL(audio) };
+  if (music && raw?.music) project.music = { name: String(raw.music.name ?? "music"), volume: Number(raw.music.volume) || 0.25, url: URL.createObjectURL(music) };
+  db.markRestored(project.id, project.audio?.url, project.music?.url);
+  return project;
+}
+
 /**
- * Restore the last session before the first render: project (cleaned), assets, chat, and the
- * voice-over / music files. Never throws; a damaged save falls back to the demo project.
+ * Restore the workspace before the first render: the project list, the shared asset library,
+ * and the last open project with its chat and media. Never throws; a damaged project falls back
+ * to the demo. A first visit seeds the library with the demo project.
  */
 export async function hydrate() {
-  const { saved, audioBlob, musicBlob } = await loadSaved().catch(() => ({ saved: {} as Record<string, any>, audioBlob: undefined, musicBlob: undefined }));
-  const raw = (saved.project ?? null) as Record<string, any> | null;
-  const patch: Partial<StudioState> = {};
-  if (raw && Array.isArray(raw.scenes)) {
-    const project = sanitizeProject(raw, defaultProject());
-    if (audioBlob && raw.audio && typeof raw.audio.duration === "number") {
-      project.audio = { ...raw.audio, url: URL.createObjectURL(audioBlob) };
+  const ws = await db.loadWorkspace().catch(() => ({ projects: [], assets: [], durable: false, currentId: undefined }) as db.Workspace);
+  const patch: Partial<StudioState> = { projects: ws.projects, assets: ws.assets };
+  if (ws.currentId) {
+    const rec = await db.loadProject(ws.currentId).catch(() => ({ chat: [] as ChatMessage[] }) as Awaited<ReturnType<typeof db.loadProject>>);
+    if (rec.project && Array.isArray(rec.project.scenes)) {
+      patch.project = revive({ ...rec.project, id: ws.currentId }, rec.audio, rec.music);
+      patch.chat = rec.chat;
     }
-    if (musicBlob && raw.music) project.music = { name: String(raw.music.name ?? "music"), volume: Number(raw.music.volume) || 0.25, url: URL.createObjectURL(musicBlob) };
-    patch.project = project;
-    markRestored(project.audio?.url, project.music?.url);
   }
-  if (Array.isArray(saved.assets)) patch.assets = (saved.assets as Asset[]).filter((a) => a && typeof a.src === "string" && !a.src.startsWith("blob:"));
-  if (Array.isArray(saved.chat)) patch.chat = (saved.chat as ChatMessage[]).filter((m) => m && typeof m.text === "string");
   state = { ...state, ...patch };
-  requestPersistence();
+  if (!ws.projects.length) scheduleSave(); // first visit: put the demo into the library
+  db.requestPersistence();
 }
 
 // ---------------------------------------------------------------- undo history (project only)
@@ -99,21 +115,136 @@ export function setState(patch: Partial<StudioState> | ((s: StudioState) => Part
 }
 
 let saveFailed = false;
+let lastLibrary: Asset[] | null = null;
 function scheduleSave() {
   clearTimeout(saveTimer);
-  saveTimer = window.setTimeout(() => {
-    saveStudio(state.project, state.assets, state.chat).then(
-      () => {
-        if (saveFailed) setState({ notice: "Saving works again." });
-        saveFailed = false;
-      },
-      () => {
-        if (!saveFailed) setState({ notice: "Couldn't save your project: this browser's storage is full or blocked. Save a copy from Export → Save project." });
-        saveFailed = true;
-      },
-    );
-  }, 500);
+  saveTimer = window.setTimeout(flushSave, 500);
 }
+/** Save the open project (with a fresh dashboard thumbnail) and, if it changed, the shared library. */
+export async function flushSave() {
+  clearTimeout(saveTimer);
+  const { project, chat, assets } = state;
+  let thumb: string | undefined;
+  try {
+    thumb = posterFor(project);
+  } catch {}
+  try {
+    await db.saveProject(project, chat, thumb);
+    if (assets !== lastLibrary) {
+      await db.saveLibrary(assets);
+      lastLibrary = assets;
+    }
+    const projects = await db.listProjects();
+    if (projects.length) setStateQuiet({ projects });
+    if (saveFailed) setState({ notice: "Saving works again." });
+    saveFailed = false;
+  } catch {
+    if (!saveFailed) setState({ notice: "Couldn't save your project: this browser's storage is full or blocked. Save a copy from Export → Save project." });
+    saveFailed = true;
+  }
+}
+/** Update state without scheduling another save (used for the project list itself). */
+function setStateQuiet(p: Partial<StudioState>) {
+  state = { ...state, ...p };
+  listeners.forEach((l) => l());
+}
+
+// ---------------------------------------------------------------- projects
+function resetHistory() {
+  past.length = 0;
+  future.length = 0;
+}
+
+/** Open a project from the library (saving the current one first). */
+export async function openProject(id: string) {
+  if (id === state.project.id) return setState({ view: "studio" });
+  await flushSave();
+  const rec = await db.loadProject(id);
+  if (!rec.project) {
+    setState({ notice: "That project couldn't be opened. It may have been deleted in another tab." });
+    return;
+  }
+  resetHistory();
+  setStateQuiet({ project: revive({ ...rec.project, id }, rec.audio, rec.music), chat: rec.chat, selected: 0, conversationId: uid("c"), view: "studio" });
+  await db.setCurrent(id);
+}
+
+/** Create a project from a starter kit and open it. */
+export async function createProject(starterId = "blank") {
+  await flushSave();
+  const starter = STARTERS.find((s) => s.id === starterId) ?? STARTERS[STARTERS.length - 1];
+  const project = starter.build();
+  resetHistory();
+  setStateQuiet({ project, chat: [], selected: 0, conversationId: uid("c"), view: "studio" });
+  await flushSave();
+}
+
+/** Import a project file (e.g. from Export → Save project) as a new project in the library, and open it. */
+export async function importProject(data: unknown) {
+  await flushSave();
+  const project = sanitizeProject(data, defaultProject());
+  project.id = uid("p");
+  resetHistory();
+  setStateQuiet({ project, chat: [], selected: 0, conversationId: uid("c"), view: "studio" });
+  await flushSave();
+}
+
+export async function duplicateProject(id: string) {
+  await flushSave();
+  const src = state.projects.find((p) => p.id === id);
+  await db.duplicateProjectRecord(id, uid("p"), `${src?.title ?? "Project"} copy`);
+  setStateQuiet({ projects: await db.listProjects() });
+}
+
+export async function renameProject(id: string, title: string) {
+  const t = title.trim().slice(0, 120) || "Untitled";
+  if (id === state.project.id) setState({ project: { ...state.project, title: t } });
+  else {
+    await db.renameProjectRecord(id, t);
+    setStateQuiet({ projects: await db.listProjects() });
+  }
+}
+
+/** Delete a project. Deleting the open one opens the next most recent (or a fresh blank). */
+export async function deleteProject(id: string) {
+  clearTimeout(saveTimer);
+  await db.deleteProjectRecord(id);
+  const projects = await db.listProjects();
+  setStateQuiet({ projects });
+  if (id === state.project.id) {
+    if (projects[0]) {
+      const rec = await db.loadProject(projects[0].id);
+      resetHistory();
+      setStateQuiet({ project: revive({ ...rec.project, id: projects[0].id }, rec.audio, rec.music), chat: rec.chat, selected: 0, conversationId: uid("c") });
+      await db.setCurrent(projects[0].id);
+    } else {
+      resetHistory();
+      setStateQuiet({ project: STARTERS[STARTERS.length - 1].build(), chat: [], selected: 0, conversationId: uid("c") });
+      await flushSave();
+    }
+  }
+}
+
+// ---------------------------------------------------------------- versions
+export const listVersions = () => db.listVersions(state.project.id);
+
+export async function saveVersion(name?: string): Promise<Version> {
+  const { audio, music, ...rest } = state.project;
+  const v: Version = { id: uid("v"), name: (name ?? "").trim().slice(0, 80) || new Date().toLocaleString(), createdAt: Date.now(), project: rest };
+  await db.addVersion(state.project.id, v);
+  return v;
+}
+
+/** Restore a version into the open project (undoable; keeps the voice-over and music). */
+export function restoreVersion(v: Version) {
+  const cur = state.project;
+  const restored = sanitizeProject(v.project, cur);
+  updateProject(() => ({ ...restored, id: cur.id, audio: cur.audio, music: cur.music }));
+  setState({ selected: 0 });
+}
+
+export const deleteVersion = (versionId: string) => db.deleteVersion(state.project.id, versionId);
+
 export function useStudio<T>(sel: (s: StudioState) => T): T {
   return useSyncExternalStore(
     (l) => (listeners.add(l), () => listeners.delete(l)),

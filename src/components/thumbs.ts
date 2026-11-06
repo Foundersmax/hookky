@@ -72,3 +72,16 @@ export function useThumbs(project: Project) {
   }
   return { thumbs: out, width: Math.round((SHOW_H * ASPECT_SIZE[project.aspect][0]) / ASPECT_SIZE[project.aspect][1]) };
 }
+
+let posterRenderer: Renderer | null = null;
+/** A small JPEG poster of a project for the dashboard: its second scene (or first) mid-animation. */
+export function posterFor(p: Project, height = 180): string {
+  if (!p.scenes.length) return "";
+  const [W, H] = ASPECT_SIZE[p.aspect];
+  const scale = height / H;
+  if (!posterRenderer) posterRenderer = new Renderer(document.createElement("canvas"), W, H, scale);
+  else posterRenderer.resize(W, H, scale);
+  const s = p.scenes[Math.min(1, p.scenes.length - 1)];
+  posterRenderer.render({ ...p, scenes: [{ ...s, transition: "cut" }], captions: false, grain: false }, momentFor(s), images.get);
+  return posterRenderer.canvas.toDataURL("image/jpeg", 0.8);
+}
