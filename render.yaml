@@ -12,6 +12,9 @@ services:
     startCommand: npm start
     healthCheckPath: /api/health
     autoDeploy: true
+    # The studio's address. Point a CNAME for "app" at this service's .onrender.com host.
+    domains:
+      - app.rookker.com
     envVars:
       - key: NODE_VERSION
         value: "22"

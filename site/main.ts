@@ -15,7 +15,7 @@ function studioUrl() {
 for (const a of document.querySelectorAll<HTMLAnchorElement>("[data-studio]")) a.href = studioUrl();
 // The end card of the showcase names the real studio address.
 const endCard = showcase.scenes.find((s) => s.template === "cta-end");
-if (endCard) endCard.url = studioUrl().startsWith("https://github.com") ? "app.yourdomain.com" : new URL(studioUrl()).host;
+if (endCard) endCard.url = studioUrl().startsWith("https://github.com") ? "app.rookker.com" : new URL(studioUrl()).host;
 for (const el of document.querySelectorAll("[data-year]")) el.textContent = String(new Date().getFullYear());
 
 class Player {
