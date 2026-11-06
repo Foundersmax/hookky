@@ -199,6 +199,24 @@ select.sel { height: 32px; border-radius: 9px; border: 1px solid var(--line); ba
 .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 9px 14px; border-radius: 10px; font-size: 13px; z-index: 50; box-shadow: var(--shadow); }
 kbd { font: 10.5px var(--mono); border: 1px solid var(--line-2); border-bottom-width: 2px; border-radius: 5px; padding: 0 4px; color: var(--text-2); }
 
+/* ---------- fullscreen preview */
+.stage.is-full { background: #000; padding: 0; cursor: default; }
+.stage.is-full canvas { box-shadow: none; border-radius: 0; }
+.stage.window-full { position: fixed; inset: 0; z-index: 100; padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
+.stage.idle { cursor: none; }
+.fs-controls {
+  position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: center; gap: 14px;
+  padding: 28px max(20px, env(safe-area-inset-right, 0px)) max(18px, env(safe-area-inset-bottom, 0px)) max(20px, env(safe-area-inset-left, 0px));
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.7)); color: #fff; transition: opacity .25s;
+}
+.stage.idle .fs-controls { opacity: 0; pointer-events: none; }
+.fs-btn { width: 40px; height: 40px; flex: none; display: grid; place-items: center; border: 0; border-radius: 50%; background: rgba(255,255,255,.14); color: #fff; }
+.fs-btn:hover { background: rgba(255,255,255,.24); }
+.fs-btn:focus-visible, .fs-scrub:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.fs-scrub { flex: 1; min-width: 0; accent-color: #fff; }
+.fs-time { font: 12px var(--mono); color: rgba(255,255,255,.8); white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { .fs-controls { transition: none; } }
+
 /* ---------- collapsible panels (desktop only; phones always stack everything) */
 .panel-toggles { display: inline-flex; gap: 2px; }
 .panel-toggles .btn.on { color: var(--text); }

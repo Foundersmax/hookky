@@ -92,7 +92,7 @@ Conversation history is kept server-side and only ever appended to, so prompt ca
 
 ## Shortcuts
 
-`Space` play/pause · `F` focus on the canvas (hide both sidebars) · `←/→` previous/next scene · `⌘Z / ⇧⌘Z` undo/redo · `Home` restart
+`Space` play/pause · `F` focus on the canvas (hide both sidebars) · `Esc` leave fullscreen preview · `←/→` previous/next scene · `⌘Z / ⇧⌘Z` undo/redo · `Home` restart
 
 ## Notes
 

@@ -119,9 +119,12 @@ export function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      const type = (e.target as HTMLInputElement).type;
+      const typing = tag === "TEXTAREA" || tag === "SELECT" || (tag === "INPUT" && !["range", "checkbox", "radio", "button", "color"].includes(type)) || (e.target as HTMLElement).isContentEditable;
+      if (typing) return;
       if (e.code === "Space") {
         e.preventDefault();
+        if (tag === "BUTTON" || tag === "INPUT") (e.target as HTMLElement).blur(); // stop the focused control also reacting on keyup
         clock.toggle();
       } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
         e.preventDefault();

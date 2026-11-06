@@ -22,6 +22,8 @@ const paths: Record<string, string> = {
   panelLeft: "M4 5h16v14H4zM9.5 5v14",
   panelRight: "M4 5h16v14H4zM14.5 5v14",
   focus: "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5",
+  expand: "M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7",
+  shrink: "M4 14h6v6M10 14l-7 7M20 10h-6V4M14 10l7-7",
   wand: "M15 4V2M15 10V8M11 6H9M21 6h-2M18 3l-1.5 1.5M18 9l-1.5-1.5M3 21l11-11",
 };
 
