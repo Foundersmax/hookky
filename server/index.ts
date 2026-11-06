@@ -5,7 +5,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { runAgentTurn, claudeConfigured, resetConversation } from "./agent";
-import { listConnectors, searchVisuals, importFromUrl, assertPublicUrl, magnificUpscale } from "./connectors";
+import { listConnectors, searchVisuals, importFromUrl, magnificUpscale } from "./connectors";
+import { assertPublicUrl, safeFetch } from "./safeFetch";
 import { transcribe, transcriptionProvider } from "./transcribe";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -94,10 +95,10 @@ app.post("/api/transcribe", upload.single("audio"), async (req, res) => {
 const cache = new Map<string, { type: string; body: Buffer }>();
 app.get("/api/img", async (req, res) => {
   try {
-    const u = assertPublicUrl(String(req.query.u ?? ""));
+    const u = await assertPublicUrl(String(req.query.u ?? ""));
     let hit = cache.get(u.href);
     if (!hit) {
-      const r = await fetch(u, { headers: { "User-Agent": "Mozilla/5.0 (compatible; Hookky/0.1)", Referer: u.origin }, signal: AbortSignal.timeout(20000) });
+      const { res: r } = await safeFetch(u, { headers: { "User-Agent": "Mozilla/5.0 (compatible; Hookky/0.1)", Referer: u.origin }, timeoutMs: 20000 });
       const type = r.headers.get("content-type") || "";
       if (!r.ok || !type.startsWith("image/")) throw new Error(`Not an image (${r.status})`);
       hit = { type, body: Buffer.from(await r.arrayBuffer()) };
