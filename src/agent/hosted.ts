@@ -1,13 +1,13 @@
 // Claude agent for the claude.ai-hosted build: the page calls Claude through the `sample`
 // capability and Claude edits the studio through page-side tools.
-import { TEMPLATES, TRANSITIONS, BACKGROUNDS, MOTIONS } from "../types";
+import { TEMPLATES, TRANSITIONS, BACKGROUNDS, MOTIONS, PACES } from "../types";
 import type { ChatAttachment } from "../types";
 import { STYLE_PRESETS } from "../presets";
 import { getState, applyStoryboard, applyPatch, setBrand, updateProject } from "../store";
 import { totalDuration } from "../engine/render";
 import { sampleCap, sampleLimits } from "../host";
 import { directorPrompt } from "./prompt";
-import { sanitizeBrand } from "../sanitize";
+import { sanitizeBrand, sanitizeDirections } from "../sanitize";
 import { lintStoryboard, notesForAgent } from "./lint";
 
 const SCENE_FIELDS = `Each scene: {template (${TEMPLATES.join("|")}), duration (s), kicker?, headline? (*word* = accent), subline?, items?: string[], stat?: {value, prefix?, suffix?, decimals?, label?}, image?: asset id, images?: asset ids, cta?, url?, author?, background? (${BACKGROUNDS.join("|")}), align? (left|center), transition? (${TRANSITIONS.join("|")}), motion? (${MOTIONS.join("|")}), accent? (hex)}`;
@@ -21,7 +21,23 @@ function review() {
 
 const asObj = (v: unknown) => (v && typeof v === "object" ? (v as Record<string, any>) : {});
 
-export const hostedTools = (activity: (label: string) => void) => [
+export const hostedTools = (activity: (label: string) => void, onDirections: (d: unknown) => void = () => {}) => [
+  {
+    name: "propose_directions",
+    description: `Pitch 3 distinct creative directions as cards the user picks from, before building. Each: {name (2-3 words), pitch (1 sentence), style (preset id), motion (${MOTIONS.join("|")}), pace (${PACES.join("|")}), hook (opening headline, *word* = accent), accent? (hex)}. Then stop and wait for the pick.`,
+    inputSchema: {
+      type: "object" as const,
+      properties: { directions: { type: "array", items: { type: "object" }, minItems: 3, maxItems: 3 } },
+      required: ["directions"],
+    },
+    execute(input: Record<string, unknown>) {
+      activity("Sketching directions");
+      const list = sanitizeDirections(input.directions);
+      if (list.length < 2) throw new Error("Send 3 directions, each with at least a name and a hook.");
+      onDirections(list);
+      return `Showing ${list.length} direction cards. Don't build yet: reply with one short sentence inviting the user to pick one (or mix two).`;
+    },
+  },
   {
     name: "create_storyboard",
     description: `Replace the whole animation with a new storyboard. ${SCENE_FIELDS}. Returns a short confirmation.`,
@@ -90,10 +106,11 @@ async function dataUrlToBlob(src: string) {
 export interface HostedCallbacks {
   onText: (text: string) => void;
   onActivity: (label: string) => void;
+  onDirections?: (d: unknown) => void;
 }
 
 /** One agent turn on claude.ai. Rejects with the sample error shape on failure. */
-export async function hostedTurn(text: string, attachments: ChatAttachment[], stateJson: unknown, cb: HostedCallbacks, signal?: AbortSignal) {
+export async function hostedTurn(text: string, attachments: ChatAttachment[], stateJson: unknown, cb: HostedCallbacks, signal?: AbortSignal, frames: Blob[] = []) {
   const sample = await sampleCap;
   if (!sample) throw { code: "not_granted" };
   const limits = await sampleLimits();
@@ -107,6 +124,10 @@ export async function hostedTurn(text: string, attachments: ChatAttachment[], st
       if (asset?.src.startsWith("data:")) images.push(await dataUrlToBlob(asset.src));
     }
   }
+  const refCount = images.length;
+  // Rendered frames for a visual review go after the references, within the host's image limit.
+  if (limits?.images) images.push(...frames.slice(0, Math.max(0, limits.images.maxCount - images.length)));
+  const frameCount = images.length - refCount;
 
   // The page keeps the conversation: standing rules, recent turns, then this turn.
   const prior = chat
@@ -114,7 +135,9 @@ export async function hostedTurn(text: string, attachments: ChatAttachment[], st
     .slice(-10, -1)
     .map((m) => ({ role: m.role as "user" | "assistant", content: m.text.slice(0, 2000) }));
   while (prior.length && prior[0].role !== "user") prior.shift();
-  const imageNote = images.length ? `\n\nAttached images, in order: ${imgAtts.slice(0, images.length).map((a) => a.assetId).join(", ")}. Reference them by these asset ids.` : "";
+  const imageNote =
+    (refCount ? `\n\nAttached images, in order: ${imgAtts.slice(0, refCount).map((a) => a.assetId).join(", ")}. Reference them by these asset ids.` : "") +
+    (frameCount ? `\n\n${refCount ? "The last " : ""}${frameCount === 1 ? "attached image is the contact sheet" : `${frameCount} attached images are the contact sheets`} of rendered frames.` : frames.length ? "\n\n(The contact sheet couldn't be attached here, so review from the scene list instead.)" : "");
   const turns = [
     { role: "user" as const, content: directorPrompt("hosted") + "\n\nAlways change the workspace by calling the tools; then reply to the user in 2-5 sentences." },
     ...prior,
@@ -122,7 +145,7 @@ export async function hostedTurn(text: string, attachments: ChatAttachment[], st
   ];
 
   return sample(turns, {
-    tools: hostedTools(cb.onActivity),
+    tools: hostedTools(cb.onActivity, cb.onDirections),
     ...(images.length && { images }),
     onText: ({ text }: { text: string }) => cb.onText(text),
     signal,

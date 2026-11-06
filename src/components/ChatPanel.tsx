@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useStudio, addAssets, setAudio, getState } from "../store";
-import { sendToAgent, resetAgent } from "../agent/client";
+import { sendToAgent, resetAgent, reviewFrames, askForDirections } from "../agent/client";
+import { DirectionCards } from "./DirectionCards";
 import type { Asset, ChatAttachment } from "../types";
 import { Icon } from "./Icon";
 import { LogoMark } from "./Logo";
@@ -8,7 +9,8 @@ import { uid } from "../engine/util";
 import { extractPalette } from "../engine/images";
 import { ingestVoiceover } from "./VoicePanel";
 
-const STARTERS = [
+const STARTERS: { t: string; s: string; server?: boolean; directions?: boolean }[] = [
+  { t: "Pitch me 3 directions", s: "Type your product below first, and I'll sketch three different looks to pick from.", directions: true },
   { t: "30s launch ad for a minimalist smartwatch", s: "\"Orbit\" — titanium, 10-day battery, sleep coaching. Swiss style, pre-order CTA." },
   { t: "Vertical reel for a skincare drop", s: "Blush style, 9:16, soft and premium, captions on." },
   { t: "Turn my voice-over into motion graphics", s: "Upload a 30–60s VO and I'll storyboard it in sync." },
@@ -66,6 +68,7 @@ export function ChatPanel() {
   const chat = useStudio((s) => s.chat);
   const busy = useStudio((s) => s.busy);
   const health = useStudio((s) => s.health);
+  const sceneCount = useStudio((s) => s.project.scenes.length);
   const [text, setText] = useState("");
   const [pending, setPending] = useState<ChatAttachment[]>([]);
   const [drag, setDrag] = useState(false);
@@ -108,6 +111,11 @@ export function ChatPanel() {
             <span className="dot" />
             {health ? (health.agent === "local" ? "Local director" : "Claude") : "…"}
           </span>
+          {health && health.agent !== "local" && (
+            <button className="btn icon ghost" title="Visual review: Claude looks at the rendered frames and fixes what it sees" aria-label="Review the rendered frames" disabled={busy || !sceneCount} onClick={() => reviewFrames()}>
+              <Icon name="eye" />
+            </button>
+          )}
           <button className="btn icon ghost" title="New conversation" onClick={resetAgent}>
             <Icon name="reset" />
           </button>
@@ -122,7 +130,7 @@ export function ChatPanel() {
             <p>Describe the product, drop references or a voice-over, or paste a link from Pinterest, Freepik, Envato — anywhere.</p>
             <div className="chips">
               {STARTERS.filter((s) => s.server === undefined || s.server === !!health?.connectors.length).map((s) => (
-                <button key={s.t} className="chip" onClick={() => submit(`${s.t}. ${s.s}`)}>
+                <button key={s.t} className={`chip ${s.directions ? "accent" : ""}`} onClick={() => (s.directions ? (text.trim() ? (askForDirections(text), setText("")) : askForDirections()) : submit(`${s.t}. ${s.s}`))}>
                   {s.t}
                   <small>{s.s}</small>
                 </button>
@@ -132,7 +140,12 @@ export function ChatPanel() {
         )}
         {chat.map((m) => (
           <div key={m.id} className={`msg ${m.role} ${m.error ? "error" : ""}`}>
-            {!!m.attachments?.length && (
+            {m.review && m.attachments?.[0]?.preview ? (
+              <figure className="review-sheet">
+                <img src={m.attachments[0].preview} alt="Contact sheet of the rendered frames Claude reviewed" />
+                <figcaption>{m.text}</figcaption>
+              </figure>
+            ) : !!m.attachments?.length && (
               <div className="att-row">
                 {m.attachments.map((a, i) => (
                   <span className="att" key={i}>
@@ -155,7 +168,8 @@ export function ChatPanel() {
                 ))}
               </div>
             )}
-            {(m.text || !m.pending) && <div className="bubble">{m.text}</div>}
+            {(m.text || !m.pending) && !(m.review && m.attachments?.[0]?.preview) && <div className="bubble">{m.text}</div>}
+            <DirectionCards m={m} />
             {m.pending && !m.text && (
               <div className="bubble">
                 <span className="typing"><i /><i /><i /></span>

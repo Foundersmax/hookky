@@ -4,7 +4,7 @@ import { STYLE_PRESETS } from "../presets";
 import { STARTERS } from "../starters";
 import { TEMPLATES, type Aspect, type Scene } from "../types";
 import { clock } from "../clock";
-import { sendToAgent } from "../agent/client";
+import { sendToAgent, reviewFrames, askForDirections, autoReviewOn, setAutoReview } from "../agent/client";
 import { score } from "../fuzzy";
 
 export interface PaletteHost {
@@ -82,6 +82,12 @@ export function CommandPalette({ host }: { host: PaletteHost }) {
       add("Playback", "play", clock.playing ? "Pause" : "Play", () => clock.toggle(), { keys: "Space" });
       add("Playback", "fullscreen", "Fullscreen preview", () => window.dispatchEvent(new Event("hookky:fullscreen")));
       add("Playback", "start", "Back to the start", () => clock.seek(0), { keys: "Home" });
+      add("Agent", "directions", "Pitch 3 creative directions", () => askForDirections(), { hint: "cards to pick from" });
+      if (health?.agent && health.agent !== "local") {
+        add("Agent", "review", "Review the rendered frames", () => reviewFrames(), { hint: "Claude looks and fixes" });
+        const on = autoReviewOn();
+        add("Agent", "auto-review", on ? "Turn auto visual review off" : "Turn auto visual review on", () => (setAutoReview(!on), host.toast(on ? "Claude won't review new storyboards automatically" : "Claude will review each new storyboard's frames")));
+      }
       add("Studio", "export", "Export video…", () => host.openTab("Export"));
       add("Studio", "version", "Save a version", () => saveVersion().then((v) => host.toast(`Saved version “${v.name}”`)));
       add("Studio", "undo", "Undo", undo, { keys: "⌘Z" });
@@ -117,7 +123,7 @@ export function CommandPalette({ host }: { host: PaletteHost }) {
     add("App", "theme", "Toggle light / dark theme", host.toggleTheme);
     add("App", "keys", "Keyboard shortcuts", host.showKeys, { keys: "?" });
     return c;
-  }, [view, projects, project.id, project.aspect, project.style, project.captions, project.grain, project.audio]);
+  }, [view, projects, project.id, project.aspect, project.style, project.captions, project.grain, project.audio, health?.agent]);
 
   const query = q.trim().toLowerCase();
   const results = useMemo(() => {

@@ -1,8 +1,9 @@
 // Strict cleaning of scenes and brand values from any source (Claude, the local director,
 // an opened project file, an older saved version). Whatever comes in, what comes out is
 // something the renderer can draw without throwing.
-import type { Brand, Project, Scene, Stat, Aspect } from "./types";
-import { TEMPLATES, TRANSITIONS, BACKGROUNDS, MOTIONS } from "./types";
+import type { Brand, Project, Scene, Stat, Aspect, Direction } from "./types";
+import { TEMPLATES, TRANSITIONS, BACKGROUNDS, MOTIONS, PACES } from "./types";
+import { STYLE_PRESETS } from "./presets";
 import { uid } from "./engine/util";
 
 const MAX_TEXT = 280;
@@ -127,4 +128,28 @@ export function sanitizeProject(input: unknown, fallback: Project): Project {
     audio: undefined,
     music: undefined,
   };
+}
+
+/** Clean the creative directions the agent pitches: 1–3 complete routes, or none. */
+export function sanitizeDirections(input: unknown): Direction[] {
+  const arr = Array.isArray(input) ? input : [];
+  const out: Direction[] = [];
+  for (const x of arr) {
+    if (!x || typeof x !== "object") continue;
+    const o = x as Record<string, unknown>;
+    const name = str(o.name, 40);
+    const hook = str(o.hook, 80);
+    if (!name || !hook) continue;
+    out.push({
+      name,
+      pitch: str(o.pitch, 240) ?? "",
+      style: oneOf(o.style, STYLE_PRESETS.map((p) => p.id)) ?? "noir",
+      motion: oneOf(o.motion, MOTIONS) ?? "snappy",
+      pace: oneOf(o.pace, PACES) ?? "steady",
+      hook,
+      accent: hex(o.accent),
+    });
+    if (out.length === 3) break;
+  }
+  return out;
 }

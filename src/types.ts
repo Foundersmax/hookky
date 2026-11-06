@@ -139,6 +139,21 @@ export interface ChatAttachment {
   preview?: string;
 }
 
+export const PACES = ["punchy", "steady", "cinematic"] as const;
+export type Pace = (typeof PACES)[number];
+
+/** One creative route the agent pitches before building. */
+export interface Direction {
+  name: string;
+  pitch: string;
+  style: string;
+  motion: Motion;
+  pace: Pace;
+  /** Opening headline, *word* = accent. */
+  hook: string;
+  accent?: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant" | "system";
@@ -148,6 +163,14 @@ export interface ChatMessage {
   activity?: string[];
   pending?: boolean;
   error?: boolean;
+  /** Creative directions pitched in this reply, shown as cards. */
+  directions?: Direction[];
+  /** Index of the direction the user built. */
+  picked?: number;
+  /** The brief the directions answer (used by the local director when one is picked). */
+  brief?: string;
+  /** A visual-review turn: the attachment is the contact sheet Claude was shown. */
+  review?: boolean;
 }
 
 /** Server → client stream events */
@@ -160,6 +183,7 @@ export type AgentEvent =
   | { type: "patch"; ops: PatchOp[] }
   | { type: "brand"; brand: Partial<Brand> & { style?: string } }
   | { type: "settings"; settings: Partial<Pick<Project, "aspect" | "captions" | "grain" | "title">> }
+  | { type: "directions"; directions: Direction[] }
   | { type: "error"; message: string }
   | { type: "done" };
 

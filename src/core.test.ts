@@ -221,3 +221,33 @@ test("new templates and motion presets survive cleaning", () => {
   assert.equal(sanitizeScene({ motion: "dramatic" }).motion, "dramatic");
   assert.equal(sanitizeScene({ motion: "wobbly" }).motion, undefined);
 });
+
+// ---------------------------------------------------------------- creative directions
+import { sanitizeDirections } from "./sanitize";
+import { localDirections, wantsDirections, briefName } from "./agent/localDirector";
+
+test("sanitizeDirections keeps up to 3 complete routes with valid values", () => {
+  assert.deepEqual(sanitizeDirections(null), []);
+  assert.deepEqual(sanitizeDirections([{ name: "No hook" }, 5, "x"]), []);
+  const out = sanitizeDirections([{ name: "  A  ", hook: "Hi *there*", style: "blush", motion: "dramatic", pace: "cinematic", accent: "#abc", pitch: "x".repeat(500) }]);
+  assert.equal(out[0].name, "A");
+  assert.equal(out[0].pitch.length, 240);
+  assert.deepEqual([out[0].style, out[0].motion, out[0].pace, out[0].accent], ["blush", "dramatic", "cinematic", "#abc"]);
+});
+
+test("the local director pitches three contrasting routes that fit the brief", () => {
+  const p = { ...fallback, brand: { ...brand, name: "" } };
+  assert.ok(wantsDirections("Pitch me 3 directions for a serum"));
+  assert.ok(wantsDirections("any ideas?"));
+  assert.ok(!wantsDirections("make scene 3 punchier"));
+  const beauty = localDirections('Vertical reel for "Dew", a skincare serum', p);
+  assert.equal(beauty.length, 3);
+  assert.equal(beauty[0].style, "blush");
+  assert.match(beauty[0].hook, /\*/);
+  const combos = new Set(beauty.map((d) => `${d.motion}/${d.pace}`));
+  assert.equal(combos.size, 3, "routes differ in motion and pace");
+  const app = localDirections('Launch ad for "Ledger", a budgeting app', p);
+  assert.equal(app[0].style, "clean");
+  assert.ok(app.some((d) => d.hook.includes("Ledger")));
+  assert.equal(briefName("A 15s teaser for Ritual Coffee", p), "Ritual Coffee");
+});

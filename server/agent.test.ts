@@ -55,3 +55,51 @@ test("the shadow tolerates a malformed studio state", () => {
     assert.match(s.review(), /Director's notes/);
   }
 });
+
+test("propose_directions sends cleaned cards and tells Claude to wait", async () => {
+  const shadow = new Shadow(clientState);
+  const events: AgentEvent[] = [];
+  const out = await runTool(
+    "propose_directions",
+    {
+      directions: [
+        { name: "Bold & graphic", pitch: "Big type.", style: "swiss", motion: "snappy", pace: "punchy", hook: "Meet *Orbit*", accent: "#FF4D1A" },
+        { name: "Cinematic", pitch: "Slow glow.", style: "not-a-style", motion: "warp", pace: "slow", hook: "Orbit is here", accent: "red" },
+        { name: "Calm", pitch: "Air.", style: "clean", motion: "smooth", pace: "steady", hook: "Breathe *easy*" },
+        { name: "Extra", hook: "Ignored fourth" },
+      ],
+    },
+    (e) => events.push(e),
+    shadow,
+  );
+  assert.equal(events.length, 1);
+  const ev = events[0] as Extract<AgentEvent, { type: "directions" }>;
+  assert.equal(ev.type, "directions");
+  assert.equal(ev.directions.length, 3);
+  assert.deepEqual([ev.directions[1].style, ev.directions[1].motion, ev.directions[1].pace, ev.directions[1].accent], ["noir", "snappy", "steady", undefined]);
+  assert.equal(ev.directions[0].accent, "#FF4D1A");
+  assert.match(out, /Don't build yet/);
+  assert.equal(shadow.scenes.length, 1, "pitching doesn't touch the storyboard");
+});
+
+test("propose_directions rejects empty pitches", async () => {
+  await assert.rejects(runTool("propose_directions", { directions: [{ pitch: "no name or hook" }] }, () => {}, new Shadow(clientState)), /3 directions/);
+});
+
+test("turnContent attaches valid contact sheets before the studio state and drops bad ones", () => {
+  const { turnContent } = __test;
+  const content = turnContent({
+    conversationId: "c",
+    text: "Visual review.",
+    state: { a: 1 },
+    frames: [
+      { mediaType: "image/jpeg", data: "AAAA" },
+      { mediaType: "text/html", data: "PGgxPg==" },
+      { mediaType: "image/png", data: "" },
+      { mediaType: "image/png", data: "BBBB" },
+    ],
+  });
+  const kinds = content.map((b) => (b.type === "text" ? `text:${b.text.slice(0, 24)}` : b.type));
+  assert.deepEqual(kinds, ["text:Rendered frames, contact", "image", "text:Rendered frames, contact", "image", "text:<studio_state>\n{\"a\":1}\n<", "text:Visual review."]);
+  assert.match((content[2] as { text: string }).text, /2 of 2/);
+});

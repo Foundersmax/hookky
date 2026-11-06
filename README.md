@@ -12,6 +12,8 @@
 AI motion-graphics studio for product ads and launches. Chat with a creative agent on the right; watch the animation build live in the centre, with scene, library, brand, voice and export panels on the left.
 
 - **Chat agent console**: describe a product, upload references or a voice-over, paste any link. The agent (Claude) storyboards, art-directs, and edits scenes using tools.
+- **Three directions first**: for a new brief the agent pitches three genuinely different routes (idea, style, motion, pacing, opening line) as cards with live previews; hover to play one, click **Build** to make it, or try another later.
+- **Claude watches its own cut**: after every new storyboard the studio renders each scene into a numbered contact sheet and Claude reviews the actual pixels (legibility, crowding, crops, contrast, consistency) and fixes what it sees. Press the eye button in the chat to review any time; turn the automatic pass off in ⌘K.
 - **Live workspace**: a custom canvas motion engine with 19 minimal, modern templates (including device mockup, countdown, price card, testimonials, before/after and logo reveal), 8 transitions, 5 motion presets, brand presets, your own uploaded fonts, a scrubbable timeline, and a scene inspector.
 - **Edit on the canvas**: pause and click any text to edit it in place; drop images from the Library or your desktop onto the canvas or a timeline scene; set each image's focal point and zoom in the Scene panel.
 - **Voice-over to animation**: upload a 30–60s VO. The studio finds natural pauses, transcribes it (or aligns your pasted script), and the agent builds scenes that cut on the pauses, with kinetic type synced word by word. Optional burn-in captions and a music bed that ducks under the voice.
@@ -91,6 +93,7 @@ Openverse (800M+ openly licensed images) and URL import need no key.
 
 ## Built to hold up
 
+- **Visual review.** Director's notes check the storyboard data; visual review checks the rendered frames (`src/agent/frames.ts`). Both feed back into the agent, which fixes its own work.
 - **Director's notes.** Every storyboard is reviewed automatically: copy length, reading time, pacing, a hook in the first 3 seconds, template repetition, missing images, contrast, and voice-over sync (total length and cuts that land mid-speech). Notes show in the Scene panel and on the timeline, Claude receives them after each edit and fixes the warnings itself, and **Fix with the agent** hands the rest over.
 - **Nothing the agent sends can break the preview.** Scenes from Claude, files and old saves pass through a strict cleaner (`src/sanitize.ts`), and a per-scene render guard turns any drawing error into a quiet placeholder instead of a frozen canvas.
 - **Crash recovery.** The chat, preview, timeline and each side panel have their own error boundary: a bug in one shows a "Reload this panel" card while the rest keeps working.

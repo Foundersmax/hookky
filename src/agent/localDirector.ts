@@ -1,6 +1,6 @@
 // Offline creative director: a deterministic, rule-based storyboard generator so the studio
 // works with no API key. Claude replaces this when ANTHROPIC_API_KEY is configured.
-import type { Asset, Project, StoryboardInput, Scene } from "../types";
+import type { Asset, Project, StoryboardInput, Scene, Direction } from "../types";
 import { STYLE_PRESETS } from "../presets";
 import { sentences } from "../audio/analyze";
 
@@ -23,6 +23,38 @@ function emphasize(s: string) {
   const i = w.reduce((bi, x, idx) => (x.replace(/\W/g, "").length > w[bi].replace(/\W/g, "").length ? idx : bi), 0);
   w[i] = `*${w[i].replace(/[.,!?]$/, "")}*${w[i].match(/[.,!?]$/)?.[0] ?? ""}`;
   return w.join(" ");
+}
+
+/** The product name in a brief, or the project's brand name. */
+export function briefName(text: string, p: Project) {
+  return text.match(/["“]([^"”]+)["”]/)?.[1] || text.match(/(?:for|called|named|launch(?:ing)?|introducing)\s+([A-Z][\w\-]+(?:\s[A-Z][\w\-]+)?)/)?.[1] || p.brand.name || "Your product";
+}
+
+/** Does the message ask for options rather than a finished cut? */
+export const wantsDirections = (text: string) => /\b(directions?|options|concepts?|ideas|routes|pitch me|moodboards?|approaches)\b/i.test(text);
+
+const ROUTES: (Omit<Direction, "hook"> & { hook: (n: string) => string; fits: RegExp })[] = [
+  { name: "Bold & graphic", pitch: "Big type on a grid, fast cuts on the beat and one loud accent. Confident and impossible to scroll past.", style: "swiss", motion: "snappy", pace: "punchy", hook: (n) => `Meet *${n}*.`, fits: /bold|sport|fitness|shoe|drink|food|brand/i },
+  { name: "Cinematic glow", pitch: "Slow reveals on deep navy with soft light. The product arrives like a film premiere.", style: "aurora", motion: "dramatic", pace: "cinematic", hook: (n) => `*${n}* is here.`, fits: /premium|luxury|watch|audio|car|phone|headphone|earbud/i },
+  { name: "Calm & clear", pitch: "Lots of white space, crisp blue and even motion. Every benefit gets room to land.", style: "clean", motion: "smooth", pace: "steady", hook: (n) => `Work smarter with *${n}*.`, fits: /app|saas|software|tool|platform|ai|dashboard|productivity|fintech|bank/i },
+  { name: "Electric dark", pitch: "Black canvas, lime accent and kinetic type. Techy, sharp and a little rebellious.", style: "noir", motion: "snappy", pace: "punchy", hook: () => `Built *different*.`, fits: /tech|game|gaming|dev|crypto|hardware|keyboard|smart/i },
+  { name: "Magazine calm", pitch: "Serif headlines, generous margins and unhurried pacing, like a feature spread.", style: "editorial", motion: "calm", pace: "steady", hook: (n) => `The story of *${n}*.`, fits: /coffee|book|fashion|interior|travel|hotel|wine|craft|ritual/i },
+  { name: "Soft premium", pitch: "Rosy neutrals, an elegant serif and gentle, smooth motion. Tactile and self-care calm.", style: "blush", motion: "smooth", pace: "cinematic", hook: () => `Meet your new *ritual*.`, fits: /skin|beauty|care|serum|candle|wellness|spa|cosmetic|fragrance|lifestyle/i },
+  { name: "Raw mono", pitch: "Monospace, black on bone and hard cuts. Brutalist honesty for builders.", style: "mono", motion: "snappy", pace: "punchy", hook: (n) => `${n}. *No fluff.*`, fits: /developer|api|code|open source|terminal|indie|minimal/i },
+];
+
+/** Three contrasting creative routes for a brief, ranked by how well each fits it. */
+export function localDirections(text: string, p: Project): Direction[] {
+  const name = briefName(text, p);
+  // Keywords match at word starts ("car" must not match "skincare"); more hits rank higher.
+  const hits = (re: RegExp) => text.match(new RegExp(`\\b(?:${re.source})`, "gi"))?.length ?? 0;
+  const ranked = ROUTES.map((r, i) => ({ r, score: hits(r.fits) * 10 - i * 0.1 })).sort((a, b) => b.score - a.score);
+  const picked: typeof ROUTES = [];
+  for (const { r } of ranked) {
+    // Keep the three different in motion and pace, not just colour.
+    if (picked.length < 3 && !picked.some((x) => x.motion === r.motion && x.pace === r.pace)) picked.push(r);
+  }
+  return picked.map(({ fits: _f, hook, ...r }) => ({ ...r, hook: hook(name) }));
 }
 
 export function localDirector(text: string, p: Project, assets: Asset[]): LocalResult {
@@ -48,7 +80,7 @@ export function localDirector(text: string, p: Project, assets: Asset[]): LocalR
   const ctaLine = text.split(/(?<=[.!?])\s+|\n+/).find((l) => /\b(pre-?order|buy|shop|order|get|download|try|sign up|join|visit)\b.*\b(at|on|now|today)\b/i.test(l));
   const url = text.match(/\b[a-z0-9-]+(\.[a-z0-9-]+)*\.(com|io|co|app|studio|ai|watch|store|shop|xyz|net|org|dev|design|so|me)\b/i)?.[0];
 
-  const name = text.match(/["“]([^"”]+)["”]/)?.[1] || text.match(/(?:for|called|named|launch(?:ing)?|introducing)\s+([A-Z][\w\-]+(?:\s[A-Z][\w\-]+)?)/)?.[1] || p.brand.name || "Your product";
+  const name = briefName(text, p);
   const productImg = assets.find((a) => a.source === "upload")?.id || assets[0]?.id;
   const gallery = assets.slice(0, 6).map((a) => a.id);
 

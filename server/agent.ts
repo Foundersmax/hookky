@@ -2,13 +2,13 @@ import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import type { Response } from "express";
 import type { AgentEvent } from "../src/types";
-import { TEMPLATES, TRANSITIONS, BACKGROUNDS, MOTIONS } from "../src/types";
+import { TEMPLATES, TRANSITIONS, BACKGROUNDS, MOTIONS, PACES } from "../src/types";
 import { STYLE_PRESETS } from "../src/presets";
 import { searchVisuals, importFromUrl } from "./connectors";
 import { directorPrompt } from "../src/agent/prompt";
 import { lintStoryboard, notesForAgent } from "../src/agent/lint";
 import { buildScenes, patchScenes, brandWithStyle, type Timing } from "../src/storyboard";
-import { sanitizeScene, sanitizeBrand } from "../src/sanitize";
+import { sanitizeScene, sanitizeBrand, sanitizeDirections } from "../src/sanitize";
 import { presetById } from "../src/presets";
 import type { Brand, Scene } from "../src/types";
 
@@ -55,6 +55,34 @@ const sceneSchema = {
 } as const;
 
 const tools: Anthropic.Beta.BetaToolUnion[] = [
+  {
+    name: "propose_directions",
+    description: "Pitch 3 distinct creative directions for a new brief as cards the user picks from. Use before create_storyboard when starting a new ad, unless the user already fixed the look or asked you to just build. After calling it, stop and wait for the pick.",
+    input_schema: {
+      type: "object",
+      properties: {
+        directions: {
+          type: "array",
+          minItems: 3,
+          maxItems: 3,
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string", description: "2–3 words" },
+              pitch: { type: "string", description: "one sentence: the idea, the feel, why it fits" },
+              style: { type: "string", enum: STYLE_PRESETS.map((p) => p.id) },
+              motion: { type: "string", enum: [...MOTIONS] },
+              pace: { type: "string", enum: [...PACES] },
+              hook: { type: "string", description: "opening headline, ≤ 6 words, *word* = accent" },
+              accent: { type: "string", description: "optional hex accent override" },
+            },
+            required: ["name", "pitch", "style", "motion", "pace", "hook"],
+          },
+        },
+      },
+      required: ["directions"],
+    },
+  },
   {
     name: "create_storyboard",
     description: "Replace the whole animation with a new storyboard. Use for first drafts or full re-concepts.",
@@ -148,6 +176,28 @@ export interface TurnInput {
   text: string;
   state: unknown;
   images?: { assetId: string; mediaType: string; data: string }[];
+  /** Contact sheets of rendered frames, for a visual review. */
+  frames?: { mediaType: string; data: string }[];
+}
+
+const FRAME_TYPES = new Set(["image/jpeg", "image/png"]);
+const MAX_FRAME_B64 = 6_000_000;
+
+/** The user turn sent to Claude: references, rendered frames, studio state, then the message. */
+export function turnContent(input: TurnInput): Anthropic.Beta.BetaContentBlockParam[] {
+  const content: Anthropic.Beta.BetaContentBlockParam[] = [];
+  for (const img of input.images ?? []) {
+    content.push({ type: "text", text: `Uploaded reference → ${img.assetId}` });
+    content.push({ type: "image", source: { type: "base64", media_type: img.mediaType as "image/png", data: img.data } });
+  }
+  const frames = (Array.isArray(input.frames) ? input.frames : []).filter((f) => f && FRAME_TYPES.has(f.mediaType) && typeof f.data === "string" && f.data.length > 0 && f.data.length <= MAX_FRAME_B64).slice(0, 3);
+  frames.forEach((f, i) => {
+    content.push({ type: "text", text: `Rendered frames, contact sheet ${i + 1} of ${frames.length}` });
+    content.push({ type: "image", source: { type: "base64", media_type: f.mediaType as "image/jpeg", data: f.data } });
+  });
+  content.push({ type: "text", text: `<studio_state>\n${JSON.stringify(input.state)}\n</studio_state>` });
+  content.push({ type: "text", text: input.text || "(no message)" });
+  return content;
 }
 
 export async function runAgentTurn(input: TurnInput, res: Response) {
@@ -155,14 +205,7 @@ export async function runAgentTurn(input: TurnInput, res: Response) {
   const history = conversations.get(input.conversationId) ?? [];
   conversations.set(input.conversationId, history);
 
-  const content: Anthropic.Beta.BetaContentBlockParam[] = [];
-  for (const img of input.images ?? []) {
-    content.push({ type: "text", text: `Uploaded reference → ${img.assetId}` });
-    content.push({ type: "image", source: { type: "base64", media_type: img.mediaType as "image/png", data: img.data } });
-  }
-  content.push({ type: "text", text: `<studio_state>\n${JSON.stringify(input.state)}\n</studio_state>` });
-  content.push({ type: "text", text: input.text || "(no message)" });
-  history.push({ role: "user", content });
+  history.push({ role: "user", content: turnContent(input) });
   const shadow = new Shadow(input.state);
 
   let closed = false;
@@ -240,7 +283,7 @@ async function streamOnce(history: Msg[], send: (e: AgentEvent) => void): Promis
 
 function toolLabel(name: string) {
   return (
-    { create_storyboard: "Composing storyboard", update_scenes: "Editing scenes", set_brand: "Setting brand", search_visuals: "Searching visual sources", import_url: "Importing from URL" } as Record<string, string>
+    { propose_directions: "Sketching directions", create_storyboard: "Composing storyboard", update_scenes: "Editing scenes", set_brand: "Setting brand", search_visuals: "Searching visual sources", import_url: "Importing from URL" } as Record<string, string>
   )[name] ?? name;
 }
 
@@ -276,6 +319,12 @@ class Shadow {
 async function runTool(name: string, input: unknown, send: (e: AgentEvent) => void, shadow: Shadow): Promise<string> {
   const i = input as any;
   switch (name) {
+    case "propose_directions": {
+      const list = sanitizeDirections(i?.directions);
+      if (list.length < 2) throw new Error("Send 3 directions, each with at least a name and a hook.");
+      send({ type: "directions", directions: list });
+      return `Showing ${list.length} direction cards to the user. Don't build yet: end your turn with one short sentence inviting them to pick one (or mix two).`;
+    }
     case "create_storyboard": {
       const p = ZStoryboard.safeParse(input);
       if (!p.success) throw new Error(`Invalid storyboard: ${p.error.issues.slice(0, 3).map((x) => `${x.path.join(".")} ${x.message}`).join("; ")}`);
@@ -332,4 +381,4 @@ export function resetConversation(id: string) {
 }
 
 /** Internals exposed for unit tests only. */
-export const __test = { Shadow, runTool };
+export const __test = { Shadow, runTool, turnContent };

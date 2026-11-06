@@ -31,6 +31,7 @@ const paths: Record<string, string> = {
   focus: "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5",
   expand: "M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7",
   shrink: "M4 14h6v6M10 14l-7 7M20 10h-6V4M14 10l7-7",
+  eye: "M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12zM12 9a3 3 0 100 6 3 3 0 000-6z",
   wand: "M15 4V2M15 10V8M11 6H9M21 6h-2M18 3l-1.5 1.5M18 9l-1.5-1.5M3 21l11-11",
 };
 

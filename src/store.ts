@@ -283,7 +283,12 @@ export function editedScene(s: Scene): Scene {
   };
 }
 
+let builds = 0;
+/** How many storyboards have been applied this session (lets the agent client tell a turn built one). */
+export const buildCount = () => builds;
+
 export function applyStoryboard(sb: StoryboardInput) {
+  builds++;
   updateProject((p) => {
     let next: Project = { ...p, title: sb.title ?? p.title, aspect: sb.aspect ?? p.aspect };
     if (sb.style) next = withStyle(next, sb.style);

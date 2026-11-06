@@ -1,12 +1,13 @@
-import type { AgentEvent, ChatAttachment } from "../types";
-import { getState, setState, pushChat, updateChat, applyStoryboard, applyPatch, setBrand, addAssets, updateProject } from "../store";
+import type { AgentEvent, ChatAttachment, Direction } from "../types";
+import { getState, setState, pushChat, updateChat, applyStoryboard, applyPatch, setBrand, addAssets, updateProject, buildCount } from "../store";
 import { uid } from "../engine/util";
 import { totalDuration } from "../engine/render";
 import { sentences } from "../audio/analyze";
-import { localDirector } from "./localDirector";
+import { localDirector, localDirections, wantsDirections } from "./localDirector";
+import { contactSheets, sheetPreview, REVIEW_PROMPT, type Sheet } from "./frames";
 import { toAgentImage } from "../engine/images";
 import { hostedTurn } from "./hosted";
-import { sanitizeBrand } from "../sanitize";
+import { sanitizeBrand, sanitizeDirections } from "../sanitize";
 import { lintStoryboard } from "./lint";
 
 /** Director's notes for the current project. */
@@ -35,15 +36,118 @@ function studioState() {
   };
 }
 
-export async function sendToAgent(text: string, attachments: ChatAttachment[] = []) {
+export interface SendOptions {
+  /** What the chat shows for the user's message; the agent receives `text`. */
+  display?: string;
+  /** Contact sheets for a visual review turn. */
+  sheets?: Sheet[];
+  review?: boolean;
+  /** Building a direction pitched in an earlier reply. */
+  direction?: { message: string; index: number };
+}
+
+const PACE_FACTOR = { punchy: 0.85, steady: 1, cinematic: 1.2 } as const;
+
+/** What a direction-pick message asks the agent to do. */
+export function directionBrief(d: Direction, n: number) {
+  return `Build direction ${n} “${d.name}”: ${d.pitch} Style preset: ${d.style}. Motion: ${d.motion}. Pacing: ${d.pace}. Open with the line: ${d.hook}${d.accent ? `. Accent colour ${d.accent}` : ""}. Use the brief from earlier in our conversation.`;
+}
+
+/** Build the direction the user picked from a directions card. */
+export function pickDirection(messageId: string, index: number) {
+  const m = getState().chat.find((x) => x.id === messageId);
+  const d = m?.directions?.[index];
+  if (!d) return;
+  return sendToAgent(directionBrief(d, index + 1), [], { display: `Go with “${d.name}”`, direction: { message: messageId, index } });
+}
+
+/** The local director builds a picked direction from the original brief. */
+function buildDirectionLocally(messageId: string, index: number) {
+  const m = getState().chat.find((x) => x.id === messageId);
+  const d = m?.directions?.[index];
+  if (!d) return "That direction is no longer in the chat.";
+  const { project, assets } = getState();
+  const r = localDirector(`${m!.brief ?? ""}\nbuild`, project, assets);
+  if (!r.storyboard) return "Tell me about the product first, then pick a direction.";
+  const factor = project.audio ? 1 : PACE_FACTOR[d.pace];
+  let hooked = false;
+  const scenes = r.storyboard.scenes.map((s) => {
+    const out = { ...s, motion: d.motion, duration: +(s.duration * factor).toFixed(2) };
+    if (!hooked && s.template === "title-reveal") (hooked = true), (out.headline = d.hook);
+    return out;
+  });
+  if (r.name) setBrand({ name: r.name });
+  if (r.settings && Object.keys(r.settings).length) updateProject((p) => ({ ...p, ...r.settings }));
+  applyStoryboard({ ...r.storyboard, style: d.style, scenes });
+  if (d.accent) setBrand({ accent: d.accent });
+  return `Built “${d.name}”: ${d.pitch} (Drafted by the built-in local director. Connect Claude for the full creative agent.)`;
+}
+
+const REVIEW_KEY = "hookky:autoReview";
+export const autoReviewOn = () => {
+  try {
+    return localStorage.getItem(REVIEW_KEY) !== "off";
+  } catch {
+    return true;
+  }
+};
+export function setAutoReview(on: boolean) {
+  try {
+    localStorage.setItem(REVIEW_KEY, on ? "on" : "off");
+  } catch {
+    /* per-browser convenience only */
+  }
+}
+/** Claude can look at frames; the local director can't. */
+export const canReview = () => {
+  const { health, project } = getState();
+  return !!health && health.agent !== "local" && project.scenes.length > 0;
+};
+
+/** Render the cut as contact sheets and have Claude review it visually, fixing what it sees. */
+export async function reviewFrames(auto = false) {
+  const st = getState();
+  if (st.busy || !canReview()) return false;
+  const sheets = await contactSheets(st.project);
+  if (!sheets.length) return false;
+  const preview = await sheetPreview(sheets[0].url);
+  await sendToAgent(REVIEW_PROMPT(sheets, st.project.scenes.length), [{ kind: "image", name: sheets.length > 1 ? `${sheets.length} contact sheets` : "Contact sheet", preview }], {
+    display: auto ? "Visual review: checking the rendered frames" : "Review the rendered frames",
+    sheets,
+    review: true,
+  });
+  return true;
+}
+
+/** Ask for three creative directions for a brief. */
+export function askForDirections(brief = "") {
+  const t = brief.trim();
+  return sendToAgent(t ? `Pitch me 3 creative directions for this, then wait for me to pick: ${t}` : "Pitch me 3 creative directions for this project, then wait for me to pick one.", [], { display: t ? undefined : "Pitch me 3 directions" });
+}
+
+export async function sendToAgent(text: string, attachments: ChatAttachment[] = [], opts: SendOptions = {}) {
   const s = getState();
   if (s.busy) return;
-  pushChat({ id: uid("m"), role: "user", text, attachments });
+  pushChat({ id: uid("m"), role: "user", text: opts.display ?? text, attachments, ...(opts.review && { review: true }) });
   const replyId = uid("m");
   pushChat({ id: replyId, role: "assistant", text: "", pending: true, activity: [] });
+  if (opts.direction) updateChat(opts.direction.message, (m) => ({ ...m, picked: opts.direction!.index }));
   setState({ busy: true });
+  const builtBefore = buildCount();
+  const showDirections = (directions: Direction[]) => updateChat(replyId, (m) => ({ ...m, directions, brief: m.brief ?? text }));
 
   const runLocal = (note?: string) => {
+    const pre = note ? note + "\n\n" : "";
+    if (opts.review) return updateChat(replyId, (m) => ({ ...m, text: pre + "Visual review needs Claude. Director's notes in the Scene panel still check copy, pacing and contrast.", pending: false }));
+    if (opts.direction) {
+      const reply = buildDirectionLocally(opts.direction.message, opts.direction.index);
+      return updateChat(replyId, (m) => ({ ...m, text: pre + reply, pending: false }));
+    }
+    if (wantsDirections(text)) {
+      const brief = text.replace(/^pitch me 3 creative directions for (this|this project)[^:]*:?\s*/i, "");
+      const directions = localDirections(brief, getState().project);
+      return updateChat(replyId, (m) => ({ ...m, text: pre + "Three ways we could take it. Pick one and I'll build it.", directions, brief, pending: false }));
+    }
     const r = localDirector(text, getState().project, getState().assets);
     if (r.style || r.name) setBrand({ ...(r.style && { style: r.style }), ...(r.name && { name: r.name }) });
     if (r.settings && Object.keys(r.settings).length) updateProject((p) => ({ ...p, ...r.settings }));
@@ -55,10 +159,12 @@ export async function sendToAgent(text: string, attachments: ChatAttachment[] = 
     if (s.health?.agent === "hosted") {
       const activity: string[] = [];
       try {
+        const frames = await Promise.all((opts.sheets ?? []).map((sh) => fetch(sh.url).then((r) => r.blob())));
         const r = await hostedTurn(text, attachments, studioState(), {
           onText: (t) => updateChat(replyId, (m) => ({ ...m, text: t })),
           onActivity: (label) => (activity.push(label), updateChat(replyId, (m) => ({ ...m, activity: [...activity] }))),
-        });
+          onDirections: (d) => showDirections(sanitizeDirections(d)),
+        }, undefined, frames);
         updateChat(replyId, (m) => ({ ...m, text: r.text.trim() || "Done — have a look at the preview.", pending: false }));
       } catch (e: any) {
         const code = e?.code ?? "upstream_error";
@@ -96,7 +202,7 @@ export async function sendToAgent(text: string, attachments: ChatAttachment[] = 
     const res = await fetch("/api/agent", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ conversationId: s.conversationId, text, state: studioState(), images }),
+      body: JSON.stringify({ conversationId: s.conversationId, text, state: studioState(), images, frames: (opts.sheets ?? []).map((sh) => ({ mediaType: "image/jpeg", data: sh.url.split(",")[1] })) }),
     });
     if (!res.ok || !res.body) throw new Error(`Agent unavailable (${res.status})`);
     const reader = res.body.getReader();
@@ -113,7 +219,8 @@ export async function sendToAgent(text: string, attachments: ChatAttachment[] = 
         buf = buf.slice(idx + 2);
         if (!chunk.startsWith("data: ")) continue;
         const ev = JSON.parse(chunk.slice(6)) as AgentEvent;
-        handle(ev, replyId);
+        if (ev.type === "directions") showDirections(sanitizeDirections(ev.directions));
+        else handle(ev, replyId);
         if (ev.type === "error") fatal = ev.message;
       }
     }
@@ -128,6 +235,10 @@ export async function sendToAgent(text: string, attachments: ChatAttachment[] = 
     runLocal(`Couldn't reach Claude (${e.message}). Used the local director instead.`);
   } finally {
     setState({ busy: false });
+    // A fresh storyboard from Claude gets one look at its own rendered frames (the hosted and
+    // fallback paths return early, so this lives here).
+    const reply = getState().chat.find((m) => m.id === replyId);
+    if (!opts.review && buildCount() > builtBefore && !reply?.error && autoReviewOn() && canReview()) void reviewFrames(true).catch(() => {});
   }
 }
 
