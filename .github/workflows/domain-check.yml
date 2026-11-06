@@ -30,6 +30,11 @@ jobs:
             head -c 160 body.txt | tr '\n' ' ' | sed 's/^/  body: /'; echo
             grep -o 'assets/index-[A-Za-z0-9_-]*\.js' body.txt | head -1 | sed 's/^/  app build: /' || true
           done
+      - name: Studio services (agent, transcription, connected sources)
+        run: |
+          curl -sS -m 20 https://app.rookker.com/api/health | jq -r '"  agent: \(.agent) · transcription: \(.transcription)", (.connectors[] | "  \(if .configured then "on " else "off" end)  \(.id)")' || echo "  health check failed"
+          echo "== password gate (expect 401 when HOOKKY_PASSWORD is set)"
+          curl -sS -m 20 -o /dev/null -w '  / → %{http_code}\n' https://app.rookker.com/ || true
       - name: Certificate on rookker.com
         run: |
           echo | openssl s_client -connect rookker.com:443 -servername rookker.com 2>/dev/null | openssl x509 -noout -subject -issuer -dates 2>/dev/null || echo "  no certificate served for rookker.com"
