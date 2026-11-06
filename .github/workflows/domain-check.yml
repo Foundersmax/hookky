@@ -28,6 +28,7 @@ jobs:
             curl -sS -m 20 -o body.txt -D headers.txt -w '  status %{http_code} · ip %{remote_ip} · redirect %{redirect_url}\n' "$u" || echo "  request failed (exit $?)"
             grep -iE '^(server|location|cf-ray|x-github-request-id):' headers.txt | sed 's/^/  /' || true
             head -c 160 body.txt | tr '\n' ' ' | sed 's/^/  body: /'; echo
+            grep -o 'assets/index-[A-Za-z0-9_-]*\.js' body.txt | head -1 | sed 's/^/  app build: /' || true
           done
       - name: Certificate on rookker.com
         run: |
