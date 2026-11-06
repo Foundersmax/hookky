@@ -2,7 +2,7 @@
 // an opened project file, an older saved version). Whatever comes in, what comes out is
 // something the renderer can draw without throwing.
 import type { Brand, Project, Scene, Stat, Aspect } from "./types";
-import { TEMPLATES, TRANSITIONS, BACKGROUNDS } from "./types";
+import { TEMPLATES, TRANSITIONS, BACKGROUNDS, MOTIONS } from "./types";
 import { uid } from "./engine/util";
 
 const MAX_TEXT = 280;
@@ -78,7 +78,7 @@ export function sanitizeScene(input: unknown, keepId?: string): Scene {
     background: oneOf(s.background, BACKGROUNDS),
     align: oneOf(s.align, ["left", "center"] as const),
     transition: oneOf(s.transition, TRANSITIONS) ?? "fade",
-    motion: oneOf(s.motion, ["calm", "snappy", "bouncy"] as const),
+    motion: oneOf(s.motion, MOTIONS),
     accent: hex(s.accent),
     focus: focusOf(s.focus),
     zoom: num(s.zoom, 1, 3),

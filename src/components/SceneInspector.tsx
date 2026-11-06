@@ -1,5 +1,5 @@
 import { useStudio, updateProject, setState, normalizeScene, editedScene } from "../store";
-import { TEMPLATES, TRANSITIONS, BACKGROUNDS, type Scene } from "../types";
+import { TEMPLATES, TRANSITIONS, BACKGROUNDS, MOTIONS, type Scene } from "../types";
 import { timeline } from "../engine/render";
 import { stripMarks } from "../engine/text";
 import { clock } from "../clock";
@@ -23,6 +23,17 @@ const USES: Record<string, (keyof Scene)[]> = {
   "shape-burst": ["headline"],
   "logo-sting": ["image", "headline", "subline"],
   "cta-end": ["headline", "subline", "cta", "url"],
+  "device-mockup": ["image", "kicker", "headline", "subline", "align"],
+  countdown: ["kicker", "stat", "headline", "align"],
+  "price-card": ["kicker", "stat", "items", "cta", "headline"],
+  testimonials: ["headline", "items"],
+  "before-after": ["images", "items", "headline"],
+  "logo-reveal": ["image", "headline", "subline"],
+};
+const ITEMS_LABEL: Record<string, string> = {
+  testimonials: "Quotes, one per line: quote — name, role",
+  "before-after": "Labels: before, then after",
+  "price-card": "Features, one per line",
 };
 
 export function SceneInspector() {
@@ -101,7 +112,7 @@ export function SceneInspector() {
             <div className="field">
               <label>Motion</label>
               <select value={scene.motion ?? "snappy"} onChange={(e) => edit({ motion: e.target.value as Scene["motion"] })}>
-                <option>snappy</option><option>calm</option><option>bouncy</option>
+                {MOTIONS.map((m) => <option key={m}>{m}</option>)}
               </select>
             </div>
             {uses.includes("align") && (
@@ -118,7 +129,7 @@ export function SceneInspector() {
           {uses.includes("subline") && <Text label="Subline" v={scene.subline} on={(subline) => edit({ subline })} />}
           {uses.includes("items") && (
             <div className="field">
-              <label>Items (one per line)</label>
+              <label>{ITEMS_LABEL[scene.template] ?? "Items (one per line)"}</label>
               <textarea value={(scene.items ?? []).join("\n")} onChange={(e) => edit({ items: e.target.value.split("\n") })} />
             </div>
           )}

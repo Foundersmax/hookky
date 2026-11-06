@@ -16,6 +16,12 @@ export const TEMPLATES = [
   "shape-burst",
   "logo-sting",
   "cta-end",
+  "device-mockup",
+  "countdown",
+  "price-card",
+  "testimonials",
+  "before-after",
+  "logo-reveal",
 ] as const;
 export type TemplateId = (typeof TEMPLATES)[number];
 
@@ -25,7 +31,8 @@ export type TransitionId = (typeof TRANSITIONS)[number];
 export const BACKGROUNDS = ["solid", "gradient", "grid", "dots", "grain", "blobs", "invert", "accent", "image"] as const;
 export type BackgroundId = (typeof BACKGROUNDS)[number];
 
-export type Motion = "calm" | "snappy" | "bouncy";
+export const MOTIONS = ["snappy", "calm", "bouncy", "smooth", "dramatic"] as const;
+export type Motion = (typeof MOTIONS)[number];
 
 export interface Stat {
   value: number;
@@ -118,7 +125,10 @@ export interface Asset {
   w?: number;
   h?: number;
   palette?: string[];
-  kind: "image" | "logo";
+  kind: "image" | "logo" | "font";
+  /** fonts only: the family name it registers, and its weight */
+  family?: string;
+  weight?: number;
 }
 
 export interface ChatAttachment {

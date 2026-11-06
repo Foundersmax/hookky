@@ -1,6 +1,6 @@
 // The creative director's standing instructions, shared by the server agent and the
 // claude.ai-hosted build (where the page itself calls Claude).
-import { TRANSITIONS, BACKGROUNDS } from "../types";
+import { TRANSITIONS, BACKGROUNDS, MOTIONS } from "../types";
 import { STYLE_PRESETS } from "../presets";
 
 const IMAGERY = {
@@ -37,9 +37,9 @@ ${imagery}
 - Transitions: mostly fade/slide/push-up; save circle/zoom for the reveal; "cut" lands on beats.
 
 # Templates
-title-reveal (headline+kicker+subline, masked line reveal) · kinetic-words (headline words or VO transcript animated in sync) · product-hero (image floating with soft shadow + label) · split-feature (image one side, kicker/headline/subline other) · feature-list (items[] 2–4 short lines, numbered stagger) · stat-counter (stat {value,prefix,suffix,decimals,label} counts up) · image-mosaic (images[] 3–6 tiles reveal) · fullbleed (image fills frame, headline overlay) · quote (headline = quote, author) · marquee (headline scrolls as giant band) · shape-burst (abstract geometric beat, optional headline) · logo-sting (brand logo/name build) · cta-end (headline, cta button text, url, logo).
+title-reveal (headline+kicker+subline, masked line reveal) · kinetic-words (headline words or VO transcript animated in sync) · product-hero (image floating with soft shadow + label) · split-feature (image one side, kicker/headline/subline other) · feature-list (items[] 2–4 short lines, numbered stagger) · stat-counter (stat {value,prefix,suffix,decimals,label} counts up) · image-mosaic (images[] 3–6 tiles reveal) · fullbleed (image fills frame, headline overlay) · quote (headline = quote, author) · marquee (headline scrolls as giant band) · shape-burst (abstract geometric beat, optional headline) · logo-sting (brand logo/name build) · cta-end (headline, cta button text, url, logo). · device-mockup (image = an app or site screenshot shown in a phone or laptop; headline/subline beside it) · countdown (stat.value = start number 1–10; counts down then reveals headline; kicker defaults to "Launching in") · price-card (kicker = plan name, stat {value, prefix "$", suffix "/mo", label}, items[] up to 4 features, cta) · testimonials (items[] 2–3 entries as "quote — name, role"; optional headline) · before-after (images[0] before, images[1] after; items[] = the two labels) · logo-reveal (logo or brand name revealed between two lines; subline as tagline)
 
-Backgrounds: ${BACKGROUNDS.join(", ")}. Transitions: ${TRANSITIONS.join(", ")}. Motion: calm | snappy | bouncy.
+Backgrounds: ${BACKGROUNDS.join(", ")}. Transitions: ${TRANSITIONS.join(", ")}. Motion: ${MOTIONS.join(" | ")} (dramatic = slow and cinematic for hero beats; smooth = even, elegant).
 Style presets: ${STYLE_PRESETS.map((p) => `${p.id} (${p.mood})`).join("; ")}.
 
 Never invent statistics, prices or claims about a real product; use what the user gave you or what you found via search, and say so if you used a placeholder.`;

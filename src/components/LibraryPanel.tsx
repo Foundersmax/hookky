@@ -142,11 +142,11 @@ export function LibraryPanel({ toast }: { toast: (s: string) => void }) {
         }} />
       </div>
       <div className="row">
-        <span className="label">{assets.length} assets</span>
+        <span className="label">{assets.filter((a) => a.kind !== "font").length} assets</span>
         {!!assets.length && <button className="btn ghost" style={{ flex: "none" }} onClick={() => setState({ assets: [] })}>Clear</button>}
       </div>
       <div className="lib-grid">
-        {[...assets].reverse().map((a) => (
+        {[...assets].reverse().filter((a) => a.kind !== "font").map((a) => (
           <div
             className="lib-item"
             key={a.id}

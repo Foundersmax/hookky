@@ -62,6 +62,15 @@ export function timeline(scenes: Scene[]): TimelineEntry[] {
 }
 export const totalDuration = (p: Project) => p.scenes.reduce((a, s) => a + s.duration, 0);
 
+/** Motion presets: the easing every element uses, and how long animations take (multiplier). */
+const MOTION: Record<string, { E: (x: number) => number; sp: number }> = {
+  snappy: { E: ease.outExpo, sp: 0.9 },
+  calm: { E: ease.outCubic, sp: 1.35 },
+  bouncy: { E: ease.outBack, sp: 1.05 },
+  smooth: { E: ease.inOutCubic, sp: 1.1 },
+  dramatic: { E: ease.outQuart, sp: 1.8 },
+};
+
 const TRANSITION_DUR: Record<TransitionId, number> = { cut: 0, fade: 0.5, slide: 0.65, "push-up": 0.7, wipe: 0.6, zoom: 0.6, circle: 0.75, blur: 0.6 };
 
 // ---------------------------------------------------------------- Renderer
@@ -162,8 +171,8 @@ export class Renderer {
       abs: e.start,
       img,
       words: p.audio?.words,
-      E: motion === "bouncy" ? ease.outBack : motion === "calm" ? ease.outCubic : ease.outExpo,
-      sp: motion === "calm" ? 1.35 : motion === "bouncy" ? 1.05 : 0.9,
+      E: MOTION[motion]?.E ?? ease.outExpo,
+      sp: MOTION[motion]?.sp ?? 0.9,
       ...(record && { hit: (r: HitRegion) => this.hits.push(r) }),
     };
     if (record) this.hitScene = e.index;
@@ -903,6 +912,344 @@ const TEMPLATES: Record<string, Tpl> = {
     if (scene.url) {
       drawLabel(ctx, scene.url, { family: "JetBrains Mono", weight: 500, size: 24 * u }, W / 2, by + bh + 64 * u, "center", c.muted, win(g.t, 1.0, 0.5));
       hitText(g, "url", scene.url, { family: "JetBrains Mono", weight: 500, size: 24 * u }, W / 2, by + bh + 64 * u, "center");
+    }
+  },
+
+  "device-mockup"(g) {
+    const { W, H, ctx, u, c, scene, pad } = g;
+    const im = g.img(scene.image);
+    const phone = g.portrait || W / H < 1.2;
+    const p = g.E(win(g.t, 0, 1.1 * g.sp));
+    const float = Math.sin(g.t * 1.2) * 6 * u;
+    // device geometry
+    let dw: number, dh: number, dx: number, dy: number;
+    if (phone) {
+      dh = H * (g.portrait ? 0.56 : 0.74);
+      dw = dh * 0.49;
+      dx = g.portrait ? W / 2 - dw / 2 : W * 0.62 - dw / 2;
+      dy = g.portrait ? H * 0.1 : H / 2 - dh / 2;
+    } else {
+      dw = W * 0.52;
+      dh = dw * 0.62;
+      dx = W - pad - dw;
+      dy = H / 2 - dh / 2 - dh * 0.06;
+    }
+    ctx.save();
+    ctx.globalAlpha = clamp(p);
+    ctx.translate(0, (1 - p) * 90 * u + float);
+    // shadow
+    ctx.fillStyle = rgba("#000000", 0.28);
+    ctx.beginPath();
+    ctx.ellipse(dx + dw / 2, dy + dh + (phone ? 26 : 40) * u, dw * 0.42, 14 * u, 0, 0, Math.PI * 2);
+    ctx.fill();
+    const bezel = phone ? dw * 0.045 : dw * 0.022;
+    const r = phone ? dw * 0.16 : 14 * u;
+    ctx.fillStyle = mix(c.fg, c.bg, 0.08);
+    rr(ctx, dx, dy, dw, dh, r);
+    ctx.fill();
+    const sx = dx + bezel, sy = dy + bezel, sw = dw - bezel * 2, sh = dh - bezel * 2;
+    ctx.save();
+    rr(ctx, sx, sy, sw, sh, Math.max(2, r - bezel));
+    ctx.clip();
+    if (im) drawCover(ctx, im, sx, sy, sw, sh, (1.06 - 0.06 * clamp(g.t / g.dur)) * (scene.zoom ?? 1), scene.focus?.x, scene.focus?.y);
+    else placeholder(g, sx, sy, sw, sh, "Drop a screenshot");
+    // screen glare
+    const gl = ctx.createLinearGradient(sx, sy, sx + sw, sy + sh);
+    gl.addColorStop(0, "rgba(255,255,255,0.10)");
+    gl.addColorStop(0.45, "rgba(255,255,255,0)");
+    ctx.fillStyle = gl;
+    ctx.fillRect(sx, sy, sw, sh);
+    ctx.restore();
+    if (phone) {
+      ctx.fillStyle = mix(c.fg, c.bg, 0.08);
+      rr(ctx, dx + dw / 2 - dw * 0.14, sy + 6 * u, dw * 0.28, dw * 0.07, dw * 0.035);
+      ctx.fill();
+    } else {
+      // laptop base
+      ctx.fillStyle = mix(c.fg, c.bg, 0.2);
+      rr(ctx, dx - dw * 0.06, dy + dh, dw * 1.12, dh * 0.045, dh * 0.02);
+      ctx.fill();
+    }
+    ctx.restore();
+    // copy
+    if (g.portrait) textStack(g, { x: W / 2, y: H * 0.72, maxW: W - pad * 2, align: "center", size: headlineSize(g, 0.6), delay: 0.4 });
+    else textStack(g, { x: pad, y: H / 2, maxW: (phone ? dx - pad * 1.6 : dx - pad * 1.8), align: "left", size: headlineSize(g, 0.66), vcenter: true, delay: 0.4 });
+  },
+
+  countdown(g) {
+    const { W, H, ctx, u, c, scene, pad } = g;
+    const from = Math.max(1, Math.min(10, Math.round(scene.stat?.value ?? 3)));
+    const steps = from + 1; // N … 1, then the reveal
+    const slot = (g.dur * 0.92) / steps;
+    const k = Math.min(steps - 1, Math.floor(g.t / slot));
+    const lt = g.t - k * slot;
+    const num = from - k;
+    const align = scene.align ?? "center";
+    const x = align === "center" ? W / 2 : pad;
+    kicker(g, scene.kicker || "Launching in", x, H * 0.24, align);
+    // ring that empties each beat
+    const R = Math.min(W, H) * 0.24;
+    ctx.save();
+    ctx.lineWidth = 4 * u;
+    ctx.strokeStyle = rgba(c.fg, 0.1);
+    ctx.beginPath();
+    ctx.arc(W / 2, H * 0.53, R, 0, Math.PI * 2);
+    ctx.stroke();
+    if (num > 0) {
+      ctx.strokeStyle = c.accent;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.arc(W / 2, H * 0.53, R, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (1 - clamp(lt / slot)));
+      ctx.stroke();
+    }
+    ctx.restore();
+    const p = ease.outBack(win(lt, 0, 0.35));
+    const out = ease.inCubic(win(lt, slot - 0.18, 0.18));
+    ctx.save();
+    ctx.translate(W / 2, H * 0.53);
+    const sc = lerp(0.7, 1, p) * (1 - out * 0.25);
+    ctx.scale(sc, sc);
+    ctx.globalAlpha = clamp(p) * (1 - out);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    if (num > 0) {
+      const size = R * 1.15;
+      ctx.font = `${displayWeight(g.brand.fontDisplay)} ${size}px "${g.brand.fontDisplay}"`;
+      ctx.fillStyle = c.fg;
+      ctx.fillText(String(num), 0, size * 0.04);
+    } else {
+      const L = layoutText(ctx, scene.headline || "Now *live*", F(g, headlineSize(g, 0.85)), W - pad * 2, 2);
+      ctx.translate(-W / 2, -H * 0.53);
+      drawLayout(ctx, L, { x: W / 2, y: H * 0.53 - L.height / 2, align: "center", color: c.fg, emColor: c.accent, t: lt, delay: 0, dur: 0.6, mode: "mask", easing: g.E });
+    }
+    ctx.restore();
+    g.hit?.({ field: num > 0 ? "stat.value" : "headline", x: W / 2 - R, y: H * 0.53 - R, w: R * 2, h: R * 2, size: R * 0.6, align: "center", lines: 1 });
+  },
+
+  "price-card"(g) {
+    const { W, H, ctx, u, c, scene, pad, brand } = g;
+    const st = scene.stat ?? { value: 29, prefix: "$", suffix: "/mo" };
+    const cw = g.portrait ? W - pad * 2 : Math.min(W * 0.42, 760 * u);
+    const items = (scene.items ?? []).slice(0, 4);
+    const priceSize = Math.min(150 * u, cw * 0.28);
+    const content = 72 * u + (scene.kicker ? 64 * u : 0) + priceSize + 30 * u + (st.label ? 50 * u : 0) + items.length * 54 * u + 56 * u + 78 * u + 48 * u;
+    const ch = Math.min(H - pad * 2, content);
+    const cx = W / 2 - cw / 2, cy = H / 2 - ch / 2;
+    const p = g.E(win(g.t, 0, 0.9 * g.sp));
+    ctx.save();
+    ctx.translate(0, (1 - p) * 60 * u);
+    ctx.globalAlpha = clamp(p);
+    ctx.fillStyle = mix(c.bg, c.fg, 0.06);
+    rr(ctx, cx, cy, cw, ch, Math.min(32, brand.radius ?? 16) * u + 8 * u);
+    ctx.fill();
+    ctx.strokeStyle = rgba(c.fg, 0.1);
+    ctx.lineWidth = 1.5 * u;
+    ctx.stroke();
+    ctx.restore();
+    const ix = cx + 56 * u;
+    let y = cy + 72 * u;
+    if (scene.kicker) {
+      kicker(g, scene.kicker, ix, y, "left", 0.2);
+      y += 64 * u;
+    }
+    // price
+    const pv = ease.outExpo(win(g.t, 0.35, 1.1 * g.sp));
+    const priceTxt = `${st.prefix ?? ""}${(st.value * pv).toLocaleString("en-US", { minimumFractionDigits: st.decimals ?? 0, maximumFractionDigits: st.decimals ?? 0 })}`;
+    const size = priceSize;
+    ctx.save();
+    ctx.globalAlpha = clamp(win(g.t, 0.3, 0.4));
+    ctx.font = `${displayWeight(brand.fontDisplay)} ${size}px "${brand.fontDisplay}"`;
+    (ctx as any).letterSpacing = `${displayTracking(brand.fontDisplay) * size}px`;
+    ctx.fillStyle = c.fg;
+    ctx.textBaseline = "alphabetic";
+    ctx.fillText(priceTxt, ix, y + size * 0.82);
+    const pw = ctx.measureText(`${st.prefix ?? ""}${st.value.toLocaleString("en-US", { minimumFractionDigits: st.decimals ?? 0, maximumFractionDigits: st.decimals ?? 0 })}`).width;
+    ctx.restore();
+    g.hit?.({ field: "stat.value", x: ix, y, w: pw, h: size, size, align: "left", lines: 1 });
+    if (st.suffix) drawLabel(ctx, st.suffix, B(g, 30 * u, 500), ix + pw + 12 * u, y + size * 0.66, "left", c.muted, win(g.t, 0.6, 0.4));
+    y += size + 30 * u;
+    if (st.label) {
+      drawLabel(ctx, st.label, B(g, 26 * u), ix, y, "left", rgba(c.fg, 0.7), win(g.t, 0.6, 0.5));
+      hitText(g, "stat.label", st.label, B(g, 26 * u), ix, y, "left");
+      y += 50 * u;
+    }
+    items.forEach((it, i) => {
+      const d = 0.7 + i * 0.12;
+      const ip = g.E(win(g.t, d, 0.6));
+      ctx.save();
+      ctx.globalAlpha = clamp(ip);
+      ctx.strokeStyle = c.accent;
+      ctx.lineWidth = 3.5 * u;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(ix, y);
+      ctx.lineTo(ix + 9 * u, y + 9 * u);
+      ctx.lineTo(ix + 24 * u, y - 9 * u);
+      ctx.stroke();
+      ctx.restore();
+      const t = stripMarks(it);
+      drawLabel(ctx, t, B(g, 28 * u, 500), ix + 44 * u + (1 - ip) * 14 * u, y, "left", c.fg, ip);
+      hitText(g, `items.${i}`, t, B(g, 28 * u, 500), ix + 44 * u, y, "left");
+      y += 54 * u;
+    });
+    // button
+    const cta = stripMarks(scene.cta || "Choose plan");
+    const bh = 78 * u, bw = cw - 112 * u, by = cy + ch - bh - 48 * u;
+    const bp = ease.outBack(win(g.t, 1.1, 0.6));
+    ctx.save();
+    ctx.translate(ix + bw / 2, by + bh / 2);
+    ctx.scale(bp, bp);
+    ctx.fillStyle = c.accent;
+    rr(ctx, -bw / 2, -bh / 2, bw, bh, (brand.radius ?? 999) * u);
+    ctx.fill();
+    ctx.restore();
+    const onAccent = contrast(c.bg, c.accent) > contrast(c.fg, c.accent) ? c.bg : c.fg;
+    drawLabel(ctx, cta, B(g, 28 * u, 600), ix + bw / 2, by + bh / 2 + 1, "center", onAccent, win(g.t, 1.25, 0.3));
+    g.hit?.({ field: "cta", x: ix, y: by, w: bw, h: bh, size: 28 * u, align: "center", lines: 1 });
+    if (scene.headline && !g.portrait) {
+      // headline sits to the side on wide formats
+      const L = layoutText(ctx, scene.headline, F(g, headlineSize(g, 0.55)), cx - pad * 1.6, 3);
+      if (cx - pad * 1.6 > 200 * u) {
+        drawLayout(ctx, L, { x: pad, y: H / 2 - L.height / 2, align: "left", color: c.fg, emColor: c.accent, t: g.t, delay: 0.2, dur: 0.8 * g.sp, mode: "mask", easing: g.E });
+        hitLayout(g, "headline", L, pad, H / 2 - L.height / 2, "left");
+      }
+    }
+  },
+
+  testimonials(g) {
+    const { W, H, ctx, u, c, scene, pad, brand } = g;
+    const raw = (scene.items?.length ? scene.items : ["Changed how we launch. — Ana, Lumen", "Fastest ads we've ever shipped. — Kofi, Orbit"]).slice(0, 3);
+    const quotes = raw.map((q) => {
+      const m = q.split(/\s+[—–-]\s+/);
+      return { text: m[0].replace(/^["“]|["”]$/g, ""), who: m[1] ?? "" };
+    });
+    let top = pad;
+    if (scene.headline) {
+      const L = layoutText(ctx, scene.headline, F(g, headlineSize(g, 0.5)), W - pad * 2, 2);
+      drawLayout(ctx, L, { x: g.portrait ? pad : W / 2, y: top, align: g.portrait ? "left" : "center", color: c.fg, emColor: c.accent, t: g.t, delay: 0, dur: 0.8 * g.sp, mode: "mask", easing: g.E });
+      hitLayout(g, "headline", L, g.portrait ? pad : W / 2, top, g.portrait ? "left" : "center");
+      top += L.height + 50 * u;
+    }
+    const n = quotes.length;
+    const cols = g.portrait ? 1 : n;
+    const gap = 28 * u;
+    const cw = (W - pad * 2 - gap * (cols - 1)) / cols;
+    const qSize = Math.min(52 * u, cw * (g.portrait ? 0.06 : 0.085));
+    const qLayouts = quotes.map((q) => layoutText(ctx, q.text, B(g, qSize, 500), cw - 64 * u, g.portrait ? 4 : 6, 1.28));
+    const tallest = Math.max(...qLayouts.map((L) => L.height));
+    const fit = tallest + 100 * u + 90 * u; // quote mark above, author below
+    const ch = g.portrait ? Math.min((H - top - pad - gap * (n - 1)) / n, fit + 40 * u) : Math.min(H - top - pad, fit);
+    const cy0 = g.portrait ? top + (H - top - pad - (ch * n + gap * (n - 1))) / 2 : top + (H - top - pad - ch) / 2;
+    quotes.forEach((q, i) => {
+      const col = g.portrait ? 0 : i, row = g.portrait ? i : 0;
+      const x = pad + col * (cw + gap), y = cy0 + row * (ch + gap);
+      const d = 0.2 + i * 0.18 * g.sp;
+      const p = g.E(win(g.t, d, 0.8 * g.sp));
+      ctx.save();
+      ctx.globalAlpha = clamp(p);
+      ctx.translate(0, (1 - p) * 50 * u);
+      ctx.fillStyle = mix(c.bg, c.fg, 0.06);
+      rr(ctx, x, y, cw, ch, Math.min(28, brand.radius ?? 16) * u + 6 * u);
+      ctx.fill();
+      ctx.font = `400 ${90 * u}px "Instrument Serif", serif`;
+      ctx.fillStyle = c.accent;
+      ctx.textBaseline = "top";
+      ctx.fillText("“", x + 30 * u, y + 12 * u);
+      ctx.restore();
+      const qL = qLayouts[i];
+      drawLayout(ctx, qL, { x: x + 32 * u, y: y + 100 * u, align: "left", color: c.fg, emColor: c.accent, t: g.t, delay: d + 0.15, dur: 0.6, mode: "rise", stagger: 0.04 });
+      hitLayout(g, `items.${i}`, qL, x + 32 * u, y + 100 * u, "left");
+      if (q.who) drawLabel(ctx, q.who, B(g, 22 * u, 600), x + 32 * u, y + ch - 40 * u, "left", c.muted, win(g.t, d + 0.4, 0.5));
+    });
+  },
+
+  "before-after"(g) {
+    const { W, H, ctx, u, c, scene, pad } = g;
+    const a = g.img(scene.images?.[0] ?? scene.image), b = g.img(scene.images?.[1]);
+    const labels = [scene.items?.[0] ?? "Before", scene.items?.[1] ?? "After"];
+    const fx = pad, fy = pad, fw = W - pad * 2, fh = H - pad * 2 - (scene.headline ? headlineSize(g, 0.5) * 1.6 : 0);
+    const y0 = scene.headline ? fy + headlineSize(g, 0.5) * 1.6 : fy;
+    if (scene.headline) {
+      const L = layoutText(ctx, scene.headline, F(g, headlineSize(g, 0.5)), fw, 1);
+      drawLayout(ctx, L, { x: pad, y: pad - 8 * u, align: "left", color: c.fg, emColor: c.accent, t: g.t, delay: 0, dur: 0.7, mode: "mask", easing: g.E });
+      hitLayout(g, "headline", L, pad, pad - 8 * u, "left");
+    }
+    const r = Math.min(24, g.brand.radius ?? 12) * u;
+    // the divider sweeps across, pauses at the middle, then reveals "after"
+    const sweep = ease.inOutCubic(win(g.t, 0.5, g.dur * 0.35)) * 0.5 + ease.inOutCubic(win(g.t, g.dur * 0.55, g.dur * 0.3)) * 0.5;
+    const split = fx + fw * (1 - sweep);
+    ctx.save();
+    rr(ctx, fx, y0, fw, fh, r);
+    ctx.clip();
+    if (a) drawCover(ctx, a, fx, y0, fw, fh, 1.04);
+    else placeholder(g, fx, y0, fw, fh, "Drop the before image");
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(split, y0, fx + fw - split, fh);
+    ctx.clip();
+    if (b) drawCover(ctx, b, fx, y0, fw, fh, 1.04);
+    else {
+      ctx.fillStyle = mix(c.bg, c.accent, 0.35);
+      ctx.fillRect(fx, y0, fw, fh);
+    }
+    ctx.restore();
+    ctx.restore();
+    if (sweep > 0 && sweep < 1) {
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fillRect(split - 2 * u, y0, 4 * u, fh);
+      ctx.beginPath();
+      ctx.arc(split, y0 + fh / 2, 26 * u, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#111111";
+      drawLabel(ctx, "‹ ›", B(g, 24 * u, 700), split, y0 + fh / 2, "center", "#111111");
+    }
+    const tag = (text: string, x: number, align: "left" | "right", alpha: number, field: string) => {
+      const f = K(g, 20 * u);
+      const w = measure(ctx, text.toUpperCase(), f) + 32 * u;
+      const tx = align === "left" ? x : x - w;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = "rgba(0,0,0,0.55)";
+      rr(ctx, tx, y0 + 20 * u, w, 44 * u, 22 * u);
+      ctx.fill();
+      ctx.restore();
+      drawLabel(ctx, text.toUpperCase(), f, tx + 16 * u, y0 + 42 * u, "left", "#FFFFFF", alpha);
+      g.hit?.({ field, x: tx, y: y0 + 20 * u, w, h: 44 * u, size: 20 * u, align: "left", lines: 1 });
+    };
+    tag(labels[0], fx + 20 * u, "left", clamp(1 - sweep * 1.6), "items.0");
+    tag(labels[1], fx + fw - 20 * u, "right", clamp(sweep * 1.6 - 0.3), "items.1");
+  },
+
+  "logo-reveal"(g) {
+    const { W, H, ctx, u, c, scene, brand } = g;
+    const logo = g.img(scene.image || brand.logo);
+    const cx = W / 2, cy = H / 2 - 20 * u;
+    const name = stripMarks(scene.headline || brand.name || "Brand");
+    // two lines draw in from the centre, then the mark wipes up between them
+    const lp = ease.inOutExpo(win(g.t, 0, 0.8 * g.sp));
+    const half = Math.min(W, H) * 0.32;
+    ctx.fillStyle = c.accent;
+    ctx.fillRect(cx - half * lp, cy - 110 * u, half * 2 * lp, 3 * u);
+    ctx.fillRect(cx - half * lp, cy + 110 * u, half * 2 * lp, 3 * u);
+    const mp = ease.outExpo(win(g.t, 0.5, 0.9 * g.sp));
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(cx - half, cy - 106 * u, half * 2, 212 * u);
+    ctx.clip();
+    ctx.translate(0, (1 - mp) * 220 * u);
+    if (logo) {
+      const r = containRect(logo, cx - half * 0.8, cy - 90 * u, half * 1.6, 180 * u);
+      ctx.drawImage(logo, r.x, r.y, r.w, r.h);
+    } else {
+      const f = F(g, Math.min(150 * u, (half * 1.7) / Math.max(1, name.length * 0.55)));
+      drawLabel(ctx, name, f, cx, cy, "center", c.fg);
+      g.hit?.({ field: "headline", x: cx - half, y: cy - 90 * u, w: half * 2, h: 180 * u, size: f.size, align: "center", lines: 1 });
+    }
+    ctx.restore();
+    if (scene.subline) {
+      const sub = stripMarks(scene.subline).toUpperCase();
+      drawLabel(ctx, sub, K(g, 22 * u), cx, cy + 170 * u, "center", c.muted, win(g.t, 1.1, 0.6));
+      hitText(g, "subline", sub, K(g, 22 * u), cx, cy + 170 * u, "center");
     }
   },
 };

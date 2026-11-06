@@ -40,10 +40,21 @@ const STARTER_CONTENT: Partial<Record<Scene["template"], Partial<Scene>>> = {
   "shape-burst": {},
   "logo-sting": {},
   "cta-end": { headline: "Get it *today*", cta: "Shop now" },
+  "device-mockup": { kicker: "The app", headline: "Everything in *one place*", subline: "Drop a screenshot to fill the screen." },
+  countdown: { kicker: "Launching in", stat: { value: 3 }, headline: "Now *live*" },
+  "price-card": { kicker: "Pro", stat: { value: 29, prefix: "$", suffix: "/mo", label: "Billed monthly" }, items: ["Unlimited projects", "4K export", "Priority support"], cta: "Choose Pro" },
+  testimonials: { headline: "Loved by *teams*", items: ["It changed how we launch. — Ana, Lumen", "Our fastest ads yet. — Kofi, Orbit"] },
+  "before-after": { headline: "See the *difference*", items: ["Before", "After"] },
+  "logo-reveal": { subline: "Made to move" },
+};
+/** Starting lengths that give each template's starter copy time to read. */
+const START_DURATION: Partial<Record<Scene["template"], number>> = {
+  "feature-list": 5, quote: 4.5, "price-card": 7, testimonials: 6.5, "device-mockup": 4.5, countdown: 4.5, "before-after": 5, "logo-reveal": 3, "shape-burst": 2, "stat-counter": 3.5,
 };
 const TEMPLATE_NAMES: Record<string, string> = {
   "title-reveal": "Title reveal", "kinetic-words": "Kinetic words", "product-hero": "Product hero", "split-feature": "Split feature", "feature-list": "Feature list",
   "stat-counter": "Stat counter", "image-mosaic": "Image mosaic", fullbleed: "Full-bleed image", quote: "Quote", marquee: "Marquee", "shape-burst": "Shape burst", "logo-sting": "Logo sting", "cta-end": "End card",
+  "device-mockup": "Device mockup", countdown: "Countdown", "price-card": "Price card", testimonials: "Testimonials", "before-after": "Before / after", "logo-reveal": "Logo reveal",
 };
 
 export function CommandPalette({ host }: { host: PaletteHost }) {
@@ -93,7 +104,7 @@ export function CommandPalette({ host }: { host: PaletteHost }) {
       for (const t of TEMPLATES)
         add("Add scene", `scene-${t}`, `Add ${TEMPLATE_NAMES[t] ?? t}`, () => {
           const at = Math.min(getState().selected + 1, getState().project.scenes.length);
-          updateProject((p) => ({ ...p, scenes: [...p.scenes.slice(0, at), normalizeScene({ template: t, duration: 3.5, ...STARTER_CONTENT[t] }), ...p.scenes.slice(at)] }));
+          updateProject((p) => ({ ...p, scenes: [...p.scenes.slice(0, at), normalizeScene({ template: t, duration: START_DURATION[t] ?? 3.5, ...STARTER_CONTENT[t] }), ...p.scenes.slice(at)] }));
           setState({ selected: at });
           host.openTab("Scene");
         }, { hint: "after the selected scene" });

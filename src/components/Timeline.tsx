@@ -16,6 +16,7 @@ const TEMPLATE_COLORS: Record<string, string> = {
   "title-reveal": "#8B6CFF", "kinetic-words": "#C8FF3D", "product-hero": "#FF8A3D", "split-feature": "#3DB8FF", "feature-list": "#3DFFB1",
   "stat-counter": "#FF4D6D", "image-mosaic": "#FFD23D", fullbleed: "#FF9ED8", quote: "#B0A8FF", marquee: "#7DF9FF", "shape-burst": "#FFFFFF",
   "logo-sting": "#F5A3FF", "cta-end": "#FF4D1A",
+  "device-mockup": "#5EE7DF", countdown: "#FFB23D", "price-card": "#9BE15D", testimonials: "#C9A7FF", "before-after": "#4DA3FF", "logo-reveal": "#FF7AB6",
 };
 
 /** Move a scene to a new position (undoable) and keep it selected. */

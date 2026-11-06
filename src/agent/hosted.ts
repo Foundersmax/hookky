@@ -1,6 +1,6 @@
 // Claude agent for the claude.ai-hosted build: the page calls Claude through the `sample`
 // capability and Claude edits the studio through page-side tools.
-import { TEMPLATES, TRANSITIONS, BACKGROUNDS } from "../types";
+import { TEMPLATES, TRANSITIONS, BACKGROUNDS, MOTIONS } from "../types";
 import type { ChatAttachment } from "../types";
 import { STYLE_PRESETS } from "../presets";
 import { getState, applyStoryboard, applyPatch, setBrand, updateProject } from "../store";
@@ -10,7 +10,7 @@ import { directorPrompt } from "./prompt";
 import { sanitizeBrand } from "../sanitize";
 import { lintStoryboard, notesForAgent } from "./lint";
 
-const SCENE_FIELDS = `Each scene: {template (${TEMPLATES.join("|")}), duration (s), kicker?, headline? (*word* = accent), subline?, items?: string[], stat?: {value, prefix?, suffix?, decimals?, label?}, image?: asset id, images?: asset ids, cta?, url?, author?, background? (${BACKGROUNDS.join("|")}), align? (left|center), transition? (${TRANSITIONS.join("|")}), motion? (calm|snappy|bouncy), accent? (hex)}`;
+const SCENE_FIELDS = `Each scene: {template (${TEMPLATES.join("|")}), duration (s), kicker?, headline? (*word* = accent), subline?, items?: string[], stat?: {value, prefix?, suffix?, decimals?, label?}, image?: asset id, images?: asset ids, cta?, url?, author?, background? (${BACKGROUNDS.join("|")}), align? (left|center), transition? (${TRANSITIONS.join("|")}), motion? (${MOTIONS.join("|")}), accent? (hex)}`;
 
 /** Director's notes on the live project, for tool results. */
 function review() {

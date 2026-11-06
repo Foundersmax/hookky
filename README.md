@@ -12,7 +12,7 @@
 AI motion-graphics studio for product ads and launches. Chat with a creative agent on the right; watch the animation build live in the centre, with scene, library, brand, voice and export panels on the left.
 
 - **Chat agent console**: describe a product, upload references or a voice-over, paste any link. The agent (Claude) storyboards, art-directs, and edits scenes using tools.
-- **Live workspace**: a custom canvas motion engine with 13 minimal, modern templates, 8 transitions, brand presets, a scrubbable timeline, and a scene inspector.
+- **Live workspace**: a custom canvas motion engine with 19 minimal, modern templates (including device mockup, countdown, price card, testimonials, before/after and logo reveal), 8 transitions, 5 motion presets, brand presets, your own uploaded fonts, a scrubbable timeline, and a scene inspector.
 - **Edit on the canvas**: pause and click any text to edit it in place; drop images from the Library or your desktop onto the canvas or a timeline scene; set each image's focal point and zoom in the Scene panel.
 - **Voice-over to animation**: upload a 30–60s VO. The studio finds natural pauses, transcribes it (or aligns your pasted script), and the agent builds scenes that cut on the pauses, with kinetic type synced word by word. Optional burn-in captions and a music bed that ducks under the voice.
 - **Visual sources**: Pinterest, Freepik, Envato, Unsplash, Pexels, Openverse, plus **any URL** (Pinterest pins, Behance, Dribbble, product pages). Magnific upscaling for low-res references.

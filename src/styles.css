@@ -529,3 +529,9 @@ select.sel { height: 30px; border-radius: 8px; background: transparent; font-siz
 .framing-zoom input[type="range"] { flex: 1; accent-color: var(--accent); }
 .framing-zoom .tiny { flex: none; min-width: 64px; }
 .framing-zoom .btn { flex: none; }
+
+/* ---------- brand fonts */
+.font-list { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.font-list li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); }
+.font-sample { flex: 1; min-width: 0; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.font-list .tiny { flex: none; font-family: var(--mono); }

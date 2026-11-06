@@ -19,8 +19,8 @@ export interface LintInput {
 }
 
 const words = (s?: string) => (s ? s.replace(/\*/g, "").trim().split(/\s+/).filter(Boolean).length : 0);
-const IMAGE_TEMPLATES = new Set(["product-hero", "split-feature", "fullbleed"]);
-const HEADLINE_MAX: Record<string, number> = { quote: 22, "kinetic-words": 10, "feature-list": 5, "image-mosaic": 6 };
+const IMAGE_TEMPLATES = new Set(["product-hero", "split-feature", "fullbleed", "device-mockup"]);
+const HEADLINE_MAX: Record<string, number> = { quote: 22, "kinetic-words": 10, "feature-list": 5, "image-mosaic": 6, testimonials: 5, "before-after": 5 };
 const READ_WPS = 3.2; // comfortable on-screen reading speed, words per second
 
 export function lintStoryboard({ scenes, brand, assetIds, audio }: LintInput): Note[] {
@@ -71,6 +71,15 @@ export function lintStoryboard({ scenes, brand, assetIds, audio }: LintInput): N
       if (longItem >= 0) add(i, "tip", "item-long", `Scene ${n}: item ${longItem + 1} is ${words(items[longItem])} words. Keep items to 5 or fewer.`);
     }
     if (s.template === "stat-counter" && !s.stat) add(i, "warn", "stat-missing", `Scene ${n}: the stat counter has no number.`);
+    if (s.template === "price-card" && !s.stat) add(i, "warn", "price-missing", `Scene ${n}: the price card has no price.`);
+    if (s.template === "price-card" && (s.items?.length ?? 0) > 4) add(i, "tip", "items", `Scene ${n}: the price card shows 4 features at most.`);
+    if (s.template === "testimonials" && (s.items?.length ?? 0) < 2) add(i, "warn", "quotes", `Scene ${n}: testimonials need 2 or 3 quotes, one per line.`);
+    if (s.template === "before-after") {
+      const k = (s.images ?? []).filter(hasAsset).length;
+      if (k < 2) add(i, "warn", "before-after", `Scene ${n}: before/after needs two images (it has ${k}).`);
+    }
+    if (s.template === "countdown" && s.duration < (Math.round(s.stat?.value ?? 3) + 1) * 0.7) add(i, "tip", "countdown-fast", `Scene ${n}: the countdown ticks faster than one beat every 0.7s. Give it more time or count from a lower number.`);
+    if (s.template === "logo-reveal" && !hasAsset(s.image || brand.logo) && !brand.name && !s.headline) add(i, "tip", "logo-missing", `Scene ${n}: the logo reveal has no logo or brand name.`);
     if (s.template === "cta-end" && !s.cta) add(i, "warn", "cta-missing", `Scene ${n}: the end card has no button text.`);
     if (s.template === "logo-sting" && !hasAsset(s.image || brand.logo) && !brand.name) add(i, "tip", "logo-missing", `Scene ${n}: the logo sting has no logo or brand name.`);
     if (s.template === "kinetic-words" && audio && !audio.hasWords) add(i, "tip", "no-transcript", `Scene ${n}: paste the script in the Voice tab so the words sync to speech.`);

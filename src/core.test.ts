@@ -8,6 +8,7 @@ import { lintStoryboard, notesForAgent } from "./agent/lint";
 import { TEMPLATES, type Project, type Scene } from "./types";
 import { tokenize } from "./engine/text";
 import { score } from "./fuzzy";
+import { parseFontName } from "./fonts";
 
 const brand = { name: "Orbit", bg: "#0B0B0C", fg: "#F4F4EF", accent: "#C8FF3D", muted: "#6E6E6A", fontDisplay: "Inter", fontBody: "Inter", radius: 8 };
 const fallback: Project = { id: "p1", title: "Fallback", aspect: "16:9", style: "noir", brand, captions: false, grain: true, scenes: [{ id: "f1", template: "title-reveal", duration: 3 }] };
@@ -204,4 +205,19 @@ test("image framing is cleaned and clamped", () => {
   assert.equal(s.zoom, 3);
   assert.equal(sanitizeScene({ focus: { x: "a" }, zoom: "big" }).focus, undefined);
   assert.equal(sanitizeScene({ zoom: 0.2 }).zoom, 1);
+});
+
+// ---------------------------------------------------------------- brand fonts
+test("font file names become a family and a weight", () => {
+  assert.deepEqual(parseFontName("AcmeSans-SemiBold.woff2"), { family: "Acme Sans", weight: 600, italic: false });
+  assert.deepEqual(parseFontName("acme_sans_bold_italic.ttf"), { family: "acme sans", weight: 700, italic: true });
+  assert.deepEqual(parseFontName("Brandon-Regular.otf"), { family: "Brandon", weight: 400, italic: false });
+  assert.equal(parseFontName("GT-America-Extra-Light.woff").weight, 200);
+  assert.equal(parseFontName("Bold.woff2").family, "Brand Font");
+});
+
+test("new templates and motion presets survive cleaning", () => {
+  for (const t of ["device-mockup", "countdown", "price-card", "testimonials", "before-after", "logo-reveal"]) assert.equal(sanitizeScene({ template: t }).template, t);
+  assert.equal(sanitizeScene({ motion: "dramatic" }).motion, "dramatic");
+  assert.equal(sanitizeScene({ motion: "wobbly" }).motion, undefined);
 });

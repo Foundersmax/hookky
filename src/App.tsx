@@ -20,6 +20,7 @@ import { images } from "./runtime";
 import { STYLE_PRESETS, FONT_CHOICES } from "./presets";
 import type { Aspect } from "./types";
 import { timeline } from "./engine/render";
+import { registerFonts } from "./fonts";
 import { sampleCap } from "./host";
 
 const TABS = ["Scene", "Library", "Brand", "Voice", "Export"] as const;
@@ -103,6 +104,8 @@ export function App() {
   useEffect(() => {
     images.setAssets(assets);
     clock.seek(clock.time);
+    // brand fonts: register any new ones, then redraw with them
+    registerFonts(assets).then((loaded) => loaded && clock.seek(clock.time));
   }, [assets]);
 
   // voice-over + music elements drive the clock

@@ -8,8 +8,9 @@ export function cropAspect(p: Project, s: Scene): number | null {
   const [W, H] = ASPECT_SIZE[p.aspect];
   const pad = Math.min(W, H) * 0.085;
   const portrait = H > W * 1.1;
-  if (s.template === "fullbleed" || (s.background === "image" && !["split-feature", "product-hero", "image-mosaic", "logo-sting"].includes(s.template))) return W / H;
+  if (s.template === "fullbleed" || (s.background === "image" && !["split-feature", "product-hero", "image-mosaic", "logo-sting", "device-mockup", "logo-reveal", "before-after"].includes(s.template))) return W / H;
   if (s.template === "split-feature") return portrait ? (W - pad * 2) / (H * 0.5) : (W * 0.46) / (H - pad * 2);
+  if (s.template === "device-mockup") return portrait || W / H < 1.2 ? 0.49 : 1 / 0.62; // phone or laptop screen
   return null;
 }
 

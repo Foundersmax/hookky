@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import type { Response } from "express";
 import type { AgentEvent } from "../src/types";
-import { TEMPLATES, TRANSITIONS, BACKGROUNDS } from "../src/types";
+import { TEMPLATES, TRANSITIONS, BACKGROUNDS, MOTIONS } from "../src/types";
 import { STYLE_PRESETS } from "../src/presets";
 import { searchVisuals, importFromUrl } from "./connectors";
 import { directorPrompt } from "../src/agent/prompt";
@@ -47,7 +47,7 @@ const sceneSchema = {
     background: { type: "string", enum: [...BACKGROUNDS] },
     align: { type: "string", enum: ["left", "center"] },
     transition: { type: "string", enum: [...TRANSITIONS], description: "transition INTO this scene" },
-    motion: { type: "string", enum: ["calm", "snappy", "bouncy"] },
+    motion: { type: "string", enum: [...MOTIONS] },
     accent: { type: "string", description: "hex override" },
     notes: { type: "string", description: "director's note, not rendered" },
   },

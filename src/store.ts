@@ -331,7 +331,7 @@ export function updateChat(id: string, fn: (m: ChatMessage) => ChatMessage) {
 }
 
 // ---------------------------------------------------------------- direct editing
-const IMAGE_SLOT = new Set(["product-hero", "split-feature", "fullbleed", "logo-sting"]);
+const IMAGE_SLOT = new Set(["product-hero", "split-feature", "fullbleed", "logo-sting", "device-mockup", "logo-reveal"]);
 
 /** Put an image into a scene: its image slot, a mosaic tile, or (for text-only scenes) a soft image backdrop. */
 export function assignImage(index: number, assetId: string) {
@@ -340,6 +340,11 @@ export function assignImage(index: number, assetId: string) {
     scenes: p.scenes.map((s, i) => {
       if (i !== index) return s;
       if (s.template === "image-mosaic") return { ...s, images: [...(s.images ?? []).filter((x) => x !== assetId), assetId].slice(-6) };
+      if (s.template === "before-after") {
+        // fill "before" first, then "after"; a third drop replaces "after"
+        const cur = (s.images ?? []).filter((x) => x !== assetId);
+        return { ...s, images: cur.length < 2 ? [...cur, assetId] : [cur[0], assetId] };
+      }
       if (IMAGE_SLOT.has(s.template)) return { ...s, image: assetId, focus: undefined, zoom: undefined };
       return { ...s, image: assetId, background: "image" as const };
     }),
