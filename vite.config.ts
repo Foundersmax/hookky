@@ -8,5 +8,5 @@ export default defineConfig(({ mode }) => ({
     proxy: { "/api": { target: "http://localhost:8787", changeOrigin: true } },
   },
   // The claude.ai build is one self-contained page: inline lazily loaded modules (the MP4 decoder).
-  ...(mode === "artifact" && { build: { rolldownOptions: { output: { inlineDynamicImports: true } } } }),
+  ...(mode === "artifact" && { build: { rolldownOptions: { output: { codeSplitting: false } } } }),
 }));
