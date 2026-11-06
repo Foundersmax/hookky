@@ -14,11 +14,6 @@ on:
       - "package*.json"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
-  # Safety net while the Pages source is "Deploy from a branch": GitHub's branch builder
-  # publishes the raw repo over the landing page on every push, so republish right after it.
-  workflow_run:
-    workflows: ["pages build and deployment"]
-    types: [completed]
 
 permissions:
   contents: read
