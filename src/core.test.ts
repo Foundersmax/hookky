@@ -197,3 +197,11 @@ test("command matching ignores punctuation and ranks word starts first", () => {
   assert.equal(best("vertical"), "Format: vertical (9:16)");
   assert.equal(score("zzz", "Add Quote"), -1);
 });
+
+test("image framing is cleaned and clamped", () => {
+  const s = sanitizeScene({ template: "fullbleed", focus: { x: 1.4, y: "0.25" }, zoom: 9 });
+  assert.deepEqual(s.focus, { x: 1, y: 0.25 });
+  assert.equal(s.zoom, 3);
+  assert.equal(sanitizeScene({ focus: { x: "a" }, zoom: "big" }).focus, undefined);
+  assert.equal(sanitizeScene({ zoom: 0.2 }).zoom, 1);
+});

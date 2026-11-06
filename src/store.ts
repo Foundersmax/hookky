@@ -329,3 +329,55 @@ export function pushChat(m: ChatMessage) {
 export function updateChat(id: string, fn: (m: ChatMessage) => ChatMessage) {
   setState((s) => ({ chat: s.chat.map((m) => (m.id === id ? fn(m) : m)) }));
 }
+
+// ---------------------------------------------------------------- direct editing
+const IMAGE_SLOT = new Set(["product-hero", "split-feature", "fullbleed", "logo-sting"]);
+
+/** Put an image into a scene: its image slot, a mosaic tile, or (for text-only scenes) a soft image backdrop. */
+export function assignImage(index: number, assetId: string) {
+  updateProject((p) => ({
+    ...p,
+    scenes: p.scenes.map((s, i) => {
+      if (i !== index) return s;
+      if (s.template === "image-mosaic") return { ...s, images: [...(s.images ?? []).filter((x) => x !== assetId), assetId].slice(-6) };
+      if (IMAGE_SLOT.has(s.template)) return { ...s, image: assetId, focus: undefined, zoom: undefined };
+      return { ...s, image: assetId, background: "image" as const };
+    }),
+  }));
+  setState({ selected: index });
+}
+
+/** Read an editable field ("headline", "items.2", "stat.value", …) from a scene as text. */
+export function readField(s: Scene, field: string): string {
+  if (field.startsWith("items.")) return s.items?.[Number(field.slice(6))] ?? "";
+  if (field === "stat.value") return s.stat ? String(s.stat.value) : "";
+  if (field === "stat.label") return s.stat?.label ?? "";
+  const v = (s as unknown as Record<string, unknown>)[field];
+  return typeof v === "string" ? v : "";
+}
+
+/** Write an edited field back into a scene (undoable). Returns false if the value was rejected. */
+export function writeField(index: number, field: string, value: string): boolean {
+  const s = state.project.scenes[index];
+  if (!s) return false;
+  let next: Scene = { ...s };
+  const v = value.replace(/\s+$/g, "");
+  if (field.startsWith("items.")) {
+    const k = Number(field.slice(6));
+    const items = [...(s.items ?? [])];
+    if (v.trim()) items[k] = v.trim();
+    else items.splice(k, 1);
+    next.items = items;
+  } else if (field === "stat.value") {
+    const n = parseFloat(v.replace(/[^0-9.\-]/g, ""));
+    if (!Number.isFinite(n)) return false;
+    next.stat = { ...(s.stat ?? { value: 0 }), value: n };
+  } else if (field === "stat.label") {
+    next.stat = { ...(s.stat ?? { value: 0 }), label: v.trim() || undefined };
+  } else if (["headline", "subline", "kicker", "cta", "url", "author"].includes(field)) {
+    (next as unknown as Record<string, unknown>)[field] = v.trim() || undefined;
+  } else return false;
+  if (readField(next, field) === readField(s, field) && field !== "stat.value") return true;
+  updateProject((p) => ({ ...p, scenes: p.scenes.map((x, i) => (i === index ? editedScene(next) : x)) }));
+  return true;
+}

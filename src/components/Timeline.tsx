@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useStudio, setState, getState, updateProject, snapPoints, snapCutsToPauses } from "../store";
+import { useStudio, setState, getState, updateProject, snapPoints, snapCutsToPauses, assignImage } from "../store";
 import { timeline, totalDuration } from "../engine/render";
 import { clock, useClock } from "../clock";
 import { stripMarks } from "../engine/text";
@@ -44,6 +44,7 @@ export function Timeline() {
   const total = Math.max(totalDuration(project), project.audio?.duration ?? 0, 0.1);
   const tl = timeline(project.scenes);
   const notes = useNotes();
+  const [dropOn, setDropOn] = useState<number | null>(null);
   const { thumbs, width: thumbW } = useThumbs(project);
   const sceneWarn = new Map<number, string>();
   for (const n of notes) if (n.level === "warn" && n.scene !== null && !sceneWarn.has(n.scene)) sceneWarn.set(n.scene, n.message);
@@ -384,10 +385,22 @@ export function Timeline() {
               <div
                 key={e.scene.id}
                 data-thumb={thumbs.has(e.scene.id) && e.scene.duration * pxs - 4 >= thumbW + 64 ? "" : undefined}
-                className={`tl-scene ${selected === e.index ? "sel" : ""} ${drag?.id === e.scene.id ? "dragging" : drag ? "shifting" : ""}`}
+                className={`tl-scene ${dropOn === e.index ? "drop-target" : ""} ${selected === e.index ? "sel" : ""} ${drag?.id === e.scene.id ? "dragging" : drag ? "shifting" : ""}`}
                 style={{ left: e.start * pxs + 2, width: Math.max(8, e.scene.duration * pxs - 4), ["--thumb-w" as string]: `${thumbW}px` }}
                 onPointerDown={(ev) => startDrag(ev, e.index)}
                 onDoubleClick={() => zoomToScene(e.index)}
+                onDragOver={(ev) => {
+                  if (!ev.dataTransfer.types.includes("application/x-hookky-asset")) return;
+                  ev.preventDefault();
+                  setDropOn(e.index);
+                }}
+                onDragLeave={() => setDropOn((d) => (d === e.index ? null : d))}
+                onDrop={(ev) => {
+                  ev.preventDefault();
+                  setDropOn(null);
+                  const id = ev.dataTransfer.getData("application/x-hookky-asset");
+                  if (id) assignImage(e.index, id);
+                }}
                 title={`${e.scene.template} · ${e.scene.duration.toFixed(1)}s · drag to reorder, double-click to zoom`}
               >
                 <i className="sw" style={{ background: TEMPLATE_COLORS[e.scene.template] }} />

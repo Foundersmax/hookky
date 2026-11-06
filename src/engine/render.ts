@@ -1,7 +1,7 @@
 // Hookky motion engine — renders a Project at time t onto a 2D canvas.
 import type { Project, Scene, Brand, Word, TransitionId } from "../types";
 import { clamp, ease, lerp, win, rgba, mix, contrast, hash } from "./util";
-import { layoutText, drawLayout, drawLabel, displayWeight, displayTracking, stripMarks, measure, type FontSpec } from "./text";
+import { layoutText, drawLayout, drawLabel, displayWeight, displayTracking, stripMarks, measure, type FontSpec, type Layout } from "./text";
 
 export type ImageGetter = (ref?: string) => HTMLImageElement | undefined;
 
@@ -29,6 +29,20 @@ export interface G {
   words?: Word[];
   E: (x: number) => number;
   sp: number; // motion speed multiplier (durations)
+  /** set while drawing the scene on screen: records where editable text landed */
+  hit?: (r: HitRegion) => void;
+}
+
+/** Where an editable field was drawn, in canvas (logical) pixels. */
+export interface HitRegion {
+  field: string; // "headline", "subline", "kicker", "items.2", "stat.value", "stat.label", "cta", "url", "author"
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  size: number; // font size in px
+  align: "left" | "center" | "right";
+  lines: number;
 }
 
 export interface TimelineEntry {
@@ -78,8 +92,14 @@ export class Renderer {
     }
   }
 
+  /** Editable text regions of the scene on screen in the last frame, and that scene's index. */
+  hits: HitRegion[] = [];
+  hitScene = -1;
+
   render(project: Project, t: number, img: ImageGetter) {
     const ctx = this.canvas.getContext("2d")!;
+    this.hits = [];
+    this.hitScene = -1;
     ctx.setTransform(this.scale, 0, 0, this.scale, 0, 0);
     const tl = timeline(project.scenes);
     if (!tl.length) {
@@ -99,10 +119,10 @@ export class Renderer {
     if (i > 0 && td > 0 && lt < td) {
       const prev = tl[i - 1];
       this.drawSceneTo(this.bufA, project, prev, prev.scene.duration + lt, img);
-      this.drawSceneTo(this.bufB, project, cur, lt, img);
+      this.drawSceneTo(this.bufB, project, cur, lt, img, true);
       composite(ctx, this.bufA, this.bufB, tr, ease.inOutCubic(lt / td), this.W, this.H, colorsFor(project.brand, cur.scene).accent);
     } else {
-      this.drawScene(ctx, project, cur, lt, img);
+      this.drawScene(ctx, project, cur, lt, img, true);
     }
 
     if (project.captions && project.audio?.words?.length) drawCaptions(ctx, this.W, this.H, project, tt);
@@ -119,13 +139,13 @@ export class Renderer {
     }
   }
 
-  private drawSceneTo(c: HTMLCanvasElement, p: Project, e: TimelineEntry, lt: number, img: ImageGetter) {
+  private drawSceneTo(c: HTMLCanvasElement, p: Project, e: TimelineEntry, lt: number, img: ImageGetter, record = false) {
     const ctx = c.getContext("2d")!;
     ctx.setTransform(this.scale, 0, 0, this.scale, 0, 0);
-    this.drawScene(ctx, p, e, lt, img);
+    this.drawScene(ctx, p, e, lt, img, record);
   }
 
-  private drawScene(ctx: CanvasRenderingContext2D, p: Project, e: TimelineEntry, lt: number, img: ImageGetter) {
+  private drawScene(ctx: CanvasRenderingContext2D, p: Project, e: TimelineEntry, lt: number, img: ImageGetter, record = false) {
     const { W, H } = this;
     const scene = e.scene;
     const motion = scene.motion ?? "snappy";
@@ -144,7 +164,9 @@ export class Renderer {
       words: p.audio?.words,
       E: motion === "bouncy" ? ease.outBack : motion === "calm" ? ease.outCubic : ease.outExpo,
       sp: motion === "calm" ? 1.35 : motion === "bouncy" ? 1.05 : 0.9,
+      ...(record && { hit: (r: HitRegion) => this.hits.push(r) }),
     };
+    if (record) this.hitScene = e.index;
     ctx.save();
     ctx.beginPath();
     ctx.rect(0, 0, W, H);
@@ -311,7 +333,7 @@ function drawBackground(g: G) {
     if (im) {
       ctx.save();
       ctx.filter = `blur(${28 * u}px) saturate(1.1)`;
-      drawCover(ctx, im, -40 * u, -40 * u, W + 80 * u, H + 80 * u, 1.05 + t * 0.01);
+      drawCover(ctx, im, -40 * u, -40 * u, W + 80 * u, H + 80 * u, (1.05 + t * 0.01) * (g.scene.zoom ?? 1), g.scene.focus?.x, g.scene.focus?.y);
       ctx.restore();
       ctx.fillStyle = rgba(c.bg, 0.55);
       ctx.fillRect(0, 0, W, H);
@@ -361,6 +383,20 @@ const F = (g: G, size: number): FontSpec => ({ family: g.brand.fontDisplay, weig
 const B = (g: G, size: number, weight = 450): FontSpec => ({ family: g.brand.fontBody, weight, size, tracking: -0.005 });
 const K = (g: G, size: number): FontSpec => ({ family: g.brand.fontBody, weight: 600, size, tracking: 0.14 });
 
+/** Record a laid-out text block as editable. */
+function hitLayout(g: G, field: string, L: Layout, x: number, y: number, align: "left" | "center" | "right") {
+  if (!g.hit || !L.lines.length) return;
+  const left = align === "left" ? x : align === "center" ? x - L.width / 2 : x - L.width;
+  g.hit({ field, x: left, y, w: L.width, h: L.height, size: L.font.size, align, lines: L.lines.length });
+}
+/** Record a single line drawn around a vertical middle `yMid` as editable. */
+function hitText(g: G, field: string, text: string, f: FontSpec, x: number, yMid: number, align: "left" | "center" | "right") {
+  if (!g.hit || !text) return;
+  const w = measure(g.ctx, text, f);
+  const left = align === "left" ? x : align === "center" ? x - w / 2 : x - w;
+  g.hit({ field, x: left, y: yMid - f.size * 0.7, w, h: f.size * 1.4, size: f.size, align, lines: 1 });
+}
+
 function kicker(g: G, text: string | undefined, x: number, y: number, align: "left" | "center", delay = 0) {
   if (!text) return;
   const { ctx, u, c } = g;
@@ -379,6 +415,7 @@ function kicker(g: G, text: string | undefined, x: number, y: number, align: "le
   ctx.fill();
   ctx.restore();
   drawLabel(ctx, label, K(g, size), x0 + dot + 14 * u + (1 - p) * 20 * u, y, "left", c.muted, p);
+  g.hit?.({ field: "kicker", x: x0, y: y - size * 0.8, w: total, h: size * 1.6, size, align: "left", lines: 1 });
 }
 
 function headlineSize(g: G, scale = 1) {
@@ -400,9 +437,11 @@ function textStack(g: G, opts: { x: number; y: number; maxW: number; align: "lef
     kicker(g, scene.kicker, opts.x, y + 14 * u, align, d);
     y += kh;
   }
+  if (H1) hitLayout(g, "headline", H1, opts.x, y, align);
   if (H1) y = drawLayout(ctx, H1, { x: opts.x, y, align, color: opts.color ?? c.fg, emColor: c.accent, t: g.t, delay: d + 0.12, dur: 0.85 * g.sp, stagger: 0.09, mode: opts.mode ?? "mask", easing: g.E, emItalic: /Serif|Fraunces/.test(g.brand.fontDisplay) });
   if (S) {
     y += gap;
+    hitLayout(g, "subline", S, opts.x, y, align);
     y = drawLayout(ctx, S, { x: opts.x, y, align, color: rgba(opts.color ?? c.fg, 0.72), emColor: c.accent, t: g.t, delay: d + 0.45, dur: 0.8 * g.sp, mode: "rise", stagger: 0.06, easing: ease.outCubic });
   }
   return y;
@@ -449,6 +488,7 @@ const TEMPLATES: Record<string, Tpl> = {
     const size = Math.min(headlineSize(g, g.portrait ? 1.3 : 1.45), (maxW / longest) * 100);
     const lh = size * 1.0;
     const y0 = H / 2 - (ph.length * lh) / 2;
+    g.hit?.({ field: "headline", x: W * 0.1, y: y0, w: W * 0.8, h: ph.length * lh, size, align: "center", lines: ph.length });
     // phrase exit when next phrase starts
     const next = phrases[pi + 1];
     const exitP = next ? ease.inCubic(win(g.t, next[0].s - 0.12, 0.12)) : 0;
@@ -533,8 +573,12 @@ const TEMPLATES: Record<string, Tpl> = {
     if (scene.headline) {
       const L = layoutText(ctx, scene.headline, F(g, headlineSize(g, 0.55)), W - pad * 2, 2);
       drawLayout(ctx, L, { x: W / 2, y: labelY - L.height, align: "center", color: c.fg, emColor: c.accent, t: g.t, delay: 0.6, dur: 0.8 * g.sp, mode: "mask", easing: g.E });
+      hitLayout(g, "headline", L, W / 2, labelY - L.height, "center");
     }
-    if (scene.subline) drawLabel(ctx, stripMarks(scene.subline), B(g, 26 * u), W / 2, labelY + 34 * u, "center", rgba(c.fg, 0.65), g.E(win(g.t, 0.9, 0.6)));
+    if (scene.subline) {
+      drawLabel(ctx, stripMarks(scene.subline), B(g, 26 * u), W / 2, labelY + 34 * u, "center", rgba(c.fg, 0.65), g.E(win(g.t, 0.9, 0.6)));
+      hitText(g, "subline", stripMarks(scene.subline), B(g, 26 * u), W / 2, labelY + 34 * u, "center");
+    }
   },
 
   "split-feature"(g) {
@@ -555,7 +599,7 @@ const TEMPLATES: Record<string, Tpl> = {
     if (g.portrait) ctx.rect(ix, iy, iw, ih * reveal);
     else ctx.rect(imgLeft ? ix : ix + iw * (1 - reveal), iy, iw * reveal, ih);
     ctx.clip();
-    if (im) drawCover(ctx, im, ix, iy, iw, ih, 1.12 - 0.1 * clamp(g.t / g.dur));
+    if (im) drawCover(ctx, im, ix, iy, iw, ih, (1.12 - 0.1 * clamp(g.t / g.dur)) * (scene.zoom ?? 1), scene.focus?.x, scene.focus?.y);
     else placeholder(g, ix, iy, iw, ih);
     ctx.restore();
     if (g.portrait) textStack(g, { x: pad, y: iy + ih + pad * 0.9, maxW: W - pad * 2, align: "left", size: headlineSize(g, 0.68), delay: 0.35 });
@@ -575,6 +619,7 @@ const TEMPLATES: Record<string, Tpl> = {
     }
     if (scene.headline) {
       const L = layoutText(ctx, scene.headline, F(g, headlineSize(g, 0.6)), W - pad * 2, 2);
+      hitLayout(g, "headline", L, pad, y, "left");
       y = drawLayout(ctx, L, { x: pad, y, align: "left", color: c.fg, emColor: c.accent, t: g.t, delay: 0.1, dur: 0.8 * g.sp, mode: "mask", easing: g.E });
     }
     const top = Math.max(y + 50 * u, g.portrait ? H * 0.32 : H * 0.36);
@@ -588,6 +633,7 @@ const TEMPLATES: Record<string, Tpl> = {
       drawLabel(ctx, String(i + 1).padStart(2, "0"), { family: "JetBrains Mono", weight: 500, size: 22 * u }, pad, ry + rowH / 2, "left", c.accent, p);
       const L = layoutText(ctx, it, F(g, Math.min(rowH * 0.42, headlineSize(g, 0.45))), W - pad * 2 - 120 * u, 1);
       drawLayout(ctx, L, { x: pad + 110 * u, y: ry + rowH / 2 - L.height / 2, align: "left", color: c.fg, emColor: c.accent, t: g.t, delay: d, dur: 0.7 * g.sp, mode: "mask", easing: g.E });
+      hitLayout(g, `items.${i}`, L, pad + 110 * u, ry + rowH / 2 - L.height / 2, "left");
     });
   },
 
@@ -611,6 +657,10 @@ const TEMPLATES: Record<string, Tpl> = {
     ctx.globalAlpha = clamp(win(g.t, 0.1, 0.4));
     ctx.fillText(txt, x, H / 2);
     ctx.restore();
+    if (g.hit) {
+      const fw = measure(ctx, finalTxt, F(g, size));
+      g.hit({ field: "stat.value", x: align === "center" ? x - fw / 2 : x, y: H / 2 - size * 0.55, w: fw, h: size * 1.1, size, align, lines: 1 });
+    }
     const lw = Math.min(W - pad * 2, measure(ctx, finalTxt, F(g, size))) * ease.inOutExpo(win(g.t, 0.4, 1.2));
     ctx.fillStyle = c.accent;
     ctx.fillRect(align === "center" ? W / 2 - lw / 2 : x, H / 2 + size * 0.55, lw, 6 * u);
@@ -618,6 +668,7 @@ const TEMPLATES: Record<string, Tpl> = {
     if (label) {
       const L = layoutText(ctx, label, B(g, 34 * u, 500), W - pad * 2, 2, 1.3);
       drawLayout(ctx, L, { x, y: H / 2 + size * 0.55 + 40 * u, align, color: rgba(c.fg, 0.75), emColor: c.accent, t: g.t, delay: 0.8, dur: 0.7, mode: "rise" });
+      hitLayout(g, st.label ? "stat.label" : "headline", L, x, H / 2 + size * 0.55 + 40 * u, align);
     }
   },
 
@@ -634,6 +685,7 @@ const TEMPLATES: Record<string, Tpl> = {
     if (scene.headline) {
       const L = layoutText(ctx, scene.headline, F(g, headlineSize(g, 0.5)), gw, 1);
       drawLayout(ctx, L, { x: pad, y: pad - 8 * u, align: "left", color: c.fg, emColor: c.accent, t: g.t, delay: 0, dur: 0.7, mode: "mask", easing: g.E });
+      hitLayout(g, "headline", L, pad, pad - 8 * u, "left");
     }
     for (let i = 0; i < n; i++) {
       const col = i % cols, row = Math.floor(i / cols);
@@ -656,7 +708,7 @@ const TEMPLATES: Record<string, Tpl> = {
     const { W, H, ctx, u, scene, pad } = g;
     const im = g.img(scene.image);
     const z = 1.14 - 0.12 * ease.outCubic(clamp(g.t / g.dur));
-    if (im) drawCover(ctx, im, 0, 0, W, H, z);
+    if (im) drawCover(ctx, im, 0, 0, W, H, z * (scene.zoom ?? 1), scene.focus?.x, scene.focus?.y);
     else placeholder(g, 0, 0, W, H);
     const gr = ctx.createLinearGradient(0, H * 0.35, 0, H);
     gr.addColorStop(0, "rgba(0,0,0,0)");
@@ -686,11 +738,13 @@ const TEMPLATES: Record<string, Tpl> = {
     const L = layoutText(ctx, scene.headline ?? "", { ...F(g, headlineSize(g, 0.62)), family: /Mono/.test(g.brand.fontDisplay) ? g.brand.fontDisplay : g.brand.fontDisplay }, W - pad * 2.4, 5, 1.12);
     const y = H / 2 - L.height / 2;
     drawLayout(ctx, L, { x: pad * 1.2, y, align: "left", color: c.fg, emColor: c.accent, t: g.t, delay: 0.2, dur: 0.9 * g.sp, mode: "mask", stagger: 0.1, easing: g.E });
+    hitLayout(g, "headline", L, pad * 1.2, y, "left");
     if (scene.author) {
       const ap = g.E(win(g.t, 0.9, 0.7));
       ctx.fillStyle = c.accent;
       ctx.fillRect(pad * 1.2, y + L.height + 56 * u, 40 * u * ap, 3 * u);
       drawLabel(ctx, scene.author, B(g, 26 * u, 500), pad * 1.2 + 60 * u, y + L.height + 58 * u, "left", c.muted, ap);
+      hitText(g, "author", scene.author, B(g, 26 * u, 500), pad * 1.2 + 60 * u, y + L.height + 58 * u, "left");
     }
   },
 
@@ -702,6 +756,7 @@ const TEMPLATES: Record<string, Tpl> = {
     const tw = measure(ctx, text, f);
     const rows = 3;
     const p = ease.outExpo(win(g.t, 0, 0.9));
+    g.hit?.({ field: "headline", x: 0, y: H / 2 - size * 0.55, w: W, h: size * 1.1, size, align: "center", lines: 1 });
     for (let r = 0; r < rows; r++) {
       const dir = r % 2 ? 1 : -1;
       const speed = 160 * u * (1 + r * 0.15);
@@ -724,7 +779,10 @@ const TEMPLATES: Record<string, Tpl> = {
       }
       ctx.restore();
     }
-    if (scene.subline) drawLabel(ctx, stripMarks(scene.subline), B(g, 26 * u, 500), W / 2, H - g.pad, "center", c.fg, win(g.t, 0.5, 0.6));
+    if (scene.subline) {
+      drawLabel(ctx, stripMarks(scene.subline), B(g, 26 * u, 500), W / 2, H - g.pad, "center", c.fg, win(g.t, 0.5, 0.6));
+      hitText(g, "subline", stripMarks(scene.subline), B(g, 26 * u, 500), W / 2, H - g.pad, "center");
+    }
   },
 
   "shape-burst"(g) {
@@ -765,6 +823,7 @@ const TEMPLATES: Record<string, Tpl> = {
     if (scene.headline) {
       const L = layoutText(ctx, scene.headline, F(g, headlineSize(g, 0.55)), W * 0.7, 2);
       drawLayout(ctx, L, { x: cx, y: cy + m * 0.12, align: "center", color: c.fg, emColor: c.accent, t: g.t, delay: 0.5, dur: 0.8, mode: "mask", easing: g.E });
+      hitLayout(g, "headline", L, cx, cy + m * 0.12, "center");
     }
   },
 
@@ -791,6 +850,7 @@ const TEMPLATES: Record<string, Tpl> = {
     const f = F(g, 64 * u);
     const letters = [...name];
     const tw = measure(ctx, name, f);
+    g.hit?.({ field: "headline", x: cx - tw / 2, y: cy + 200 * u - f.size * 0.7, w: tw, h: f.size * 1.4, size: f.size, align: "center", lines: 1 });
     let x = cx - tw / 2;
     letters.forEach((ch, i) => {
       const lp = g.E(win(g.t, 0.6 + i * 0.035, 0.6));
@@ -798,7 +858,10 @@ const TEMPLATES: Record<string, Tpl> = {
       drawLabel(ctx, ch, f, x, cy + 200 * u + (1 - lp) * 30 * u, "left", c.fg, lp);
       x += w;
     });
-    if (scene.subline) drawLabel(ctx, stripMarks(scene.subline).toUpperCase(), K(g, 20 * u), cx, cy + 270 * u, "center", c.muted, win(g.t, 1.1, 0.6));
+    if (scene.subline) {
+      drawLabel(ctx, stripMarks(scene.subline).toUpperCase(), K(g, 20 * u), cx, cy + 270 * u, "center", c.muted, win(g.t, 1.1, 0.6));
+      hitText(g, "subline", stripMarks(scene.subline).toUpperCase(), K(g, 20 * u), cx, cy + 270 * u, "center");
+    }
   },
 
   "cta-end"(g) {
@@ -819,6 +882,7 @@ const TEMPLATES: Record<string, Tpl> = {
     const bf = B(g, 32 * u, 600);
     const bw = measure(ctx, cta, bf) + 96 * u, bh = 88 * u;
     const by = Math.max(bottom + 70 * u, H * 0.62);
+    g.hit?.({ field: "cta", x: W / 2 - bw / 2, y: by, w: bw, h: bh, size: 32 * u, align: "center", lines: 1 });
     const bp = ease.outBack(win(g.t, 0.7, 0.7));
     ctx.save();
     ctx.translate(W / 2, by + bh / 2);
@@ -836,7 +900,10 @@ const TEMPLATES: Record<string, Tpl> = {
     ctx.restore();
     const onAccent = contrast(c.bg, c.accent) > contrast(c.fg, c.accent) ? c.bg : c.fg;
     drawLabel(ctx, cta, bf, W / 2, by + bh / 2 + 1, "center", onAccent, win(g.t, 0.85, 0.3));
-    if (scene.url) drawLabel(ctx, scene.url, { family: "JetBrains Mono", weight: 500, size: 24 * u }, W / 2, by + bh + 64 * u, "center", c.muted, win(g.t, 1.0, 0.5));
+    if (scene.url) {
+      drawLabel(ctx, scene.url, { family: "JetBrains Mono", weight: 500, size: 24 * u }, W / 2, by + bh + 64 * u, "center", c.muted, win(g.t, 1.0, 0.5));
+      hitText(g, "url", scene.url, { family: "JetBrains Mono", weight: 500, size: 24 * u }, W / 2, by + bh + 64 * u, "center");
+    }
   },
 };
 

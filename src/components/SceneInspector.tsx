@@ -7,6 +7,7 @@ import { sendToAgent } from "../agent/client";
 import { uid } from "../engine/util";
 import { Icon } from "./Icon";
 import { DirectorNotes } from "./DirectorNotes";
+import { Framing } from "./Framing";
 
 const USES: Record<string, (keyof Scene)[]> = {
   "title-reveal": ["kicker", "headline", "subline", "align"],
@@ -143,6 +144,9 @@ export function SceneInspector() {
                 {imgOptions.map((a) => <option key={a.id} value={a.id}>{a.source} · {a.title.slice(0, 34)}</option>)}
               </select>
             </div>
+          )}
+          {scene.image && assets.find((a) => a.id === scene.image) && (
+            <Framing project={project} scene={scene} asset={assets.find((a) => a.id === scene.image)!} onChange={edit} />
           )}
           {uses.includes("images") && (
             <div className="field">

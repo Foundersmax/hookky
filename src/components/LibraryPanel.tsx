@@ -147,7 +147,15 @@ export function LibraryPanel({ toast }: { toast: (s: string) => void }) {
       </div>
       <div className="lib-grid">
         {[...assets].reverse().map((a) => (
-          <div className="lib-item" key={a.id} title={`${a.title}${a.author ? ` — ${a.author}` : ""}${a.license ? ` (${a.license})` : ""}`}>
+          <div
+            className="lib-item"
+            key={a.id}
+            draggable
+            onDragStart={(e) => {
+              e.dataTransfer.setData("application/x-hookky-asset", a.id);
+              e.dataTransfer.effectAllowed = "copy";
+            }}
+            title={`${a.title}${a.author ? ` — ${a.author}` : ""}${a.license ? ` (${a.license})` : ""}`}>
             <img src={a.thumb ?? a.src} alt={a.title} loading="lazy" referrerPolicy="no-referrer" />
             <span className="src">{a.source}</span>
             <div className="acts">

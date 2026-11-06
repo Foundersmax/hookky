@@ -51,6 +51,13 @@ const list = (v: unknown, max: number, each: (x: unknown) => string | undefined)
   return out.length ? out : undefined;
 };
 
+function focusOf(v: unknown): { x: number; y: number } | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  const o = v as Record<string, unknown>;
+  const x = num(o.x, 0, 1), y = num(o.y, 0, 1);
+  return x === undefined || y === undefined ? undefined : { x: +x.toFixed(3), y: +y.toFixed(3) };
+}
+
 /** Clean one scene. Unknown fields are dropped; bad values fall back to safe defaults. */
 export function sanitizeScene(input: unknown, keepId?: string): Scene {
   const s = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
@@ -73,6 +80,8 @@ export function sanitizeScene(input: unknown, keepId?: string): Scene {
     transition: oneOf(s.transition, TRANSITIONS) ?? "fade",
     motion: oneOf(s.motion, ["calm", "snappy", "bouncy"] as const),
     accent: hex(s.accent),
+    focus: focusOf(s.focus),
+    zoom: num(s.zoom, 1, 3),
     notes: str(s.notes, 400),
   };
   for (const k of Object.keys(scene) as (keyof Scene)[]) if (scene[k] === undefined) delete scene[k];

@@ -58,6 +58,9 @@ export interface Scene {
   motion?: Motion;
   /** colour override for this scene's accent */
   accent?: string;
+  /** image framing for cropped layouts: focal point (0–1 from top-left) and zoom (1–3) */
+  focus?: { x: number; y: number };
+  zoom?: number;
   notes?: string;
 }
 

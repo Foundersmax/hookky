@@ -1,10 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useStudio, updateProject, getState } from "../store";
-import { Renderer, timeline, totalDuration } from "../engine/render";
+import { useStudio, updateProject, getState, setState, readField, writeField, assignImage, addAssets } from "../store";
+import { Renderer, timeline, totalDuration, type HitRegion } from "../engine/render";
 import { ASPECT_SIZE } from "../types";
 import { clock, useClock } from "../clock";
 import { images } from "../runtime";
 import { Icon } from "./Icon";
+import { fileToUploadAsset } from "./ChatPanel";
 
 export const fmt = (t: number) => {
   const m = Math.floor(t / 60);
@@ -18,6 +19,10 @@ export function Stage() {
   const canvas = useRef<HTMLCanvasElement>(null);
   const renderer = useRef<Renderer | null>(null);
   const [box, setBox] = useState({ w: 640, h: 360 });
+  // ---- direct editing on the canvas
+  const [hover, setHover] = useState<HitRegion | null>(null);
+  const [edit, setEdit] = useState<{ hit: HitRegion; scene: number; value: string } | null>(null);
+  const [dropping, setDropping] = useState(false);
   const c = useClock();
   const [W, H] = ASPECT_SIZE[project.aspect];
 
@@ -106,6 +111,76 @@ export function Stage() {
   }, [project]);
   useEffect(() => clock.subscribe(draw), []);
 
+  /** Map a pointer position on the canvas to canvas (logical) pixels. */
+  const toCanvas = (e: { clientX: number; clientY: number }) => {
+    const r = canvas.current!.getBoundingClientRect();
+    return { x: ((e.clientX - r.left) / r.width) * W, y: ((e.clientY - r.top) / r.height) * H };
+  };
+  const hitAt = (e: { clientX: number; clientY: number }) => {
+    const rnd = renderer.current;
+    if (!rnd) return null;
+    const { x, y } = toCanvas(e);
+    const padPx = Math.min(W, H) * 0.008;
+    // smallest region first, so a label inside a bigger block wins
+    const found = rnd.hits.filter((h) => x >= h.x - padPx && x <= h.x + h.w + padPx && y >= h.y - padPx && y <= h.y + h.h + padPx).sort((a, b) => a.w * a.h - b.w * b.h)[0];
+    return found ?? null;
+  };
+  const onCanvasMove = (e: React.PointerEvent) => {
+    if (clock.playing || edit || full !== "off") return;
+    const h = hitAt(e);
+    setHover((prev) => (prev?.field === h?.field && prev?.x === h?.x && prev?.y === h?.y ? prev : h));
+  };
+  const onCanvasClick = (e: React.MouseEvent) => {
+    if (full !== "off" || clock.playing) return clock.toggle();
+    const h = hitAt(e);
+    const idx = renderer.current?.hitScene ?? -1;
+    if (h && idx >= 0) {
+      setState({ selected: idx });
+      setHover(null);
+      setEdit({ hit: h, scene: idx, value: readField(getState().project.scenes[idx], h.field) });
+    } else clock.toggle();
+  };
+  const commitEdit = () => {
+    setEdit((cur) => {
+      if (cur && !writeField(cur.scene, cur.hit.field, cur.value)) setState({ notice: "That needs to be a number." });
+      return null;
+    });
+  };
+  const sceneOnScreen = () => {
+    const t = timeline(getState().project.scenes);
+    return Math.max(0, t.findIndex((x) => clock.time >= x.start && clock.time < x.end));
+  };
+  const onCanvasDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setDropping(false);
+    const idx = sceneOnScreen();
+    const id = e.dataTransfer.getData("application/x-hookky-asset");
+    if (id) return assignImage(idx, id);
+    const file = [...e.dataTransfer.files].find((f) => f.type.startsWith("image/"));
+    if (file) {
+      const asset = await fileToUploadAsset(file);
+      addAssets([asset]);
+      assignImage(idx, asset.id);
+    }
+  };
+  // Overlay geometry: canvas pixels → stage pixels.
+  const place = (h: HitRegion) => {
+    const el = canvas.current;
+    const k = box.w / W;
+    return { left: (el?.offsetLeft ?? 0) + h.x * k, top: (el?.offsetTop ?? 0) + h.y * k, width: h.w * k, height: h.h * k };
+  };
+  const outlineStyle = (h: HitRegion) => {
+    const r = place(h);
+    return { left: r.left - 6, top: r.top - 4, width: r.width + 12, height: r.height + 8 };
+  };
+  const editorStyle = (h: HitRegion) => {
+    const r = place(h);
+    const stageW = wrap.current?.clientWidth ?? 800;
+    const width = Math.min(stageW - 24, Math.max(r.width + 24, 260));
+    const left = Math.max(12, Math.min(stageW - width - 12, h.align === "center" ? r.left + r.width / 2 - width / 2 : r.left - 12));
+    return { left, top: Math.max(8, r.top - 8), width };
+  };
+
   const tl = timeline(project.scenes);
   const cur = tl.find((e) => c.time >= e.start && c.time < e.end) ?? tl[tl.length - 1];
 
@@ -118,7 +193,48 @@ export function Stage() {
         role={full === "window" ? "dialog" : undefined}
         aria-label={full === "window" ? "Fullscreen preview" : undefined}
       >
-        <canvas ref={canvas} style={{ width: box.w, height: box.h }} onClick={() => clock.toggle()} />
+        <canvas
+          ref={canvas}
+          style={{ width: box.w, height: box.h, cursor: hover && !c.playing ? "text" : undefined }}
+          onClick={onCanvasClick}
+          onPointerMove={onCanvasMove}
+          onPointerLeave={() => setHover(null)}
+          onDragOver={(e) => {
+            if (!e.dataTransfer.types.includes("application/x-hookky-asset") && !e.dataTransfer.types.includes("Files")) return;
+            e.preventDefault();
+            setDropping(true);
+          }}
+          onDragLeave={() => setDropping(false)}
+          onDrop={onCanvasDrop}
+          aria-label="Preview. Click text to edit it; drop an image to use it in this scene."
+        />
+        {hover && !edit && !c.playing && full === "off" && <div className="hit-outline" style={outlineStyle(hover)} aria-hidden />}
+        {dropping && <div className="drop-hint" style={{ width: box.w, height: box.h }}>Drop to use this image in the scene</div>}
+        {edit && (
+          <div className="text-editor" style={editorStyle(edit.hit)}>
+            <textarea
+              autoFocus
+              value={edit.value}
+              rows={Math.min(4, Math.max(1, edit.hit.lines))}
+              aria-label={`Edit ${edit.hit.field}`}
+              style={{ fontFamily: `"${/headline|stat.value|cta|kicker/.test(edit.hit.field) ? project.brand.fontDisplay : project.brand.fontBody}", Inter, sans-serif`, fontSize: Math.min(44, Math.max(14, edit.hit.size * (box.w / W))) }}
+              onChange={(e) => setEdit({ ...edit, value: e.target.value })}
+              onFocus={(e) => e.currentTarget.select()}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === "Escape") setEdit(null);
+                else if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  commitEdit();
+                }
+              }}
+              onBlur={commitEdit}
+            />
+            <span className="text-editor-hint">
+              {edit.hit.field === "stat.value" ? "A number" : "*word* for accent"} · <kbd>Enter</kbd> save · <kbd>Esc</kbd> cancel
+            </span>
+          </div>
+        )}
         {full !== "off" && (
           <div className="fs-controls" onPointerMove={wake}>
             <button className="fs-btn" onClick={() => clock.toggle()} aria-label={c.playing ? "Pause" : "Play"}>
