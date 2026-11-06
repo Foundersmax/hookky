@@ -1,0 +1,34 @@
+name: Domain check
+
+# Manual diagnostic: looks up rookker.com's DNS and loads each address from GitHub's network.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: DNS records
+        run: |
+          sudo apt-get install -y -qq dnsutils >/dev/null 2>&1 || true
+          for h in rookker.com www.rookker.com app.rookker.com; do
+            echo "== $h"
+            for t in A AAAA CNAME; do printf '  %-5s ' "$t"; dig +short "$h" "$t" @1.1.1.1 | tr '\n' ' '; echo; done
+          done
+          echo "== nameservers"; dig +short NS rookker.com @1.1.1.1
+          echo "== CAA"; dig +short CAA rookker.com @1.1.1.1
+      - name: HTTP and HTTPS
+        run: |
+          for u in http://rookker.com/ https://rookker.com/ https://www.rookker.com/ https://app.rookker.com/api/health https://hookky.onrender.com/api/health; do
+            echo "== $u"
+            curl -sS -m 20 -o body.txt -D headers.txt -w '  status %{http_code} · ip %{remote_ip} · redirect %{redirect_url}\n' "$u" || echo "  request failed (exit $?)"
+            grep -iE '^(server|location|cf-ray|x-github-request-id):' headers.txt | sed 's/^/  /' || true
+            head -c 160 body.txt | tr '\n' ' ' | sed 's/^/  body: /'; echo
+          done
+      - name: Certificate on rookker.com
+        run: |
+          echo | openssl s_client -connect rookker.com:443 -servername rookker.com 2>/dev/null | openssl x509 -noout -subject -issuer -dates 2>/dev/null || echo "  no certificate served for rookker.com"
