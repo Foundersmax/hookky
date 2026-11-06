@@ -18,6 +18,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^1.6.0",
     "express": "^5.3.0",
+    "gifenc": "^1.0.3",
     "mp4-muxer": "^5.2.2",
     "multer": "^2.5.0",
     "react": "^19.3.1",

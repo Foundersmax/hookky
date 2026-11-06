@@ -23,27 +23,50 @@ export function projectImageRefs(p: Project) {
   return [p.brand.logo, ...p.scenes.flatMap((s) => [s.image, ...(s.images ?? [])])];
 }
 
-type ExportOpts = { fps?: number; bitrate?: number; onProgress?: (p: number) => void; signal?: AbortSignal };
+type ExportOpts = {
+  fps?: number;
+  /** 1 = 1080p-class (1920×1080 for 16:9), 2 = 4K-class (3840×2160). */
+  scale?: number;
+  bitrate?: number;
+  onProgress?: (p: number) => void;
+  signal?: AbortSignal;
+};
+
+/** Output size in pixels for a format at a quality scale. */
+export const outputSize = (aspect: Aspect, scale = 1): [number, number] => {
+  const [W, H] = ASPECT_SIZE[aspect];
+  return [Math.round(W * scale), Math.round(H * scale)];
+};
+
+/** A bitrate that keeps minimal motion graphics clean: more for 4K and for 60 fps. */
+export function videoBitrate(width: number, height: number, fps: number) {
+  const px = width * height;
+  const base = px <= 2.1e6 ? 10e6 : px <= 4.2e6 ? 16e6 : 40e6;
+  return Math.round(base * (fps > 30 ? 1.5 : 1));
+}
 
 /** Frame-accurate export via WebCodecs (faster than real time, never drops frames); falls back to MediaRecorder. */
 export async function exportVideo(project: Project, aspect: Aspect, opts: ExportOpts): Promise<{ blob: Blob; ext: string }> {
   if (typeof VideoEncoder !== "undefined" && typeof VideoFrame !== "undefined") {
-    const codec = await pickVideoCodec(...ASPECT_SIZE[aspect], opts.fps ?? 30);
+    const codec = await pickVideoCodec(...outputSize(aspect, opts.scale), opts.fps ?? 30);
     if (codec) return exportWebCodecs(project, aspect, codec, opts);
   }
   return exportRealtime(project, aspect, opts);
 }
 
-async function pickVideoCodec(width: number, height: number, framerate: number) {
+export async function pickVideoCodec(width: number, height: number, framerate: number) {
   const cands = [
+    // H.264 High at level 5.1 covers up to 4K30; level 5.2 adds 4K60.
     { codec: "avc1.640033", mux: "avc" as const },
+    { codec: "avc1.640034", mux: "avc" as const },
     { codec: "avc1.4d0033", mux: "avc" as const },
+    { codec: "avc1.4d0034", mux: "avc" as const },
     { codec: "vp09.00.41.08", mux: "vp9" as const },
     { codec: "av01.0.08M.08", mux: "av1" as const },
   ];
   for (const c of cands) {
     try {
-      const r = await VideoEncoder.isConfigSupported({ codec: c.codec, width, height, bitrate: 12e6, framerate });
+      const r = await VideoEncoder.isConfigSupported({ codec: c.codec, width, height, bitrate: videoBitrate(width, height, framerate), framerate });
       if (r.supported) return c;
     } catch {}
   }
@@ -83,11 +106,12 @@ async function mixAudio(p: Project, duration: number): Promise<AudioBuffer | nul
 
 async function exportWebCodecs(project: Project, aspect: Aspect, vc: { codec: string; mux: "avc" | "vp9" | "av1" }, opts: ExportOpts) {
   const p: Project = { ...project, aspect };
-  const [W, H] = ASPECT_SIZE[aspect];
+  const scale = opts.scale ?? 1;
+  const [W, H] = outputSize(aspect, scale);
   const fps = opts.fps ?? 30;
   const duration = Math.max(totalDuration(p), 0.5);
   const canvas = document.createElement("canvas");
-  const r = new Renderer(canvas, W, H, 1);
+  const r = new Renderer(canvas, ...ASPECT_SIZE[aspect], scale);
   await document.fonts.ready;
   await images.preload(projectImageRefs(p));
 
@@ -114,7 +138,7 @@ async function exportWebCodecs(project: Project, aspect: Aspect, vc: { codec: st
   });
   let failure: Error | null = null;
   const venc = new VideoEncoder({ output: (c, m) => muxer.addVideoChunk(c, m), error: (e) => (failure = e as Error) });
-  venc.configure({ codec: vc.codec, width: W, height: H, bitrate: opts.bitrate ?? (W * H > 2e6 ? 16e6 : 10e6), framerate: fps, ...(vc.mux === "avc" && { avc: { format: "avc" as const } }) });
+  venc.configure({ codec: vc.codec, width: W, height: H, bitrate: opts.bitrate ?? videoBitrate(W, H, fps), framerate: fps, ...(vc.mux === "avc" && { avc: { format: "avc" as const } }) });
 
   const frames = Math.ceil(duration * fps);
   for (let i = 0; i < frames; i++) {
@@ -166,10 +190,11 @@ async function exportRealtime(
   opts: ExportOpts,
 ): Promise<{ blob: Blob; ext: string }> {
   const p: Project = { ...project, aspect };
-  const [W, H] = ASPECT_SIZE[aspect];
+  const scale = opts.scale ?? 1;
+  const [W, H] = outputSize(aspect, scale);
   const fps = opts.fps ?? 30;
   const canvas = document.createElement("canvas");
-  const r = new Renderer(canvas, W, H, 1);
+  const r = new Renderer(canvas, ...ASPECT_SIZE[aspect], scale);
   await document.fonts.ready;
   await images.preload(projectImageRefs(p));
   r.render(p, 0, images.get);
@@ -201,7 +226,7 @@ async function exportRealtime(
   for (const t of dest.stream.getAudioTracks()) stream.addTrack(t);
 
   const { mime, ext } = pickMime();
-  const rec = new MediaRecorder(stream, { ...(mime && { mimeType: mime }), videoBitsPerSecond: opts.bitrate ?? (W * H > 2e6 ? 16e6 : 10e6), audioBitsPerSecond: 192_000 });
+  const rec = new MediaRecorder(stream, { ...(mime && { mimeType: mime }), videoBitsPerSecond: opts.bitrate ?? videoBitrate(W, H, fps), audioBitsPerSecond: 192_000 });
   const chunks: Blob[] = [];
   rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
   const stopped = new Promise<void>((res) => (rec.onstop = () => res()));
@@ -263,11 +288,23 @@ export async function download(blob: Blob, name: string): Promise<boolean> {
   return true;
 }
 
-export async function posterPng(project: Project, t: number): Promise<Blob> {
-  const [W, H] = ASPECT_SIZE[project.aspect];
+/** One frame as an image file: PNG by default, JPEG for smaller thumbnails. */
+export async function posterPng(project: Project, t: number, opts: { aspect?: Aspect; scale?: number; type?: "image/png" | "image/jpeg" } = {}): Promise<Blob> {
+  const p: Project = { ...project, aspect: opts.aspect ?? project.aspect };
   const c = document.createElement("canvas");
-  const r = new Renderer(c, W, H, 1);
-  await images.preload(projectImageRefs(project));
-  r.render(project, t, images.get);
-  return new Promise((res) => c.toBlob((b) => res(b!), "image/png"));
+  const r = new Renderer(c, ...ASPECT_SIZE[p.aspect], opts.scale ?? 1);
+  await document.fonts.ready;
+  await images.preload(projectImageRefs(p));
+  r.render(p, t, images.get);
+  return new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error("Couldn't draw the frame"))), opts.type ?? "image/png", 0.92));
+}
+
+/** The moment that best sells the cut: the first scene with a headline, fully animated in. */
+export function coverMoment(p: Project): number {
+  let t = 0;
+  for (const s of p.scenes) {
+    if (s.headline && s.template !== "shape-burst") return t + Math.min(s.duration - 0.08, Math.max(1, s.duration * 0.72));
+    t += s.duration;
+  }
+  return Math.min(1.5, totalDuration(p) / 2);
 }

@@ -18,7 +18,7 @@ AI motion-graphics studio for product ads and launches. Chat with a creative age
 - **Edit on the canvas**: pause and click any text to edit it in place; drop images from the Library or your desktop onto the canvas or a timeline scene; set each image's focal point and zoom in the Scene panel.
 - **Voice-over to animation**: upload a 30–60s VO. The studio finds natural pauses, transcribes it (or aligns your pasted script), and the agent builds scenes that cut on the pauses, with kinetic type synced word by word. Optional burn-in captions and a music bed that ducks under the voice.
 - **Visual sources**: Pinterest, Freepik, Envato, Unsplash, Pexels, Openverse, plus **any URL** (Pinterest pins, Behance, Dribbble, product pages). Magnific upscaling for low-res references.
-- **Export**: frame-accurate H.264 MP4 (WebCodecs) at 1080p in 16:9, 9:16, 1:1 and 4:5, all in one pass. Also PNG frames and project JSON.
+- **Export**: frame-accurate H.264 MP4 (WebCodecs) in 16:9, 9:16, 1:1 and 4:5 in one pass, at 1080p or 4K and 30 or 60 fps. Looping GIFs of one scene or the whole cut (one shared palette, exact timing). `.srt` / `.vtt` captions from the voice-over transcript, or from the on-screen copy when there is none. Posters for every format up to 4K, at the best frame or the playhead. Plus project JSON.
 
 ## Quick start
 

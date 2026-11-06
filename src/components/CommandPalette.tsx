@@ -89,6 +89,9 @@ export function CommandPalette({ host }: { host: PaletteHost }) {
         add("Agent", "auto-review", on ? "Turn auto visual review off" : "Turn auto visual review on", () => (setAutoReview(!on), host.toast(on ? "Claude won't review new storyboards automatically" : "Claude will review each new storyboard's frames")));
       }
       add("Studio", "export", "Export video…", () => host.openTab("Export"));
+      add("Studio", "export-gif", "Export a GIF…", () => host.openTab("Export"), { hint: "a scene or the whole cut" });
+      add("Studio", "export-captions", "Download captions (.srt / .vtt)…", () => host.openTab("Export"));
+      add("Studio", "export-poster", "Save posters / thumbnails…", () => host.openTab("Export"), { hint: "up to 4K PNG" });
       add("Studio", "version", "Save a version", () => saveVersion().then((v) => host.toast(`Saved version “${v.name}”`)));
       add("Studio", "undo", "Undo", undo, { keys: "⌘Z" });
       add("Studio", "redo", "Redo", redo, { keys: "⇧⌘Z" });

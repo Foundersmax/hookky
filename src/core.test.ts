@@ -251,3 +251,53 @@ test("the local director pitches three contrasting routes that fit the brief", (
   assert.ok(app.some((d) => d.hook.includes("Ledger")));
   assert.equal(briefName("A 15s teaser for Ritual Coffee", p), "Ritual Coffee");
 });
+
+// ---------------------------------------------------------------- captions & GIF timing
+import { cuesFromWords, cuesFromScenes, captionCues, toSrt, toVtt, wrapCue } from "./captions";
+import { gifDelays } from "./gifTiming";
+
+test("voice-over words become readable, non-overlapping caption cues", () => {
+  const text = "Meet Orbit. The watch that lasts ten whole days on one charge, with sleep coaching built in and a titanium case";
+  let t = 0;
+  const words = text.split(" ").map((w) => ({ w, s: (t += 0.3) - 0.3, e: t - 0.05 }));
+  words[5].e += 0; // keep spacing regular
+  const cues = cuesFromWords(words);
+  assert.equal(cues[0].text, "Meet Orbit.");
+  for (const c of cues) {
+    assert.ok(c.text.length <= 42, `cue too long: ${c.text}`);
+    assert.ok(c.e - c.s <= 3.3, "cue stays on screen ≤ ~3 s");
+  }
+  for (let i = 1; i < cues.length; i++) assert.ok(cues[i].s >= cues[i - 1].e, "no overlaps");
+  assert.equal(cues.map((c) => c.text).join(" "), text, "every word appears once, in order");
+  // a lone short word is held long enough to read, but never into the next cue
+  const short = cuesFromWords([{ w: "Hi.", s: 0, e: 0.2 }, { w: "Go", s: 0.5, e: 0.7 }]);
+  assert.deepEqual(short.map((c) => [c.s, c.e]), [[0, 0.5], [0.5, 1.2]]);
+});
+
+test("cuts without a transcript caption their on-screen copy, scene by scene", () => {
+  const scenes = [scene({ template: "shape-burst", duration: 2 }), scene({ headline: "Meet *Orbit*", kicker: "Introducing", duration: 3 }), scene({ template: "stat-counter", duration: 2.5, stat: { value: 10, suffix: " days", label: "on one charge" } }), scene({ template: "cta-end", headline: "Get it", cta: "Pre-order", url: "orbit.com", duration: 3 })];
+  const cues = cuesFromScenes(scenes);
+  assert.deepEqual(cues.map((c) => [c.s, c.e, c.text]), [[2, 5, "Introducing — Meet Orbit"], [5, 7.5, "10 days on one charge"], [7.5, 10.5, "Get it — Pre-order — orbit.com"]]);
+  assert.equal(captionCues({ ...fallback, scenes: [scene({ template: "shape-burst" })] }).source, "none");
+  assert.equal(captionCues({ ...fallback, audio: { name: "vo", url: "", duration: 2, peaks: [], pauses: [], words: [{ w: "Hello", s: 0, e: 1 }] } }).source, "voice-over");
+});
+
+test("SRT and WebVTT files are well formed", () => {
+  const cues = [{ s: 0, e: 1.25, text: "Meet Orbit." }, { s: 3661.5, e: 3663, text: "The watch that lasts ten whole days on one single charge" }];
+  assert.equal(toSrt(cues), "1\n00:00:00,000 --> 00:00:01,250\nMeet Orbit.\n\n2\n01:01:01,500 --> 01:01:03,000\nThe watch that lasts ten whole\ndays on one single charge\n");
+  assert.ok(toVtt(cues).startsWith("WEBVTT\n\n00:00:00.000 --> 00:00:01.250\nMeet Orbit.\n"));
+  assert.equal(wrapCue("short"), "short");
+});
+
+test("GIF frame delays add up to the clip length at any frame rate", () => {
+  for (const fps of [12, 20, 25, 30]) {
+    const d = gifDelays(fps * 4, fps);
+    assert.equal(d.reduce((a, b) => a + b, 0), 4000);
+    assert.ok(d.every((x) => x % 10 === 0 && x > 0));
+  }
+});
+
+test("scene captions don't put a dash after a full stop", () => {
+  const [c] = cuesFromScenes([scene({ kicker: "Introducing", headline: "Motion, *made simple.*", subline: "Describe it." })]);
+  assert.equal(c.text, "Introducing — Motion, made simple. Describe it.");
+});
