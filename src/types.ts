@@ -68,6 +68,9 @@ export interface Scene {
   /** image framing for cropped layouts: focal point (0–1 from top-left) and zoom (1–3) */
   focus?: { x: number; y: number };
   zoom?: number;
+  /** Video clips in this scene: where in the clip to start (seconds) and playback speed (1 = normal). */
+  clipStart?: number;
+  clipSpeed?: number;
   notes?: string;
 }
 

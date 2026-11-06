@@ -42,11 +42,11 @@ export class ImageStore {
    * The drawable for a ref. Images ignore `t`; a video asset returns its clip at scene-local time
    * `t` (live preview), or its poster frame when no time is given.
    */
-  get = (ref?: string, t?: number): HTMLImageElement | undefined => {
+  get = (ref?: string, t?: number, rate = 1): HTMLImageElement | undefined => {
     const a = this.asset(ref);
     if (a?.kind === "video") {
       const src = this.videoSrc(a);
-      if (src && t !== undefined) return this.videos.frame(src, t) ?? (a.thumb ? this.get(a.thumb) : undefined);
+      if (src && t !== undefined) return this.videos.frame(src, t, rate) ?? (a.thumb ? this.get(a.thumb) : undefined);
       return a.thumb ? this.get(a.thumb) : undefined;
     }
     return this.image(ref);

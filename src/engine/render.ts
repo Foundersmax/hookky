@@ -4,7 +4,10 @@ import { clamp, ease, lerp, win, rgba, mix, contrast, hash } from "./util";
 import { layoutText, drawLayout, drawLabel, displayWeight, displayTracking, stripMarks, measure, type FontSpec, type Layout } from "./text";
 
 /** Looks up a drawable by asset ref; `t` is the scene-local time (video clips use it). */
-export type ImageGetter = (ref?: string, t?: number) => HTMLImageElement | undefined;
+export type ImageGetter = (ref?: string, t?: number, rate?: number) => HTMLImageElement | undefined;
+
+/** Where a scene's video clips are at scene-local time lt: trimmed start plus time × speed. */
+export const clipTimeAt = (s: Scene, lt: number) => (s.clipStart ?? 0) + lt * (s.clipSpeed ?? 1);
 
 interface Colors {
   bg: string;
@@ -187,7 +190,7 @@ export class Renderer {
       t: lt,
       dur: scene.duration,
       abs: e.start,
-      img: (ref) => img(ref, lt),
+      img: (ref) => img(ref, clipTimeAt(scene, lt), scene.clipSpeed ?? 1),
       words: p.audio?.words,
       E: MOTION[motion]?.E ?? ease.outExpo,
       sp: MOTION[motion]?.sp ?? 0.9,

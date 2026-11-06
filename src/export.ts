@@ -2,7 +2,7 @@
 // the voice-over and music play into a MediaStreamDestination, then records both with MediaRecorder.
 import type { Aspect, Project } from "./types";
 import { ASPECT_SIZE } from "./types";
-import { Renderer, totalDuration, visibleAt } from "./engine/render";
+import { Renderer, totalDuration, visibleAt, clipTimeAt } from "./engine/render";
 import { VideoSeeker } from "./engine/videos";
 import { images } from "./runtime";
 import { speechRegions } from "./audio/analyze";
@@ -28,7 +28,7 @@ export function videoTargets(p: Project, t: number): Map<string, number> {
     for (const ref of [entry.scene.image, ...(entry.scene.images ?? [])]) {
       const a = images.asset(ref);
       const src = a && images.videoSrc(a);
-      if (src) m.set(src, lt);
+      if (src) m.set(src, clipTimeAt(entry.scene, lt));
     }
   return m;
 }

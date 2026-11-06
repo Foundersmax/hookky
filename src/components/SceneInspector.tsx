@@ -8,6 +8,7 @@ import { uid } from "../engine/util";
 import { Icon } from "./Icon";
 import { DirectorNotes } from "./DirectorNotes";
 import { Framing } from "./Framing";
+import { ClipControls } from "./ClipControls";
 
 const USES: Record<string, (keyof Scene)[]> = {
   "title-reveal": ["kicker", "headline", "subline", "align"],
@@ -58,7 +59,8 @@ export function SceneInspector() {
       return { ...p, scenes: s };
     });
 
-  const imgOptions = assets.filter((a) => a.kind === "image" || a.kind === "logo");
+  const imgOptions = assets.filter((a) => a.kind === "image" || a.kind === "logo" || a.kind === "video");
+  const clip = [scene?.image, ...(scene?.images ?? [])].map((id) => assets.find((a) => a.id === id)).find((a) => a?.kind === "video");
 
   return (
     <>
@@ -152,13 +154,14 @@ export function SceneInspector() {
               <label>Image</label>
               <select value={scene.image ?? ""} onChange={(e) => edit({ image: e.target.value || undefined })}>
                 <option value="">— none —</option>
-                {imgOptions.map((a) => <option key={a.id} value={a.id}>{a.source} · {a.title.slice(0, 34)}</option>)}
+                {imgOptions.map((a) => <option key={a.id} value={a.id}>{a.kind === "video" ? "▶ " : ""}{a.source} · {a.title.slice(0, 34)}</option>)}
               </select>
             </div>
           )}
           {scene.image && assets.find((a) => a.id === scene.image) && (
             <Framing project={project} scene={scene} asset={assets.find((a) => a.id === scene.image)!} onChange={edit} />
           )}
+          {clip && <ClipControls scene={scene} clip={clip} onChange={edit} />}
           {uses.includes("images") && (
             <div className="field">
               <label>Images ({scene.images?.length ?? 0}) — pick in Library</label>

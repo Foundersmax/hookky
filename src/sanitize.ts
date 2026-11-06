@@ -83,6 +83,8 @@ export function sanitizeScene(input: unknown, keepId?: string): Scene {
     accent: hex(s.accent),
     focus: focusOf(s.focus),
     zoom: num(s.zoom, 1, 3),
+    clipStart: num(s.clipStart, 0, 3600) || undefined,
+    clipSpeed: ((v) => (v === undefined || v === 1 ? undefined : +v.toFixed(2)))(num(s.clipSpeed, 0.1, 4)),
     notes: str(s.notes, 400),
   };
   for (const k of Object.keys(scene) as (keyof Scene)[]) if (scene[k] === undefined) delete scene[k];

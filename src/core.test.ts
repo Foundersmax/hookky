@@ -301,3 +301,14 @@ test("scene captions don't put a dash after a full stop", () => {
   const [c] = cuesFromScenes([scene({ kicker: "Introducing", headline: "Motion, *made simple.*", subline: "Describe it." })]);
   assert.equal(c.text, "Introducing — Motion, made simple. Describe it.");
 });
+
+test("video trim and speed survive cleaning and map scene time to clip time", async () => {
+  const { clipTimeAt } = await import("./engine/render");
+  const s = sanitizeScene({ template: "fullbleed", duration: 4, clipStart: "2.5", clipSpeed: 0.5 });
+  assert.deepEqual([s.clipStart, s.clipSpeed], [2.5, 0.5]);
+  assert.equal(clipTimeAt(s, 2), 3.5);
+  const d = sanitizeScene({ template: "fullbleed", duration: 4, clipStart: -3, clipSpeed: 1 });
+  assert.deepEqual([d.clipStart, d.clipSpeed], [undefined, undefined], "defaults stay off the scene");
+  assert.equal(sanitizeScene({ template: "fullbleed", duration: 4, clipSpeed: 99 }).clipSpeed, 4);
+  assert.equal(clipTimeAt(d, 1.5), 1.5);
+});

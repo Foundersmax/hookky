@@ -49,6 +49,8 @@ const sceneSchema = {
     transition: { type: "string", enum: [...TRANSITIONS], description: "transition INTO this scene" },
     motion: { type: "string", enum: [...MOTIONS] },
     accent: { type: "string", description: "hex override" },
+    clipStart: { type: "number", description: "video clips only: seconds into the clip where the scene starts" },
+    clipSpeed: { type: "number", description: "video clips only: 0.25–2, e.g. 0.5 for slow motion" },
     notes: { type: "string", description: "director's note, not rendered" },
   },
   required: ["template", "duration"],

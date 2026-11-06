@@ -62,7 +62,7 @@ export class VideoStore {
   }
 
   /** The clip at a scene-local time, for the live preview (real-time playback, drift-corrected). */
-  frame(src: string, t: number): Drawable | undefined {
+  frame(src: string, t: number, rate = 1): Drawable | undefined {
     const e = this.entry(src);
     e.used = performance.now();
     const v = e.el;
@@ -70,8 +70,9 @@ export class VideoStore {
     const target = clipTime(t, v.duration);
     const drift = Math.abs(v.currentTime - target);
     if (this.playing) {
+      if (v.playbackRate !== rate) v.playbackRate = rate;
       if (v.paused) v.play().catch(() => {});
-      if (drift > 0.3 && !v.seeking) v.currentTime = target;
+      if (drift > 0.3 * Math.max(1, rate) && !v.seeking) v.currentTime = target;
     } else {
       if (!v.paused) v.pause();
       if (drift > 0.03 && !v.seeking) v.currentTime = target;

@@ -575,3 +575,5 @@ select.sel { height: 30px; border-radius: 8px; background: transparent; font-siz
 .lib-media { position: absolute; inset: 0; }
 .lib-media img, .lib-media video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 .lib-item .dur { position: absolute; right: 5px; top: 5px; display: inline-flex; align-items: center; gap: 3px; font-size: 10px; font-variant-numeric: tabular-nums; padding: 1px 6px; border-radius: 99px; background: rgba(0,0,0,.6); color: #fff; }
+.clip-controls { gap: 7px; }
+.clip-num { min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
