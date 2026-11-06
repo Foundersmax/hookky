@@ -172,6 +172,30 @@ export function setBrand(b: Partial<Brand> & { style?: string }) {
 }
 
 /** Scale scenes to the VO length, then snap each cut to the nearest natural pause. */
+/** Points where a cut sounds natural: the middle of each pause, plus the end of the voice-over. */
+export function snapPoints(audio: AudioTrack): number[] {
+  return [...audio.pauses.map((p) => +((p.s + p.e) / 2).toFixed(2)), +audio.duration.toFixed(2)];
+}
+
+/** Move each cut onto the nearest pause within `maxShift` seconds, keeping scene order and roughly the same lengths. */
+export function snapCutsToPauses(scenes: Scene[], audio: AudioTrack, maxShift = 0.75): { scenes: Scene[]; moved: number } {
+  const points = snapPoints(audio);
+  let t = 0, prev = 0, moved = 0;
+  const out = scenes.map((s, i) => {
+    t += s.duration;
+    let end = t;
+    if (i < scenes.length - 1 || Math.abs(t - audio.duration) <= maxShift) {
+      let best = Infinity;
+      for (const m of points) if (Math.abs(m - t) <= maxShift && Math.abs(m - t) < Math.abs(best - t) && m - prev >= 0.8) best = m;
+      if (best !== Infinity && Math.abs(best - t) > 0.005) (end = best), moved++;
+    }
+    const d = +(end - prev).toFixed(2);
+    prev = end;
+    return { ...s, duration: d };
+  });
+  return { scenes: out, moved };
+}
+
 export function fitToVoiceover(scenes: Scene[], audio: AudioTrack): Scene[] {
   const total = scenes.reduce((a, s) => a + s.duration, 0) || 1;
   const k = audio.duration / total;

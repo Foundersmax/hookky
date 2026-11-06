@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useStudio, setState, getState, updateProject } from "../store";
+import { useStudio, setState, getState, updateProject, snapPoints, snapCutsToPauses } from "../store";
 import { timeline, totalDuration } from "../engine/render";
 import { clock, useClock } from "../clock";
 import { stripMarks } from "../engine/text";
@@ -155,6 +155,24 @@ export function Timeline() {
     clock.seek(((e.clientX - r.left) / r.width) * total);
   };
 
+  // ---- snap-to-pause: cuts dragged within SNAP_PX of a pause snap to it (hold Alt to resize freely)
+  const [snapOn, setSnapOn] = useState(() => {
+    try {
+      return localStorage.getItem("hookky.snap") !== "off";
+    } catch {
+      return true;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem("hookky.snap", snapOn ? "on" : "off");
+    } catch {}
+  }, [snapOn]);
+  const [snapAt, setSnapAt] = useState<number | null>(null);
+  const audio = project.audio;
+  const points = audio ? snapPoints(audio) : [];
+  const SNAP_PX = 10;
+
   // ---- drag to reorder: click selects; moving 4px+ starts a drag. Others slide aside to preview the drop.
   const [drag, setDrag] = useState<{ id: string; from: number; to: number; blockStart: number } | null>(null);
   const startDrag = (ev: React.PointerEvent, index: number) => {
@@ -231,20 +249,46 @@ export function Timeline() {
     const startX = e.clientX;
     const orig = getState().project;
     const d0 = orig.scenes[index].duration;
+    const sceneStart = orig.scenes.slice(0, index).reduce((a, s) => a + s.duration, 0);
+    const pts = orig.audio && snapOn ? snapPoints(orig.audio) : [];
     const move = (ev: PointerEvent) => {
-      const d = Math.max(0.8, Math.round((d0 + (ev.clientX - startX) / pxs) * 10) / 10);
+      const raw = d0 + (ev.clientX - startX) / pxs;
+      let d = Math.round(raw * 10) / 10;
+      let snapped: number | null = null;
+      if (pts.length && !ev.altKey) {
+        const end = sceneStart + raw;
+        let best = Infinity;
+        for (const m of pts) if (Math.abs(m - end) * pxs <= SNAP_PX && Math.abs(m - end) < Math.abs(best - end)) best = m;
+        if (best !== Infinity && best - sceneStart >= 0.8) {
+          snapped = best;
+          d = +(best - sceneStart).toFixed(2);
+        }
+      }
+      d = Math.max(0.8, d);
+      setSnapAt(snapped);
       setState({ project: { ...orig, scenes: orig.scenes.map((s, i) => (i === index ? { ...s, duration: d } : s)) } });
     };
     const up = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
+      setSnapAt(null);
       const final = getState().project;
       setState({ project: orig });
-      updateProject(() => final);
+      if (final.scenes[index].duration !== d0) updateProject(() => final);
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
   };
+
+  const snapAllCuts = () => {
+    const p = getState().project;
+    if (!p.audio) return;
+    const { scenes, moved } = snapCutsToPauses(p.scenes, p.audio);
+    if (moved) updateProject((pr) => ({ ...pr, scenes }));
+    setSnapNote(moved ? `Moved ${moved} cut${moved === 1 ? "" : "s"} onto pauses` : "Cuts already sit on pauses");
+    window.setTimeout(() => setSnapNote(null), 2500);
+  };
+  const [snapNote, setSnapNote] = useState<string | null>(null);
 
   // While dragging, lay scenes out in the previewed order; the dragged block follows the pointer.
   const layout = (() => {
@@ -264,8 +308,23 @@ export function Timeline() {
     <div className="timeline">
       <div className="tl-head">
         <span className="label">Timeline</span>
-        <span className="tiny tl-hint">Drag scenes to reorder · ⌘/Ctrl + scroll to zoom · double-click to zoom to a scene</span>
+        <span className="tiny tl-hint">Drag scenes to reorder · ⌘/Ctrl + scroll to zoom · double-click to zoom to a scene{audio && snapOn ? " · hold Alt to resize without snapping" : ""}</span>
         <span className="spacer" />
+        {snapNote && <span className="tiny tl-note" role="status">{snapNote}</span>}
+        <div className="tl-snap" role="group" aria-label="Snap to pauses">
+          <button
+            className={`btn ghost tl-snap-btn ${snapOn && audio ? "on" : ""}`}
+            aria-pressed={snapOn}
+            disabled={!audio}
+            title={audio ? (snapOn ? "Snapping cuts to voice-over pauses (hold Alt to resize freely)" : "Snapping off") : "Load a voice-over to snap cuts to its pauses"}
+            onClick={() => setSnapOn((v) => !v)}
+          >
+            <Icon name="magnet" /> Snap
+          </button>
+          <button className="btn ghost tl-snap-btn" disabled={!audio} title="Move every cut onto the nearest pause" onClick={snapAllCuts}>
+            Snap cuts
+          </button>
+        </div>
         <div className="tl-zoom" role="group" aria-label="Timeline zoom">
           <button className="btn icon ghost" title="Zoom out (-)" aria-label="Zoom out" disabled={zoom <= 1} onClick={() => zoomTo(zoom / 1.5)}>
             <Icon name="minus" />
@@ -292,6 +351,18 @@ export function Timeline() {
       <div className="tl-viewport" ref={viewport}>
         <div className="tl-content" style={{ width }}>
           <div className="ruler" onPointerDown={seekFromEvent}>
+            {points.map((m, i) => {
+              const pause = audio!.pauses[i];
+              const strong = !pause || pause.e - pause.s >= 0.5;
+              return (
+                <i
+                  key={`p${i}`}
+                  className={`tl-pause-mark ${strong ? "strong" : ""} ${snapAt !== null && Math.abs(snapAt - m) < 0.005 ? "hit" : ""}`}
+                  style={{ left: m * pxs }}
+                  title={pause ? `Pause ${pause.s.toFixed(2)}–${pause.e.toFixed(2)}s` : "End of voice-over"}
+                />
+              );
+            })}
             {tickTimes.map((t) => (
               <span key={t} style={{ left: t * pxs }} className={t === 0 ? "first" : ""}>
                 {fmtTick(t, step)}
@@ -300,6 +371,9 @@ export function Timeline() {
           </div>
           <div className="tl-track" ref={track} onPointerDown={seekFromEvent}>
             {zoom > 1 && tickTimes.map((t) => <i key={t} className="tl-grid" style={{ left: t * pxs }} />)}
+            {points.map((m, i) => (
+              <i key={`pl${i}`} className={`tl-pause-line ${snapAt !== null && Math.abs(snapAt - m) < 0.005 ? "hit" : ""}`} style={{ left: m * pxs }} />
+            ))}
             {layout.map((e) => (
               <div
                 key={e.scene.id}
