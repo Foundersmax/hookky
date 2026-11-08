@@ -5,7 +5,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createHash, timingSafeEqual } from "node:crypto";
-import { runAgentTurn, claudeConfigured, resetConversation } from "./agent";
+import { runAgentTurn, claudeConfigured, resetConversation, claudeCheck, probeClaude } from "./agent";
 import { listConnectors, searchVisuals, searchVideos, importFromUrl, magnificUpscale, reportStockUse, type Orientation } from "./connectors";
 import { proxyVideo } from "./videoProxy";
 import { accountsEnabled, migrate } from "./db";
@@ -64,7 +64,8 @@ if (accounts) {
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 60 * 1024 * 1024 } });
 
 app.get("/api/health", (_req, res) => {
-  res.json({ agent: claudeConfigured() ? "claude" : "local", transcription: transcriptionProvider(), connectors: listConnectors(), accounts, ...(build && { build }), ...(process.env.RENDER_GIT_COMMIT && { commit: process.env.RENDER_GIT_COMMIT }) });
+  void recheckClaude();
+  res.json({ agent: claudeConfigured() ? "claude" : "local", claude: claudeCheck(), transcription: transcriptionProvider(), connectors: listConnectors(), accounts, ...(build && { build }), ...(process.env.RENDER_GIT_COMMIT && { commit: process.env.RENDER_GIT_COMMIT }) });
 });
 
 app.post("/api/agent", async (req, res) => {
@@ -196,8 +197,18 @@ if (process.env.NODE_ENV === "production") {
   app.get(/^(?!\/api).*/, (_req, res) => res.sendFile(path.join(dist, "index.html")));
 }
 
+// A key that failed may have been replaced in the meantime; look again at most every 5 minutes.
+let lastRecheck = 0;
+async function recheckClaude() {
+  const state = claudeCheck().state;
+  if (state === "ok" || state === "missing" || state === "unchecked" || Date.now() - lastRecheck < 300_000) return;
+  lastRecheck = Date.now();
+  await probeClaude();
+}
+
 const port = Number(process.env.PORT || 8787);
 app.listen(port, () => {
   if (process.env.NODE_ENV === "production" && !password && !accounts) console.warn("Neither DATABASE_URL (accounts) nor HOOKKY_PASSWORD is set: anyone with the URL can use this deploy and its API keys.");
   console.log(`Hookky API on http://localhost:${port}  ·  agent: ${claudeConfigured() ? "Claude" : "local director"}  ·  transcription: ${transcriptionProvider()}`);
+  if (claudeConfigured() && process.env.NODE_ENV !== "test") void probeClaude().then((c) => c === "ok" && console.log("Claude key check: ok"));
 });

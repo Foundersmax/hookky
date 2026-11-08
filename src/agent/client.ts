@@ -281,10 +281,10 @@ export async function sendToAgent(text: string, attachments: ChatAttachment[] = 
     const msg = getState().chat.find((m) => m.id === replyId);
     if (fatal && msg?.text) failed(fatal);
     else if (fatal) {
-      if (/credentials/i.test(fatal)) {
-        setState((st) => ({ health: st.health && { ...st.health, agent: "local" } }));
-        runLocal(fatal);
-      } else failed(fatal);
+      // Key or billing trouble: answer this message with the local director, but try Claude again
+      // next time (the key may be fixed while the studio is open).
+      if (/local director/i.test(fatal)) runLocal(fatal);
+      else failed(fatal);
     } else updateChat(replyId, (m) => ({ ...m, pending: false, text: m.text || "Done — have a look at the preview." }));
   } catch (e: any) {
     if (ctl.signal.aborted && stalled) failed("The agent stopped responding. Retry to send it again.");

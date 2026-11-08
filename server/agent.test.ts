@@ -2,7 +2,8 @@
 // shadow storyboard, voice-over fitting, brand validation and the Director's notes it returns.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { __test } from "./agent";
+import { __test, cleanKey, explainClaudeError } from "./agent";
+import Anthropic from "@anthropic-ai/sdk";
 import type { AgentEvent } from "../src/types";
 
 const { Shadow, runTool } = __test;
@@ -157,3 +158,19 @@ test("only temporary Claude errors are retried", () => {
   for (const status of [400, 401, 403, 404, 413]) assert.equal(transient({ status }), false, String(status));
   assert.equal(transient(new Error("boom")), false);
 });
+
+
+test("Claude key: cleans keys pasted with spaces, newlines or quotes", () => {
+    assert.deepEqual(cleanKey(" sk-ant-abc\n"), { key: "sk-ant-abc", fixed: true });
+    assert.deepEqual(cleanKey('"sk-ant-abc"'), { key: "sk-ant-abc", fixed: true });
+    assert.deepEqual(cleanKey("sk-ant-abc"), { key: "sk-ant-abc", fixed: false });
+  });
+test("Claude key: names the real problem", () => {
+    const err = (status: number, message: string) => Object.assign(new Error(message), { status });
+    assert.equal(explainClaudeError(err(401, "invalid x-api-key"))?.check, "invalid-key");
+    assert.equal(explainClaudeError(err(400, "Your credit balance is too low to access the Anthropic API."))?.check, "no-credit");
+    assert.equal(explainClaudeError(err(403, "This API key does not have permission to use the specified resource."))?.check, "no-permission");
+    assert.equal(explainClaudeError(err(404, "model: claude-x not found"))?.check, "model-unavailable");
+    assert.equal(explainClaudeError(err(500, "boom")), null);
+    assert.equal(explainClaudeError(new Anthropic.AuthenticationError(401, undefined, "bad", new Headers()))?.check, "invalid-key");
+  });

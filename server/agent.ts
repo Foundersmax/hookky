@@ -20,8 +20,54 @@ export function claudeConfigured() {
   return !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_PROFILE || process.env.CLAUDE_ENABLED);
 }
 
+/** Keys pasted into a dashboard often carry a space, newline or quotes; clean them before use. */
+export function cleanKey(raw?: string): { key?: string; fixed: boolean } {
+  if (raw === undefined) return { fixed: false };
+  const key = raw.trim().replace(/^["']|["']$/g, "").trim();
+  return { key, fixed: key !== raw };
+}
+const keyCleaning = cleanKey(process.env.ANTHROPIC_API_KEY);
+if (keyCleaning.fixed) process.env.ANTHROPIC_API_KEY = keyCleaning.key;
+
 let client: Anthropic | null = null;
 const getClient = () => (client ??= new Anthropic());
+
+export type ClaudeCheck = "ok" | "unchecked" | "missing" | "invalid-key" | "no-permission" | "model-unavailable" | "no-credit" | "unreachable";
+
+/** Name what's wrong with a failed Claude call, in words a person can act on. */
+export function explainClaudeError(e: unknown): { check: ClaudeCheck; message: string } | null {
+  const status = (e as { status?: number })?.status;
+  const text = String((e as Error)?.message ?? "");
+  if (/credit balance|billing|purchase credits/i.test(text))
+    return { check: "no-credit", message: "Claude is out of credit — add credit at console.anthropic.com → Billing. Using the local director for now." };
+  if (status === 401 || e instanceof Anthropic.AuthenticationError || /invalid x-api-key|could not resolve authentication/i.test(text))
+    return { check: "invalid-key", message: "Anthropic rejected the API key — create a new key at console.anthropic.com and paste it into ANTHROPIC_API_KEY in Render → Environment. Using the local director for now." };
+  if (status === 403)
+    return { check: "no-permission", message: `This API key isn't allowed to use ${MODEL} (check the key's workspace limits at console.anthropic.com). Using the local director for now.` };
+  if (status === 404 && /model/i.test(text))
+    return { check: "model-unavailable", message: `The model ${MODEL} isn't available to this API key. Using the local director for now.` };
+  return null;
+}
+
+let check: { state: ClaudeCheck; at: number; detail?: string } = { state: "unchecked", at: 0 };
+/** What we know about the Claude key (from the startup probe or the last real call). */
+export function claudeCheck() {
+  return { state: claudeConfigured() ? check.state : ("missing" as ClaudeCheck), ...(check.detail && { detail: check.detail }), ...(keyCleaning.fixed && { keyCleaned: true }) };
+}
+/** Ask Anthropic about the model — free, no tokens — to learn whether the key works. */
+export async function probeClaude(): Promise<ClaudeCheck> {
+  if (!claudeConfigured()) return (check = { state: "missing", at: Date.now() }).state;
+  try {
+    await getClient().models.retrieve(MODEL, undefined, { timeout: 15_000, maxRetries: 1 });
+    check = { state: "ok", at: Date.now() };
+  } catch (e) {
+    const known = explainClaudeError(e);
+    const status = (e as { status?: number })?.status;
+    check = { state: known?.check ?? "unreachable", at: Date.now(), detail: `${status ?? ""} ${String((e as { error?: { error?: { message?: string } } })?.error?.error?.message ?? (e as Error)?.message ?? e).slice(0, 160)}`.trim() };
+    console.warn(`Claude key check: ${check.state} — ${check.detail}`);
+  }
+  return check.state;
+}
 
 const SYSTEM = directorPrompt("server");
 
@@ -354,7 +400,9 @@ async function streamOnce(history: Msg[], send: (e: AgentEvent) => void, signal?
         if (b.type === "server_tool_use") send({ type: "activity", label: "Searching the web" });
       }
     });
-    return await stream.finalMessage();
+    const final = await stream.finalMessage();
+    if (check.state !== "ok") check = { state: "ok", at: Date.now() };
+    return final;
   } catch (e) {
     if (signal?.aborted) return null;
     if (e instanceof Anthropic.BadRequestError && webSearchEnabled && /web_search/i.test(e.message)) {
@@ -368,9 +416,12 @@ async function streamOnce(history: Msg[], send: (e: AgentEvent) => void, signal?
       return streamOnce(history, send, signal, attempt + 1);
     }
     if (e instanceof Anthropic.BadRequestError && /prompt is too long|context (window|length)|too many (input )?tokens/i.test(e.message)) throw new ContextOverflow();
-    const authProblem = e instanceof Anthropic.AuthenticationError || /authentication method|api[_ ]?key/i.test(String((e as Error)?.message));
-    if (authProblem) send({ type: "error", message: "Claude credentials are missing or invalid — using the local director. Add ANTHROPIC_API_KEY to .env." });
-    else if (e instanceof Anthropic.RateLimitError) send({ type: "error", message: "Rate limited by the API — try again in a moment." });
+    console.error("Claude call failed:", (e as { status?: number })?.status ?? "", String((e as Error)?.message ?? e).slice(0, 300));
+    const known = explainClaudeError(e);
+    if (known) {
+      check = { state: known.check, at: Date.now(), detail: String((e as Error)?.message ?? "").slice(0, 160) };
+      send({ type: "error", message: known.message });
+    } else if (e instanceof Anthropic.RateLimitError) send({ type: "error", message: "Rate limited by the API — try again in a moment." });
     else if (e instanceof Anthropic.APIError) send({ type: "error", message: `API error ${e.status ?? ""}: ${e.message}` });
     else send({ type: "error", message: String((e as Error)?.message ?? e) });
     return null;
