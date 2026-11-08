@@ -333,3 +333,14 @@ test("brand kits capture a look, apply it, and survive bad storage", () => {
   assert.equal(findKit(kits, "Acme")?.name, "Acme main");
   assert.equal(findKit(kits, "Orbit"), undefined);
 });
+
+test("each used Coverr clip is queued for one usage report", async () => {
+  const { pendingReports } = await import("./stockUsage");
+  const assets = [
+    { id: "asset:c1", title: "", src: "https://x/1.mp4", source: "coverr", kind: "video", sourceId: "v1" },
+    { id: "asset:c2", title: "", src: "https://x/2.mp4", source: "coverr", kind: "video", sourceId: "v2" },
+    { id: "asset:p1", title: "", src: "https://x/3.mp4", source: "pixabay", kind: "video", sourceId: "9" },
+  ] as const;
+  const p = { ...fallback, scenes: [scene({ template: "fullbleed", image: "asset:c1" }), scene({ template: "image-mosaic", images: ["asset:p1", "asset:c1"] })] };
+  assert.deepEqual(pendingReports(p, [...assets]), [{ source: "coverr", id: "v1" }]);
+});

@@ -161,7 +161,7 @@ const tools: Anthropic.Beta.BetaToolUnion[] = [
   },
   {
     name: "search_videos",
-    description: "Search stock video (Pexels, Pixabay) for motion b-roll: textures, lifestyle, product-in-use, macro shots. Clips are added to the library and returned with asset ids, sizes and lengths. Use a clip id anywhere an image id goes (fullbleed, split-feature, product-hero, device-mockup, image-mosaic, before-after, or background: \"image\"); it plays from the start of its scene and loops if shorter.",
+    description: "Search stock video (Pixabay, Coverr, Pexels — whichever are connected) for motion b-roll: textures, lifestyle, product-in-use, macro shots. Clips are added to the library and returned with asset ids, sizes and lengths. Use a clip id anywhere an image id goes (fullbleed, split-feature, product-hero, device-mockup, image-mosaic, before-after, or background: \"image\"); it plays from the start of its scene and loops if shorter.",
     input_schema: {
       type: "object",
       properties: {

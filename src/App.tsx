@@ -21,6 +21,8 @@ import { STYLE_PRESETS, FONT_CHOICES } from "./presets";
 import type { Aspect } from "./types";
 import { timeline } from "./engine/render";
 import { registerFonts } from "./fonts";
+import { reportStockUse } from "./stockUsage";
+import { fillVideoPosters } from "./videoPosters";
 import { sampleCap } from "./host";
 
 const TABS = ["Scene", "Library", "Brand", "Voice", "Export"] as const;
@@ -106,7 +108,15 @@ export function App() {
     clock.seek(clock.time);
     // brand fonts: register any new ones, then redraw with them
     registerFonts(assets).then((loaded) => loaded && clock.seek(clock.time));
+    fillVideoPosters(assets);
   }, [assets]);
+
+  // Stock sources that require it are told when one of their clips is used (server mode only).
+  const scenesForReports = useStudio((s) => s.project.scenes);
+  const serverMode = useStudio((s) => !!s.health?.connectors.length);
+  useEffect(() => {
+    if (serverMode) reportStockUse(getState().project, getState().assets);
+  }, [scenesForReports, assets, serverMode]);
 
   // voice-over + music elements drive the clock
   useEffect(() => {

@@ -18,7 +18,7 @@ AI motion-graphics studio for product ads and launches. Chat with a creative age
 - **Brand kits**: save a look (style, colours, fonts, logo, radius) once in the Brand panel and apply it to any project, from ⌘K, or by asking the agent ("use our Acme kit"). Mark one as the default and every new project starts in it.
 - **Edit on the canvas**: pause and click any text to edit it in place; drop images from the Library or your desktop onto the canvas or a timeline scene; set each image's focal point and zoom in the Scene panel.
 - **Voice-over to animation**: upload a 30–60s VO. The studio finds natural pauses, transcribes it (or aligns your pasted script), and the agent builds scenes that cut on the pauses, with kinetic type synced word by word. Optional burn-in captions and a music bed that ducks under the voice.
-- **Stock video**: search Pexels and Pixabay clips (matched to your format) in the Library or let the agent pick b-roll with `search_videos`, or upload your own MP4/WebM/MOV. A clip goes anywhere an image goes (full-bleed, split, device screen, mosaic, image backgrounds), plays in sync with its scene in the preview, and exports frame-exact in MP4 and GIF. Trim where each scene starts in its clip and set its speed (0.25× slow motion to 2×) in the Scene panel; the agent can set both too. Uploaded clips are saved in the browser with the library.
+- **Stock video**: search Pixabay, Coverr and Pexels clips (matched to your format) in the Library or let the agent pick b-roll with `search_videos`, or upload your own MP4/WebM/MOV. A clip goes anywhere an image goes (full-bleed, split, device screen, mosaic, image backgrounds), plays in sync with its scene in the preview, and exports frame-exact in MP4 and GIF. Trim where each scene starts in its clip and set its speed (0.25× slow motion to 2×) in the Scene panel; the agent can set both too. Uploaded clips are saved in the browser with the library.
 - **Visual sources**: Pinterest, Freepik, Envato, Unsplash, Pexels, Pixabay, Openverse, plus **any URL** (Pinterest pins, Behance, Dribbble, product pages). Magnific upscaling for low-res references.
 - **Export**: frame-accurate H.264 MP4 (WebCodecs) in 16:9, 9:16, 1:1 and 4:5 in one pass, at 1080p or 4K and 30 or 60 fps. Looping GIFs of one scene or the whole cut (one shared palette, exact timing). `.srt` / `.vtt` captions from the voice-over transcript, or from the on-screen copy when there is none. Posters for every format up to 4K, at the best frame or the playhead. Plus project JSON.
 
@@ -88,7 +88,8 @@ The app picks its mode at startup: Hookky server if `/api/health` answers, other
 | `HOOKKY_PASSWORD` | Password-protects a deploy (browser sign-in prompt, any username). Recommended on any public URL. |
 | `ANTHROPIC_API_KEY` | The Claude creative agent (default model `claude-opus-5-5`, override with `CLAUDE_MODEL`). It uses vision on your uploads and web search for research (`CLAUDE_WEB_SEARCH=off` to disable). |
 | `UNSPLASH_ACCESS_KEY` | Free stock photo search |
-| `PEXELS_API_KEY`, `PIXABAY_API_KEY` | Free stock photo **and stock video** search (both free keys) |
+| `PIXABAY_API_KEY`, `PEXELS_API_KEY` | Free stock photo **and stock video** search (both free keys; Pexels has paused new keys) |
+| `COVERR_API_KEY` | Free stock video from Coverr (coverr.co/developers). Hookky reports each Coverr clip you use, as Coverr's API terms require. |
 | `FREEPIK_API_KEY` | Freepik stock search **and** the Magnific upscaler (Magnific's API is served through Freepik) |
 | `ENVATO_TOKEN` | Envato **Market** search (GraphicRiver). Envato Elements has no public API, so use URL import for Elements pages. |
 | `PINTEREST_ACCESS_TOKEN` | Searches **your own** pins and boards (Pinterest API v5 has no public global search). Any public pin URL also imports with no key. |
@@ -149,6 +150,6 @@ Conversation history is kept server-side and only ever appended to, so prompt ca
 ## Notes
 
 - Remote images go through `/api/img` (same-origin proxy) so they can be drawn and exported. Only public http(s) hosts are allowed.
-- Stock clips stream through `/api/video`, which only serves the stock sources' CDNs (Pexels, Pixabay, Vimeo) and passes Range requests through for seeking.
+- Stock clips stream through `/api/video`, which only serves the stock sources' CDNs (Pixabay, Coverr, Pexels, Vimeo) and clip links its own searches returned, and passes Range requests through for seeking.
 - Check the licence of each reference before you publish. Each library card shows its source and links back to it.
 - Everything autosaves in this browser (IndexedDB). Use **Export → Save project** to move a project to another browser or machine; the voice-over and music aren't included in that file.

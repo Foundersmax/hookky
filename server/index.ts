@@ -6,7 +6,7 @@ import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { runAgentTurn, claudeConfigured, resetConversation } from "./agent";
-import { listConnectors, searchVisuals, searchVideos, importFromUrl, magnificUpscale, type Orientation } from "./connectors";
+import { listConnectors, searchVisuals, searchVideos, importFromUrl, magnificUpscale, reportStockUse, type Orientation } from "./connectors";
 import { proxyVideo } from "./videoProxy";
 import { safeFetch, readLimited, BlockedUrlError } from "./safeFetch";
 import { transcribe, transcriptionProvider } from "./transcribe";
@@ -133,6 +133,16 @@ app.get("/api/img", async (req, res) => {
     res.end(hit.body);
   } catch (e: any) {
     res.status(e instanceof BlockedUrlError ? 400 : 502).send(e.message);
+  }
+});
+
+// Usage reports some stock sources require (Coverr): the browser says which clip went into a scene.
+app.post("/api/stock/used", async (req, res) => {
+  try {
+    const ok = await reportStockUse(String(req.body?.source ?? ""), String(req.body?.id ?? ""));
+    res.status(ok ? 204 : 400).end();
+  } catch {
+    res.status(502).end();
   }
 });
 

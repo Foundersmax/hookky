@@ -8,7 +8,7 @@ import { extractPalette } from "../engine/images";
 import { luminance } from "../engine/util";
 
 const SEARCH_IDS = ["pinterest", "freepik", "envato", "unsplash", "pexels", "pixabay", "openverse"];
-const VIDEO_IDS = ["pexels", "pixabay"];
+const VIDEO_IDS = ["pixabay", "coverr", "pexels"];
 
 const clock = (s?: number) => (s === undefined ? "" : `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`);
 
@@ -17,7 +17,11 @@ function Thumb({ a, hover }: { a: Asset; hover: boolean }) {
   const src = a.kind === "video" ? images.videoSrc(a) : undefined;
   return (
     <div className="lib-media">
-      <img src={a.thumb ?? a.src} alt={a.title} loading="lazy" referrerPolicy="no-referrer" />
+      {a.kind === "video" && !a.thumb ? (
+        src && <video src={`${src}#t=0.5`} muted playsInline preload="metadata" crossOrigin="anonymous" aria-hidden="true" />
+      ) : (
+        <img src={a.thumb ?? a.src} alt={a.title} loading="lazy" referrerPolicy="no-referrer" />
+      )}
       {src && hover && <video src={src} muted autoPlay loop playsInline crossOrigin="anonymous" aria-hidden="true" />}
       {a.kind === "video" && <span className="dur"><Icon name="play" size={9} /> {clock(a.duration)}</span>}
     </div>

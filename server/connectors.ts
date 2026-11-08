@@ -20,6 +20,7 @@ export function listConnectors(): ConnectorInfo[] {
     { id: "unsplash", label: "Unsplash", configured: !!env("UNSPLASH_ACCESS_KEY"), kind: "search", note: "Set UNSPLASH_ACCESS_KEY" },
     { id: "pexels", label: "Pexels", configured: !!env("PEXELS_API_KEY"), kind: "search", note: "Set PEXELS_API_KEY (free photos and stock video)" },
     { id: "pixabay", label: "Pixabay", configured: !!env("PIXABAY_API_KEY"), kind: "search", note: "Set PIXABAY_API_KEY (free photos and stock video)" },
+    { id: "coverr", label: "Coverr", configured: !!env("COVERR_API_KEY"), kind: "search", note: "Set COVERR_API_KEY (free stock video, coverr.co/developers)" },
     { id: "freepik", label: "Freepik", configured: !!env("FREEPIK_API_KEY"), kind: "search", note: "Set FREEPIK_API_KEY (stock vectors, photos, PSD)" },
     { id: "envato", label: "Envato", configured: !!env("ENVATO_TOKEN"), kind: "search", note: "Set ENVATO_TOKEN (Envato Market API)" },
     { id: "pinterest", label: "Pinterest", configured: !!env("PINTEREST_ACCESS_TOKEN"), kind: "search", note: "Set PINTEREST_ACCESS_TOKEN to search your pins. Pin URLs import without a key." },
@@ -29,8 +30,16 @@ export function listConnectors(): ConnectorInfo[] {
 }
 
 async function getJSON(url: string, headers: Record<string, string> = {}): Promise<any> {
-  const res = await fetch(url, { headers: { "User-Agent": UA, Accept: "application/json", ...headers }, signal: AbortSignal.timeout(15000) });
-  if (!res.ok) throw new Error(`${new URL(url).host} responded ${res.status}`);
+  const host = new URL(url).host;
+  let res: Response;
+  try {
+    res = await fetch(url, { headers: { "User-Agent": UA, Accept: "application/json", ...headers }, signal: AbortSignal.timeout(15000) });
+  } catch (e: any) {
+    throw new Error(e?.name === "TimeoutError" ? `${host} took too long to answer` : `couldn't reach ${host}`);
+  }
+  if (res.status === 401 || res.status === 403) throw new Error(`${host} rejected the API key (${res.status}). Check it in your environment settings.`);
+  if (res.status === 429) throw new Error(`${host} rate limit reached. Try again later.`);
+  if (!res.ok) throw new Error(`${host} responded ${res.status}`);
   return res.json();
 }
 
@@ -160,10 +169,32 @@ export function mapPixabayVideos(d: any, q: string): Asset[] {
     .filter(Boolean) as Asset[];
 }
 
+const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : typeof v === "string" && v.trim() && Number.isFinite(+v) ? +v : undefined);
+
+/** Coverr's video list. Field names beyond urls / max_width / max_height aren't fully documented, so read defensively. */
+export function mapCoverrVideos(d: any, q: string): Asset[] {
+  const list: any[] = Array.isArray(d) ? d : d?.hits ?? d?.videos ?? d?.data ?? d?.results ?? [];
+  return list
+    .map((v: any): Asset | null => {
+      const u = v?.urls ?? {};
+      const src = [u.mp4, u.mp4_preview, u.mp4_download, v?.url].find((x) => typeof x === "string" && /^https:\/\//.test(x));
+      if (!src) return null;
+      const thumb = [v.poster, v.thumbnail, u.poster, u.thumbnail, v.cover_image, v.image].find((x) => typeof x === "string" && /^https?:\/\//.test(x));
+      return {
+        id: nid("cvv"), title: String(v.title || v.description || q).slice(0, 120), src, ...(thumb && { thumb }), source: "coverr",
+        link: v.slug ? `https://coverr.co/videos/${v.slug}` : undefined, license: "Coverr",
+        w: num(v.max_width) ?? num(v.width), h: num(v.max_height) ?? num(v.height), duration: num(v.duration), kind: "video",
+        ...(v.id !== undefined && { sourceId: String(v.id) }),
+      };
+    })
+    .filter(Boolean) as Asset[];
+}
+
 const orientationOf = (a: Asset): Orientation => (!a.w || !a.h ? "landscape" : a.h > a.w * 1.1 ? "portrait" : a.w > a.h * 1.1 ? "landscape" : "square");
 
 const VIDEO_SEARCHERS: Record<string, (q: string, n: number, o?: Orientation) => Promise<Asset[]>> = {
   pexels: async (q, n, o) => mapPexelsVideos(await getJSON(`https://api.pexels.com/videos/search?query=${encodeURIComponent(q)}&per_page=${n}${o ? `&orientation=${o}` : ""}`, { Authorization: env("PEXELS_API_KEY") }), q),
+  coverr: async (q, n) => mapCoverrVideos(await getJSON(`https://api.coverr.co/videos?query=${encodeURIComponent(q.slice(0, 100))}&page_size=${Math.min(25, Math.max(3, n))}&urls=true`, { Authorization: `Bearer ${env("COVERR_API_KEY")}` }), q),
   pixabay: async (q, n) => mapPixabayVideos(await getJSON(`https://pixabay.com/api/videos/?key=${encodeURIComponent(env("PIXABAY_API_KEY"))}&q=${encodeURIComponent(q.slice(0, 100))}&per_page=${Math.max(3, n)}&safesearch=true`), q),
 };
 
@@ -172,7 +203,7 @@ export async function searchVideos(query: string, sources: string[] | undefined,
   const configured = new Set(listConnectors().filter((c) => c.configured && VIDEO_SEARCHERS[c.id]).map((c) => c.id));
   const wanted = (sources?.length ? sources : [...configured]).filter((s) => VIDEO_SEARCHERS[s]);
   const notes: string[] = [];
-  if (!wanted.length || ![...wanted].some((s) => configured.has(s))) notes.push("No stock video source is connected. Add PEXELS_API_KEY or PIXABAY_API_KEY (both free).");
+  if (!wanted.length || ![...wanted].some((s) => configured.has(s))) notes.push("No stock video source is connected. Add PIXABAY_API_KEY or COVERR_API_KEY (both free).");
   const per = Math.max(4, Math.ceil(count / Math.max(1, wanted.length)));
   const results = await Promise.all(
     wanted.map(async (s) => {
@@ -188,15 +219,36 @@ export async function searchVideos(query: string, sources: string[] | undefined,
   const out: Asset[] = [];
   for (let i = 0; out.length < count * 2 && results.some((r) => r[i]); i++) for (const r of results) if (r[i]) out.push(r[i]);
   if (orientation) out.sort((a, b) => Number(orientationOf(b) === orientation) - Number(orientationOf(a) === orientation));
-  return { assets: out.filter((a) => a.src).slice(0, count), notes };
+  const assets = out.filter((a) => a.src).slice(0, count);
+  rememberVideoUrls(assets);
+  return { assets, notes };
+}
+
+/** Tell a stock source its item was used, where its terms require it (Coverr). */
+export async function reportStockUse(source: string, id: string) {
+  if (source !== "coverr" || !/^[\w-]{1,64}$/.test(id) || !env("COVERR_API_KEY")) return false;
+  const res = await fetch(`https://api.coverr.co/videos/${encodeURIComponent(id)}/stats/downloads`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${env("COVERR_API_KEY")}`, "User-Agent": UA },
+    signal: AbortSignal.timeout(10000),
+  });
+  return res.ok;
 }
 
 /** Hosts the video proxy will stream from (the stock sources' CDNs). Redirects are still SSRF-checked. */
-export const VIDEO_HOSTS = [/(^|\.)pexels\.com$/, /(^|\.)pixabay\.com$/, /(^|\.)vimeo\.com$/, /(^|\.)vimeocdn\.com$/];
+export const VIDEO_HOSTS = [/(^|\.)pexels\.com$/, /(^|\.)pixabay\.com$/, /(^|\.)vimeo\.com$/, /(^|\.)vimeocdn\.com$/, /(^|\.)coverr\.co$/];
+
+/** Clip URLs our own searches returned (their CDNs aren't always documented). Kept for this server's lifetime. */
+const issued = new Set<string>();
+export function rememberVideoUrls(assets: Asset[]) {
+  for (const a of assets) if (a.kind === "video" && a.src) issued.add(a.src);
+  if (issued.size > 5000) for (const k of [...issued].slice(0, 1000)) issued.delete(k);
+}
+
 export function videoHostAllowed(raw: string) {
   try {
     const u = new URL(raw);
-    return u.protocol === "https:" && VIDEO_HOSTS.some((re) => re.test(u.hostname));
+    return u.protocol === "https:" && (VIDEO_HOSTS.some((re) => re.test(u.hostname)) || issued.has(raw));
   } catch {
     return false;
   }

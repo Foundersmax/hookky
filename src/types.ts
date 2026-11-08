@@ -142,6 +142,8 @@ export interface Asset {
   kind: "image" | "logo" | "font" | "video";
   /** videos only: length in seconds */
   duration?: number;
+  /** the item's id at its source (used to report usage where a source requires it) */
+  sourceId?: string;
   /** fonts only: the family name it registers, and its weight */
   family?: string;
   weight?: number;

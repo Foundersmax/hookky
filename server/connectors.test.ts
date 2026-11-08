@@ -1,7 +1,7 @@
 // Stock video connectors: response mapping, rendition choice, and the proxy's host allowlist.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mapPexelsVideos, mapPixabayVideos, pickVideoFile, videoHostAllowed } from "./connectors";
+import { mapPexelsVideos, mapPixabayVideos, mapCoverrVideos, pickVideoFile, videoHostAllowed, rememberVideoUrls, reportStockUse } from "./connectors";
 import { clipTime } from "../src/engine/videos";
 
 test("pickVideoFile takes the largest MP4 that fits 1920px, else the smallest", () => {
@@ -45,4 +45,30 @@ test("clips shorter than their scene loop", () => {
   assert.equal(clipTime(2.5, 2), 0.5);
   assert.equal(clipTime(1, 4), 1);
   assert.equal(clipTime(3, NaN), 3);
+});
+
+test("Coverr results map to video assets whatever list key and poster field the API uses", () => {
+  const hit = { id: "abc_12", title: "Surfer at dawn", slug: "surfer-at-dawn", duration: "14.2", max_width: 1920, max_height: 1080, poster: "https://cdn.coverr.co/p.jpg", urls: { mp4: "https://cdn.coverr.co/v.mp4?token=x", mp4_preview: "https://cdn.coverr.co/prev.mp4" } };
+  for (const shape of [{ hits: [hit] }, { videos: [hit] }, [hit]]) {
+    const [a] = mapCoverrVideos(shape, "surf");
+    assert.deepEqual([a.kind, a.source, a.src, a.thumb, a.w, a.h, a.duration, a.sourceId, a.link], ["video", "coverr", "https://cdn.coverr.co/v.mp4?token=x", "https://cdn.coverr.co/p.jpg", 1920, 1080, 14.2, "abc_12", "https://coverr.co/videos/surfer-at-dawn"]);
+  }
+  const noPoster = mapCoverrVideos({ hits: [{ id: 2, urls: { mp4_preview: "https://cdn.coverr.co/only-preview.mp4" }, thumbnail: "javascript:alert(1)" }] }, "x");
+  assert.deepEqual([noPoster[0].src, noPoster[0].thumb, noPoster[0].title], ["https://cdn.coverr.co/only-preview.mp4", undefined, "x"]);
+  assert.deepEqual(mapCoverrVideos({ hits: [{ id: 3, urls: {} }, { id: 4, urls: { mp4: "http://insecure/v.mp4" } }] }, "x"), [], "clips without an https file are dropped");
+});
+
+test("the proxy also streams clip links its own searches returned", () => {
+  const url = "https://d1abc.cloudfront.net/coverr/clip.mp4?sig=1";
+  assert.ok(!videoHostAllowed(url));
+  rememberVideoUrls([{ id: "a", title: "", src: url, source: "coverr", kind: "video" }, { id: "b", title: "", src: "https://img.example/x.jpg", source: "x", kind: "image" }]);
+  assert.ok(videoHostAllowed(url));
+  assert.ok(!videoHostAllowed("https://img.example/x.jpg"), "only video links are remembered");
+  assert.ok(videoHostAllowed("https://cdn.coverr.co/v.mp4"));
+});
+
+test("usage reports only go to Coverr, with safe ids, when a key is set", async () => {
+  assert.equal(await reportStockUse("pixabay", "1"), false);
+  assert.equal(await reportStockUse("coverr", "../../admin"), false);
+  assert.equal(await reportStockUse("coverr", "abc"), false, "no key configured in tests");
 });

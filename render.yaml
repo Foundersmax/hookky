@@ -35,6 +35,8 @@ services:
         sync: false
       - key: PIXABAY_API_KEY
         sync: false
+      - key: COVERR_API_KEY
+        sync: false
       - key: FREEPIK_API_KEY
         sync: false
       - key: ENVATO_TOKEN
