@@ -21,6 +21,18 @@ jobs:
           done
           echo "== nameservers"; dig +short NS rookker.com @1.1.1.1
           echo "== CAA"; dig +short CAA rookker.com @1.1.1.1
+      - name: Email records (Zoho mailbox + Brevo sending)
+        run: |
+          d=rookker.com
+          echo "== MX";            dig +short MX $d @1.1.1.1
+          echo "== TXT (SPF, Brevo code, verification)"; dig +short TXT $d @1.1.1.1
+          n=$(dig +short TXT $d @1.1.1.1 | grep -c 'v=spf1' || true); echo "  SPF records: $n (must be exactly 1)"
+          echo "== DMARC";         dig +short TXT _dmarc.$d @1.1.1.1
+          for s in brevo1 brevo2 mail zmail zoho; do
+            v=$(dig +short CNAME $s._domainkey.$d @1.1.1.1; dig +short TXT $s._domainkey.$d @1.1.1.1 | cut -c1-60)
+            [ -n "$v" ] && echo "== DKIM $s._domainkey: $v"
+          done
+          true
       - name: HTTP and HTTPS
         run: |
           for u in http://rookker.com/ https://rookker.com/ https://www.rookker.com/ https://app.rookker.com/ https://app.rookker.com/api/health https://hookky.onrender.com/api/health; do
