@@ -9,6 +9,16 @@ jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # A throwaway Postgres for the accounts tests.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: hookky_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
     outputs:
       build: ${{ steps.build.outputs.build }}
     steps:
@@ -20,8 +30,10 @@ jobs:
       - run: npm ci
       - name: Type-check
         run: npm run typecheck
-      - name: Unit tests (cleaning, storyboard ops, director's notes, URL safety)
+      - name: Unit tests (cleaning, storyboard ops, director's notes, URL safety, accounts)
         run: npm test
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/hookky_test
       - name: Build the app and the hosted page
         id: build
         # The hosted page is a single-file build; the normal (code-split) build runs last so dist/ is the app.

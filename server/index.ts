@@ -8,6 +8,9 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { runAgentTurn, claudeConfigured, resetConversation } from "./agent";
 import { listConnectors, searchVisuals, searchVideos, importFromUrl, magnificUpscale, reportStockUse, type Orientation } from "./connectors";
 import { proxyVideo } from "./videoProxy";
+import { accountsEnabled, migrate } from "./db";
+import { accountRoutes, requireUser, sameOrigin, takeAgentTurn } from "./accounts";
+import { mailConfigured } from "./mailer";
 import { safeFetch, readLimited, BlockedUrlError } from "./safeFetch";
 import { transcribe, transcriptionProvider } from "./transcribe";
 
@@ -30,8 +33,15 @@ app.set("trust proxy", 1);
 // Optional password gate for public deploys: set HOOKKY_PASSWORD and the whole app
 // (pages and API) asks for it via the browser's sign-in prompt. Any username works.
 // The health check stays open so the host can probe it.
+// With accounts on (DATABASE_URL), sign-in replaces this shared password.
+const accounts = accountsEnabled();
+if (accounts) {
+  await migrate();
+  if (!process.env.ADMIN_EMAILS?.trim()) console.warn("ADMIN_EMAILS is not set: nobody can approve new accounts. Set it to your email address.");
+  if (!mailConfigured()) console.warn("BREVO_API_KEY is not set: account emails are printed to this log instead of sent.");
+}
 const password = process.env.HOOKKY_PASSWORD?.trim();
-if (password) {
+if (password && !accounts) {
   const digest = (v: string) => createHash("sha256").update(v).digest();
   const expected = digest(password);
   app.use((req, res, next) => {
@@ -45,10 +55,15 @@ if (password) {
 }
 
 app.use(express.json({ limit: "40mb" }));
+if (accounts) {
+  app.use("/api", sameOrigin);
+  app.use(requireUser);
+  app.use(accountRoutes());
+}
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 60 * 1024 * 1024 } });
 
 app.get("/api/health", (_req, res) => {
-  res.json({ agent: claudeConfigured() ? "claude" : "local", transcription: transcriptionProvider(), connectors: listConnectors(), ...(build && { build }) });
+  res.json({ agent: claudeConfigured() ? "claude" : "local", transcription: transcriptionProvider(), connectors: listConnectors(), accounts, ...(build && { build }) });
 });
 
 app.post("/api/agent", async (req, res) => {
@@ -57,6 +72,14 @@ app.post("/api/agent", async (req, res) => {
   res.setHeader("Connection", "keep-alive");
   res.flushHeaders();
   try {
+    if (req.user) {
+      const turn = await takeAgentTurn(req.user);
+      if (!turn.ok) {
+        res.write(`data: ${JSON.stringify({ type: "error", message: `You've used today's ${turn.limit} agent turns. The limit resets at midnight UTC, or ask your admin for more.` })}\n\n`);
+        res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
+        return void res.end();
+      }
+    }
     await runAgentTurn(req.body, res);
   } catch (e: any) {
     res.write(`data: ${JSON.stringify({ type: "error", message: e?.message ?? String(e) })}\n\n`);
@@ -152,6 +175,14 @@ app.post("/api/stock/used", async (req, res) => {
 // Same-origin stream for stock video, so clips can be drawn on (and exported from) the canvas.
 app.get("/api/video", (req, res) => proxyVideo(req, res));
 
+// API errors: a database outage gets a clear "try again" instead of a bare 500.
+app.use("/api", (err: any, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (res.headersSent) return next(err);
+  const dbDown = /ECONNREFUSED|ETIMEDOUT|ENOTFOUND|terminat|Connection|too many clients|the database system/i.test(String(err?.message ?? err) + String(err?.code ?? ""));
+  console.error(dbDown ? `Database unavailable: ${err?.message ?? err}` : err);
+  res.status(dbDown ? 503 : 500).json({ error: dbDown ? "Hookky can't reach its database right now. Try again in a minute." : "Something went wrong on our side. Try again." });
+});
+
 if (process.env.NODE_ENV === "production") {
   const dist = path.join(here, "..", "dist");
   app.use(express.static(dist));
@@ -160,6 +191,6 @@ if (process.env.NODE_ENV === "production") {
 
 const port = Number(process.env.PORT || 8787);
 app.listen(port, () => {
-  if (process.env.NODE_ENV === "production" && !password) console.warn("HOOKKY_PASSWORD is not set: anyone with the URL can use this deploy and its API keys.");
+  if (process.env.NODE_ENV === "production" && !password && !accounts) console.warn("Neither DATABASE_URL (accounts) nor HOOKKY_PASSWORD is set: anyone with the URL can use this deploy and its API keys.");
   console.log(`Hookky API on http://localhost:${port}  ·  agent: ${claudeConfigured() ? "Claude" : "local director"}  ·  transcription: ${transcriptionProvider()}`);
 });

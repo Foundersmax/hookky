@@ -11,6 +11,13 @@ import type { ProjectMeta, Version } from "./persist";
 import { STARTERS } from "./starters";
 import { posterFor } from "./components/thumbs";
 
+export interface AuthUser {
+  id: number;
+  email: string;
+  name: string;
+  role: "user" | "admin";
+}
+
 export interface StudioState {
   project: Project;
   assets: Asset[];
@@ -27,8 +34,10 @@ export interface StudioState {
   /** saved brand kits, shared by every project */
   kits: BrandKit[];
   /** what the app shows */
-  view: "home" | "studio";
-  health?: { agent: "claude" | "hosted" | "local"; transcription: string; connectors: { id: string; label: string; configured: boolean; kind: string; note: string }[] };
+  view: "home" | "studio" | "admin";
+  health?: { agent: "claude" | "hosted" | "local"; transcription: string; connectors: { id: string; label: string; configured: boolean; kind: string; note: string }[]; accounts?: boolean };
+  /** Accounts (server with a database): who is signed in. "off" when the server has no accounts. */
+  auth: { status: "checking" | "signed_out" | "signed_in" | "off"; user?: AuthUser; usage?: { today: number; limit: number | null } };
 }
 
 
@@ -63,6 +72,7 @@ let state: StudioState = {
   busy: false,
   projects: [],
   kits: [],
+  auth: { status: "checking" },
   view: "studio",
 };
 

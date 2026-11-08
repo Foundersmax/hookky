@@ -53,6 +53,18 @@ The Blueprint uses the `starter` plan so the service stays awake. Change `plan` 
 
 **Deploys from CI.** Every push to `main` deploys once the checks pass: the CI workflow calls the service's deploy hook, then waits until `/api/health` reports the new build (it stays readable behind the password). One-time setup: in Render open the service's **Settings → Deploy Hook** and copy the URL; in GitHub open **Settings → Secrets and variables → Actions → New repository secret**, name it `RENDER_DEPLOY_HOOK_URL` and paste the URL there. Until the secret exists the deploy step is skipped with a notice. Treat the hook URL like a password: anyone with it can trigger deploys.
 
+### Accounts (sign-up, approval, email via Brevo)
+
+Set `DATABASE_URL` and Hookky switches from the shared password to accounts:
+
+- **Sign-up** with name, email and password (10+ characters, hashed with scrypt). Brevo sends a confirmation link; after confirming, the person waits for an admin.
+- **Admins** are the addresses in `ADMIN_EMAILS`; they become admins as soon as they confirm. Admins get an email for each new sign-up and manage everyone under **account menu → People and approvals**: approve, disable (signs them out everywhere), turn back on, make or remove admins, set a daily agent limit, delete.
+- **Daily limits**: each regular user gets `AGENT_DAILY_LIMIT` agent turns a day (default 100); admins aren't capped. Usage shows in the account menu and on the People page.
+- **Sign-in** uses a 30-day HttpOnly cookie; password reset links last an hour and sign the account out everywhere. Sign-in, sign-up and email requests are rate limited, cross-site writes are refused, and responses don't reveal which emails have accounts.
+- Without `BREVO_API_KEY` the emails are printed to the server log, so local development needs no setup. `MAIL_FROM` must be a sender (or domain) verified in Brevo.
+
+On Render: create a **Postgres** database, then on the hookky service set `DATABASE_URL` to its **Internal Database URL**, plus `ADMIN_EMAILS`, `BREVO_API_KEY` and `MAIL_FROM`. Tables are created on start. Projects still live in each browser for now.
+
 ### Landing page on GitHub Pages
 
 `site/` is the marketing page: it plays a live promo with the real Hookky engine (in the hero, and in all four formats side by side). Its **Open the studio** buttons point to `app.` on whatever domain serves the page, so `rookker.com` links to `app.rookker.com` with no configuration.

@@ -23,6 +23,10 @@ import { timeline } from "./engine/render";
 import { registerFonts } from "./fonts";
 import { reportStockUse } from "./stockUsage";
 import { fillVideoPosters } from "./videoPosters";
+import { checkSession, watchSession } from "./auth";
+import { AuthScreen } from "./components/AuthScreen";
+import { AdminPanel } from "./components/AdminPanel";
+import { UserMenu } from "./components/UserMenu";
 import { sampleCap } from "./host";
 
 const TABS = ["Scene", "Library", "Brand", "Voice", "Export"] as const;
@@ -88,11 +92,19 @@ export function App() {
   useEffect(() => {
     fetch("/api/health")
       .then((r) => r.json())
-      .then((health) => setState({ health }))
+      .then(async (health) => {
+        setState({ health });
+        if (!health.accounts) return setState({ auth: { status: "off" } });
+        watchSession();
+        await checkSession();
+        // An admin arriving from a "new sign-up" email goes straight to the approvals list.
+        const st = getState();
+        if (st.auth.user?.role === "admin" && new URL(location.href).searchParams.get("admin") === "pending") setState({ view: "admin" });
+      })
       .catch(async () => {
         // No Hookky server: on claude.ai the page can still call Claude itself.
         const sample = await sampleCap;
-        setState({ health: { agent: sample ? "hosted" : "local", transcription: "none", connectors: [] } });
+        setState({ health: { agent: sample ? "hosted" : "local", transcription: "none", connectors: [] }, auth: { status: "off" } });
       });
   }, []);
 
@@ -189,6 +201,16 @@ export function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  const auth = useStudio((s) => s.auth);
+  if (auth.status === "checking") return <div className="app booting" aria-busy="true" />;
+  if (auth.status === "signed_out")
+    return (
+      <>
+        <AuthScreen />
+        {toastMsg && <div className="toast">{toastMsg}</div>}
+      </>
+    );
+
   return (
     <div className="app">
       <header className="topbar">
@@ -203,6 +225,12 @@ export function App() {
             <>
               <span className="crumb-sep" aria-hidden>/</span>
               <input className="title-input" value={project.title} aria-label="Project name" onChange={(e) => setState((s) => ({ project: { ...s.project, title: e.target.value } }))} />
+            </>
+          )}
+          {view === "admin" && (
+            <>
+              <span className="crumb-sep" aria-hidden>/</span>
+              <span className="crumb on" aria-current="page">People</span>
             </>
           )}
         </nav>
@@ -258,8 +286,13 @@ export function App() {
             <Icon name="plus" /> New project
           </button>
         )}
+        <UserMenu />
       </header>
-      {view === "home" ? (
+      {view === "admin" ? (
+        <ErrorBoundary area="people page">
+          <AdminPanel />
+        </ErrorBoundary>
+      ) : view === "home" ? (
         <ErrorBoundary area="projects page">
           <Home />
         </ErrorBoundary>

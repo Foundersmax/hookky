@@ -18,7 +18,20 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "22"
-      # --- access: strongly recommended, since visitors spend your API credits
+      # --- accounts: sign-up with email confirmation and admin approval (see README)
+      - key: DATABASE_URL
+        sync: false
+      - key: ADMIN_EMAILS
+        sync: false
+      - key: BREVO_API_KEY
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+      - key: APP_URL
+        value: https://app.rookker.com
+      - key: AGENT_DAILY_LIMIT
+        value: "100"
+      # --- shared password: only used when DATABASE_URL (accounts) isn't set
       - key: HOOKKY_PASSWORD
         sync: false
       # --- the Claude creative agent (without it, the local director is used)
