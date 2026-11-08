@@ -1,8 +1,9 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import type { MusicTrack } from "../types";
 import { useStudio, updateProject, setState, getState } from "../store";
 import { cleanMusic, DEFAULT_DUCK } from "../audio/mix";
-import { analyzeMusicFile } from "../audio/beats";
+import { prepareMusic, type Stage } from "../audio/prepare";
+import { StageList, MusicReport } from "./AudioLab";
 import { clock } from "../clock";
 import { Icon } from "./Icon";
 
@@ -36,6 +37,7 @@ export function MusicControls() {
   const music = useStudio((s) => s.project.music);
   const audio = useStudio((s) => s.project.audio);
   const file = useRef<HTMLInputElement>(null);
+  const [stages, setStages] = useState<Stage[] | null>(null);
   const set = (patch: Partial<MusicTrack>) => updateProject((p) => (p.music ? { ...p, music: { ...p.music, ...patch } } : p));
   const voice = (volume: number) => updateProject((p) => (p.audio ? { ...p, audio: { ...p.audio, volume } } : p));
 
@@ -56,13 +58,14 @@ export function MusicControls() {
       return { ...p, music: cleanMusic({ ...mix, name: f.name, duration, start: 0 }, url) };
     });
     setState({ notice: `Music added (${mmss(duration)}). Finding the beat…` });
-    // Map the beats in the background: pulse and flash effects then hit on the music.
-    analyzeMusicFile(f)
-      .then(({ map }) => {
-        updateProject((p) => (p.music?.url === url && map ? { ...p, music: cleanMusic({ ...p.music, ...map }, url) } : p));
-        setState({ notice: map ? `${Math.round(map.bpm)} BPM${map.drop !== undefined ? `, drop at ${mmss(map.drop)}` : ""}. Pulse and flash effects now hit on the beat.` : "Music added. It has no steady beat to cut to." });
+    // Listen to it properly: beats, bars, sections, mood. Pulse and flash effects then hit on the music.
+    prepareMusic(f, setStages)
+      .then((m) => {
+        updateProject((p) => (p.music?.url === url ? { ...p, music: cleanMusic({ ...p.music, ...m, url, volume: p.music.volume, start: p.music.start }, url) } : p));
+        setState({ notice: m.bpm ? `${Math.round(m.bpm)} BPM, ${m.insight?.mood ?? ""}${m.drop !== undefined ? `, drop at ${mmss(m.drop)}` : ""}. Pulse and flash effects now hit on the beat.` : "Music added. It has no steady beat to cut to." });
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setStages(null));
   }
 
   /** Choose the start point so the music's drop hits where scene 2 begins. */
@@ -87,6 +90,8 @@ export function MusicControls() {
       <span className="label">Background music</span>
       {music ? (
         <div className="music-card">
+          {stages && <StageList title="Listening to the music" stages={stages} />}
+          {!stages && music.insight && <MusicReport track={music} start={music.start} length={getState().project.scenes.reduce((a, x) => a + x.duration, 0)} />}
           <div className="music-head">
             <Icon name="mic" size={14} />
             <span className="music-name" title={music.name}>{music.name}</span>

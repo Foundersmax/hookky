@@ -103,3 +103,29 @@ test("formats: cuts snap to the beat, scripts read like an ad, stock refs surviv
   assert.equal(sanitizeScene({ template: "fullbleed", duration: 2, image: stockRef(3) }).image, "asset:stock_3");
   assert.ok(isStockRef("asset:stock_3") && !isStockRef("asset:up_1"));
 });
+
+import { emSpoken, paced, recommend } from "./formats";
+
+test("formats: the stressed word is the highlighted one; pace sets the cutting; audio picks formats", () => {
+  assert.equal(emSpoken("Ten days on one charge.", ["charge"]), "Ten days on one *charge*.");
+  assert.equal(emSpoken("Ten days on one charge.", ["ten"]), "*Ten* days on one charge.");
+  assert.equal(emSpoken("Ten days on one charge.", []), "Ten days on one *charge*.");
+  const sc = [{ template: "title-reveal", duration: 2, transition: "cut" }, { template: "title-reveal", duration: 2, transition: "fade" }, { template: "kinetic-words", duration: 2, transition: "whip" }, { template: "cta-end", duration: 2, transition: "zoom" }] as any[];
+  const fast = paced(sc, { pace: "fast", mood: "energetic" });
+  assert.deepEqual(fast.map((s) => s.transition), ["cut", "whip", "whip", "zoom"]);
+  assert.equal(fast[1].motion, "snappy");
+  const slow = paced(sc, { pace: "slow", mood: "dramatic" });
+  assert.deepEqual(slow.map((s) => s.transition), ["cut", "fade", "fade", "zoom"]);
+  assert.equal(slow[2].motion, "dramatic");
+  const r = recommend({ mood: "dramatic", pace: "slow", text: "some things change everything" });
+  assert.ok(r[0] && ["launch-trailer", "cinematic-montage", "manifesto", "problem-solution"].includes(r[0].id), JSON.stringify(r));
+  assert.ok(recommend(undefined, { mood: "upbeat" }).some((x) => x.id === "beat-montage"));
+  assert.ok(recommend({ mood: "warm", pace: "measured", cta: "Get 30% off today" }).some((x) => x.id === "flash-sale"));
+  for (const x of [...r, ...recommend(undefined, { mood: "chill" })]) assert.ok(FORMATS.some((f) => f.id === x.id), x.id);
+});
+
+test("formats: with a voice's insight, headlines highlight the stressed words", () => {
+  const v = { ...VO, insight: { pace: "fast", mood: "energetic", stressedWords: ["second", "charge"] } as any };
+  const { scenes } = buildWithVoice(FORMATS.find((f) => f.id === "three-reasons")!, brief, v, []);
+  assert.ok(scenes.some((s) => s.headline?.includes("*second*") || s.headline?.includes("*charge*")), scenes.map((s) => s.headline).join(" | "));
+});

@@ -19,6 +19,7 @@ export function cleanMusic(m: Partial<MusicTrack> & { name?: unknown; url?: unkn
     fadeOut: num(m.fadeOut, 0, 10, 1.5),
     duck: num(m.duck, 0, 1, DEFAULT_DUCK),
     ...cleanBeats(m),
+    ...(m.insight && typeof m.insight === "object" && Array.isArray((m.insight as any).sections) && { insight: m.insight }),
   };
 }
 

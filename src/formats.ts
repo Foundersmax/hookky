@@ -5,6 +5,7 @@
 import type { Aspect, Effect, Grade, Scene, TransitionId } from "./types";
 import { voiceSlots, clip as clipWords, type VoiceIn } from "./soundTemplates";
 import { LOOKS_PROD, assemble, planShots, queriesFor, type ProdLook, type Shot, type ShotType } from "./footage/plan";
+import type { VoiceInsight, MusicInsight } from "./audio/insight";
 
 export interface Brief {
   /** product or brand name */
@@ -68,6 +69,16 @@ export function em(text: string): string {
   if (best < 0) return text;
   const m = ws[best].match(/^([^\p{L}\p{N}$€£]*)(.*?)([.,!?;:]*)$/u)!;
   ws[best] = `${m[1]}*${m[2]}*${m[3]}`;
+  return ws.join(" ");
+}
+/** Highlight the word the speaker actually stressed, if it's in the line; else the strongest word. */
+export function emSpoken(text: string, stressed?: string[]): string {
+  if (!text || text.includes("*") || !stressed?.length) return em(text);
+  const ws = text.split(" ");
+  const i = ws.findIndex((w) => stressed.includes(w.toLowerCase().replace(/[^\p{L}\p{N}']/gu, "")));
+  if (i < 0) return em(text);
+  const m = ws[i].match(/^([^\p{L}\p{N}$€£]*)(.*?)([.,!?;:]*)$/u)!;
+  ws[i] = `${m[1]}*${m[2]}*${m[3]}`;
   return ws.join(" ");
 }
 const words = (s: string, n: number) => s.split(/\s+/).filter(Boolean).slice(0, n).join(" ");
@@ -479,7 +490,7 @@ const CARRY: Partial<Record<Scene["template"], number>> = { "title-reveal": 6, "
  * format's beats as the palette, and the words on screen taken from what's said. Footage
  * formats become a shot per line with subtitles.
  */
-export function buildWithVoice(f: Format, raw: Partial<Brief>, voice: VoiceIn, images: string[]): { scenes: Beat[]; captions: boolean } {
+export function buildWithVoice(f: Format, raw: Partial<Brief>, voice: VoiceIn & { insight?: VoiceInsight }, images: string[]): { scenes: Beat[]; captions: boolean } {
   const b = fill(raw);
   const hasWords = !!voice.words?.length;
   if (f.section === "footage") {
@@ -514,9 +525,25 @@ export function buildWithVoice(f: Format, raw: Partial<Brief>, voice: VoiceIn, i
     const duration = +(r2(slot.e) - r2(slot.s)).toFixed(2);
     // Giant-letter beats show the line's key word instead of the whole line.
     const key = beat.template === "text-mask" && beat !== reveal && spoken ? keyWord(spoken, b.product) : undefined;
-    return { ...beat, duration, ...(spoken && max && { headline: em(clipWords(spoken, max).replace(/…$/, "")) }), ...(key && { headline: key }), ...(i === 0 && { transition: "cut" as const }) };
+    return { ...beat, duration, ...(spoken && max && { headline: emSpoken(clipWords(spoken, max).replace(/…$/, ""), voice.insight?.stressedWords) }), ...(key && { headline: key }), ...(i === 0 && { transition: "cut" as const }) };
   });
-  return { scenes, captions: false };
+  return { scenes: paced(scenes, voice.insight), captions: false };
+}
+
+/**
+ * Cut to the read: a fast, energetic voice gets hard cuts and whips with snappy motion; a slow
+ * or dramatic one gets dissolves and unhurried motion. The opening cut and end card stay.
+ */
+export function paced<S extends Beat>(scenes: S[], ins?: Pick<VoiceInsight, "pace" | "mood">): S[] {
+  if (!ins) return scenes;
+  const fast = ins.pace === "fast" || ins.pace === "brisk" || ins.mood === "energetic";
+  const slow = ins.pace === "slow" || ins.mood === "dramatic" || ins.mood === "calm";
+  if (!fast && !slow) return scenes;
+  return scenes.map((s, i) => {
+    if (i === 0 || s.template === "cta-end") return s;
+    if (fast) return { ...s, motion: s.motion === "dramatic" ? s.motion : "snappy", transition: s.transition === "fade" || s.transition === "slide" || s.transition === "push-up" ? (i % 2 ? "whip" : "cut") : s.transition };
+    return { ...s, motion: ins.mood === "dramatic" ? "dramatic" : "calm", transition: s.transition === "whip" || s.transition === "glitch" || s.transition === "cut" ? "fade" : s.transition };
+  });
 }
 
 /** The strongest single word of a line (a number, else the longest meaningful word, not the brand). */
@@ -555,6 +582,34 @@ export function scriptFor(f: Format, raw: Partial<Brief>): string {
   };
   const lines = [hook[f.category], `Meet ${b.product}: ${b.what}.`, ...b.benefits.slice(0, 3).map((x) => `${cap(x.replace(/\.$/, ""))}.`), ...(b.offer ? [`${cap(b.offer.replace(/\.$/, ""))}.`] : []), `${cap(b.cta)}${b.url ? ` at ${b.url}` : ""}.`];
   return lines.join(" ");
+}
+
+/**
+ * Formats that suit the audio: the voice's mood and pace, the music's mood, what's on offer.
+ * Returns format ids, best first, with a short reason each.
+ */
+export function recommend(voice?: Pick<VoiceInsight, "mood" | "pace" | "cta"> & { text?: string }, music?: Pick<MusicInsight, "mood">, offer?: string): { id: string; why: string }[] {
+  const score = new Map<string, { n: number; why: string }>();
+  const add = (ids: string[], n: number, why: string) => ids.forEach((id) => { const cur = score.get(id); if (!cur || cur.n < n) score.set(id, { n: (cur?.n ?? 0) + n, why: cur && cur.n >= n ? cur.why : why }); else cur.n += n; });
+  if (voice) {
+    if (voice.mood === "energetic" || voice.pace === "fast" || voice.pace === "brisk") add(["stop-scroll", "pov-hook", "three-reasons", "product-drop", "flash-sale", "manifesto"], 3, "an energetic, quick read");
+    if (voice.mood === "dramatic") add(["launch-trailer", "cinematic-montage", "manifesto", "problem-solution"], 3, "a dramatic read with real pauses");
+    if (voice.mood === "calm") add(["founder", "mood-film", "photo-story", "detail-reel"], 3, "a calm, unhurried voice");
+    if (voice.mood === "warm") add(["founder", "social-proof", "day-in-life", "group-chat", "transformation"], 3, "a warm, personal voice");
+    const t = voice.text?.toLowerCase() ?? "";
+    if (/(app|download|screen|tap)/.test(t)) add(["app-demo", "switch"], 2, "it talks about an app");
+    if (/(review|stars|customers|loved|rated)/.test(t)) add(["social-proof"], 2, "it mentions reviews");
+    if (/(event|tickets|tonight|join us|live)/.test(t)) add(["event"], 2, "it promotes an event");
+    if (/(menu|taste|dish|table|restaurant)/.test(t)) add(["menu"], 2, "it's about food");
+    if (/(hiring|join our team|careers)/.test(t)) add(["hiring"], 3, "it's recruiting");
+  }
+  if (music) {
+    if (music.mood === "upbeat" || music.mood === "driving") add(["beat-montage", "flash-sale", "stop-scroll"], voice ? 1 : 3, `${music.mood} music`);
+    if (music.mood === "cinematic" || music.mood === "dark") add(["cinematic-montage", "launch-trailer", "detail-reel"], voice ? 1 : 3, `${music.mood} music`);
+    if (music.mood === "chill") add(["mood-film", "lookbook", "photo-story"], voice ? 1 : 3, "chill music");
+  }
+  if (offer || /(\d+\s?%|\b(off|sale|discount)\b)/i.test(voice?.cta ?? "")) add(["flash-sale", "last-chance"], 4, "there's an offer");
+  return [...score.entries()].sort((a, b) => b[1].n - a[1].n).slice(0, 4).map(([id, v]) => ({ id, why: v.why }));
 }
 
 /** Placeholder refs the studio swaps for stock footage it casts (valid asset refs, so they survive cleaning). */

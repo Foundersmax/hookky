@@ -4,9 +4,11 @@ import { useStudio, setState, getState } from "../store";
 import { sanitizeScene } from "../sanitize";
 import { brandWithStyle } from "../storyboard";
 import { CATEGORIES, FORMATS, SECTIONS, buildFormat, buildWithVoice, scriptFor, type Brief, type Category, type Format, type Section } from "../formats";
-import { pickImages, loadMusic } from "../soundApply";
-import { analyzeAudio } from "../audio/analyze";
+import { pickImages } from "../soundApply";
 import { createFormat, generateVoice, writeScript } from "../formatsDirect";
+import { prepareVoice, prepareMusic, type Stage } from "../audio/prepare";
+import { understand } from "../audio/understand";
+import { StageList, VoiceReport, MusicReport } from "./AudioLab";
 import { LoopPreview } from "./SoundTemplates";
 import { Icon } from "./Icon";
 
@@ -80,6 +82,13 @@ export function FormatsSheet() {
   const [musicFile, setMusicFile] = useState<File>();
   const [musicInfo, setMusicInfo] = useState<MusicTrack>();
   const [dropMusic, setDropMusic] = useState(false);
+  // listening
+  const [voiceStages, setVoiceStages] = useState<Stage[] | null>(null);
+  const [musicStages, setMusicStages] = useState<Stage[] | null>(null);
+  const [meaning, setMeaning] = useState<Stage[] | null>(null);
+  const [keptVoice, setKeptVoice] = useState<AudioTrack | undefined>(() => getState().project.audio);
+  const [recs, setRecs] = useState<{ id: string; why: string }[]>([]);
+  const [listening, setListening] = useState(0);
   const voiceIn = useRef<HTMLInputElement>(null);
   const musicIn = useRef<HTMLInputElement>(null);
   const player = useRef<HTMLAudioElement | null>(null);
@@ -88,7 +97,7 @@ export function FormatsSheet() {
   const claudeOk = health?.agent === "claude" && !["invalid-key", "no-credit", "missing"].includes(health?.claude?.state ?? "");
   const canSpeak = !!health?.voice;
   const close = () => !busy && setState({ sheet: undefined });
-  const currentVoice = voiceMode === "keep" ? project.audio : voiceMode === "none" ? undefined : voiceTrack;
+  const currentVoice = voiceMode === "keep" ? keptVoice : voiceMode === "none" ? undefined : voiceTrack;
   const music = dropMusic ? undefined : musicInfo ?? project.music;
 
   useEffect(() => {
@@ -122,32 +131,74 @@ export function FormatsSheet() {
   };
   const set = (k: keyof Brief, v: string) => setBrief((b) => ({ ...b, [k]: k === "benefits" ? v.split("\n") : v }));
 
-  async function takeVoice(f?: File) {
-    if (!f) return;
+  /** Fill brief fields the user left empty with what the audio says; recommend formats. */
+  async function makeSense(v: AudioTrack | undefined, m: MusicTrack | undefined) {
+    setMeaning([{ id: "meaning", label: claudeOk ? "Claude is listening to the message" : "Reading the message", state: "running" }]);
+    const u = await understand(v, m, claudeOk);
+    setBrief((b) => ({
+      ...b,
+      product: b.product || u.brief.product || "",
+      what: b.what || u.brief.what || "",
+      audience: b.audience || u.brief.audience || "",
+      benefits: (b.benefits ?? []).filter(Boolean).length ? b.benefits : u.brief.benefits ?? [],
+      offer: b.offer || u.brief.offer || "",
+      cta: b.cta || u.brief.cta || "",
+      url: b.url || u.brief.url || "",
+    }));
+    setRecs(u.recommended);
+    const filled = Object.entries(u.brief).filter(([, v]) => (Array.isArray(v) ? v.length : v)).length;
+    setMeaning([{ id: "meaning", label: u.by === "claude" ? "Claude listened to the message" : "Read the message", state: "done", note: `${filled ? `${filled} brief field${filled > 1 ? "s" : ""} filled` : "nothing to fill"}${u.recommended.length ? `, ${u.recommended.length} formats suggested` : ""}${u.note ? ` (Claude: ${u.note.replace(/\.$/, "")})` : ""}` }]);
+  }
+
+  /** Listen to a voice-over properly before anything is built. */
+  async function listenVoice(f: File, mode: VoiceMode) {
     setError(null);
+    setListening((n) => n + 1);
     try {
-      const t = await analyzeAudio(f);
+      const t = await prepareVoice(f, setVoiceStages, health?.transcription !== "none");
       setVoiceFile(f);
-      setVoiceTrack(t);
-      setVoiceMode("upload");
-    } catch {
-      setError(`${f.name} can't be played in this browser. Try MP3, M4A or WAV.`);
+      if (mode === "keep") setKeptVoice(t);
+      else setVoiceTrack(t);
+      setVoiceMode(mode);
+      await makeSense(t, music);
+      return t;
+    } catch (e: any) {
+      setError(`${f.name} couldn't be analysed: ${e.message}. Try MP3, M4A or WAV.`);
+    } finally {
+      setListening((n) => n - 1);
     }
   }
-  async function takeMusic(f?: File) {
+  async function takeVoice(f?: File) {
+    if (f) await listenVoice(f, "upload");
+  }
+  async function takeMusic(f?: File | MusicTrack) {
     if (!f) return;
     setError(null);
-    setBusy("Finding the beat");
+    setListening((n) => n + 1);
     try {
-      setMusicInfo(await loadMusic(f));
-      setMusicFile(f);
+      const m = await prepareMusic(f, setMusicStages);
+      setMusicInfo(m);
+      if (f instanceof File) setMusicFile(f);
       setDropMusic(false);
+      await makeSense(currentVoice, m);
     } catch (e: any) {
       setError(e.message);
     } finally {
-      setBusy(null);
+      setListening((n) => n - 1);
     }
   }
+  // Audio already in the project gets the same careful listen when the sheet opens.
+  useEffect(() => {
+    const a = getState().project.audio, m = getState().project.music;
+    (async () => {
+      if (a && !a.insight) {
+        const blob = await fetch(a.url).then((r) => r.blob()).catch(() => null);
+        if (blob) await listenVoice(new File([blob], a.name, { type: blob.type || "audio/mpeg" }), "keep");
+      } else if (a?.insight) await makeSense(a, m);
+      if (m && !m.insight) await takeMusic(m);
+    })();
+  }, []);
+
   async function claudeScript() {
     setBusy("Claude is writing the script");
     const r = await writeScript(pick, brief, aspect === "16:9" ? 25 : 18);
@@ -162,12 +213,13 @@ export function FormatsSheet() {
     setBusy(`Recording “${voice}”`);
     try {
       const f = await generateVoice(text, voice, tone);
-      const t = await analyzeAudio(f);
-      setVoiceFile(f);
-      setVoiceTrack(t);
-      player.current?.pause();
-      player.current = new Audio(t.url);
-      player.current.play().catch(() => {});
+      setBusy(null);
+      const t = await listenVoice(f, "generate");
+      if (t) {
+        player.current?.pause();
+        player.current = new Audio(t.url);
+        player.current.play().catch(() => {});
+      }
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -184,9 +236,11 @@ export function FormatsSheet() {
         brief,
         aspect,
         keepBrand,
-        voiceFile: voiceMode === "upload" || voiceMode === "generate" ? voiceFile : undefined,
+        voiceTrack: voiceMode === "upload" || voiceMode === "generate" ? voiceTrack : voiceMode === "keep" ? keptVoice : undefined,
+        voiceFile: (voiceMode === "upload" || voiceMode === "generate") && !voiceTrack ? voiceFile : undefined,
         dropVoice: voiceMode === "none",
-        musicFile,
+        musicTrack: dropMusic ? undefined : musicInfo,
+        musicFile: musicInfo ? undefined : musicFile,
         dropMusic,
         useStock: useStock && pick.section !== "text",
         withClaude: withClaude && claudeOk,
@@ -254,6 +308,7 @@ export function FormatsSheet() {
                 onFocus={() => setHover(f.id)}
                 onBlur={() => setHover(null)}
               >
+                {recs.some((r) => r.id === f.id) && <span className="fits">Fits your audio</span>}
                 <span className="sound-frame" style={{ background: `linear-gradient(135deg, ${f.swatch[0]}, ${f.swatch[0]} 60%, ${f.swatch[1]})` }}>
                   <LoopPreview project={p} height={132} live={hover === f.id} />
                 </span>
@@ -283,8 +338,8 @@ export function FormatsSheet() {
                 <button className={voiceMode === "generate" ? "on" : ""} onClick={() => (setVoiceMode("generate"), !script && setScript(scriptFor(pick, brief)))}>Generate</button>
                 <button className={voiceMode === "none" ? "on" : ""} onClick={() => setVoiceMode("none")}>None</button>
               </div>
-              {voiceMode === "keep" && project.audio && <small className="tiny">{project.audio.name} · {project.audio.duration.toFixed(1)}s{project.audio.words?.length ? ` · ${project.audio.words.length} words` : ""}</small>}
-              {voiceMode === "upload" && (voiceTrack ? <small className="tiny">{voiceFile?.name} · {voiceTrack.duration.toFixed(1)}s · transcribed when you create</small> : <small className="tiny">MP3, WAV or M4A. The cut follows its pauses and words.</small>)}
+              {voiceMode === "keep" && keptVoice && <small className="tiny">{keptVoice.name} · {keptVoice.duration.toFixed(1)}s{keptVoice.words?.length ? ` · ${keptVoice.words.length} words` : ""}</small>}
+              {voiceMode === "upload" && (voiceTrack ? <small className="tiny">{voiceFile?.name} · {voiceTrack.duration.toFixed(1)}s{voiceTrack.words?.length ? ` · ${voiceTrack.words.length} words transcribed` : " · no transcript"}</small> : <small className="tiny">MP3, WAV or M4A. The cut follows its pauses and words.</small>)}
               {voiceMode === "generate" && (
                 <>
                   <textarea rows={4} value={script} onChange={(e) => setScript(e.target.value)} placeholder="What the voice says." aria-label="Script" />
@@ -310,6 +365,27 @@ export function FormatsSheet() {
                 {music && <button className="btn icon ghost" style={{ flex: "none" }} aria-label="Remove music" onClick={() => (setMusicFile(undefined), setMusicInfo(undefined), setDropMusic(true))}><Icon name="trash" size={13} /></button>}
               </div>
             </div>
+
+            {voiceStages && voiceStages.some((x) => x.state !== "done" && x.state !== "skipped") && <StageList title="Listening to the voice-over" stages={voiceStages} />}
+            {currentVoice?.insight && !(voiceStages && voiceStages.some((x) => x.state === "running" || x.state === "waiting")) && <VoiceReport track={currentVoice} />}
+            {musicStages && musicStages.some((x) => x.state !== "done" && x.state !== "skipped") && <StageList title="Listening to the music" stages={musicStages} />}
+            {music?.insight && !(musicStages && musicStages.some((x) => x.state === "running" || x.state === "waiting")) && <MusicReport track={music} />}
+            {meaning && <StageList title="Understanding" stages={meaning} />}
+            {recs.length > 0 && (
+              <div className="lab-recs">
+                <span className="label">Suits your audio</span>
+                <div className="lab-chips">
+                  {recs.map((r) => {
+                    const f = FORMATS.find((x) => x.id === r.id);
+                    return f ? (
+                      <button key={r.id} onClick={() => (setSection(f.section), setCat("All"), choose(f))} title={r.why}>
+                        {f.name}<small>{r.why}</small>
+                      </button>
+                    ) : null;
+                  })}
+                </div>
+              </div>
+            )}
 
             {pick.section !== "text" && (
               <label className="toggle">
@@ -343,8 +419,8 @@ export function FormatsSheet() {
               Keep my brand colours and fonts
             </label>
             {error && <p className="sound-error" role="alert">{error}</p>}
-            <button className="btn primary sound-build" disabled={!!busy} onClick={() => create(true)}>
-              {busy ? <span className="wave" aria-hidden="true">{[0, 1, 2, 3].map((i) => <i key={i} style={{ animationDelay: `${i * 0.11}s` }} />)}</span> : <Icon name="sparkle" />} {busy ?? (claudeOk && pick.section !== "footage" ? "Create with Claude" : "Create")}
+            <button className="btn primary sound-build" disabled={!!busy || listening > 0} onClick={() => create(true)}>
+              {busy ? <span className="wave" aria-hidden="true">{[0, 1, 2, 3].map((i) => <i key={i} style={{ animationDelay: `${i * 0.11}s` }} />)}</span> : <Icon name="sparkle" />} {busy ?? (listening > 0 ? "Listening… (the edit waits for the analysis)" : claudeOk && pick.section !== "footage" ? "Create with Claude" : "Create")}
             </button>
             {claudeOk && pick.section !== "footage" && !busy && (
               <button className="btn ghost" onClick={() => create(false)}>Use the instant draft</button>

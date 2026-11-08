@@ -1,27 +1,19 @@
 import { useRef, useState } from "react";
 import { useStudio, setAudio, getState, setState, updateProject, fitToVoiceover } from "../store";
-import { analyzeAudio, alignScript } from "../audio/analyze";
+import { alignScript } from "../audio/analyze";
+import { prepareVoice, type OnStages, type Stage } from "../audio/prepare";
+import { StageList, VoiceReport } from "./AudioLab";
 import { clock, useClock } from "../clock";
 import { sendToAgent } from "../agent/client";
 import { Icon } from "./Icon";
 import { MusicControls, Slider } from "./MusicControls";
 import { fmt } from "./Stage";
 
-/** Analyse a VO file, attach it to the project, and transcribe if a provider is configured. */
-export async function ingestVoiceover(file: File) {
-  const track = await analyzeAudio(file);
+/** Listen to a voice-over in full (words, stress, pace, mood, message) and attach it to the project. */
+export async function ingestVoiceover(file: File, onStages?: OnStages) {
+  const track = await prepareVoice(file, onStages ?? (() => {}), getState().health?.transcription !== "none");
   if (track.duration > 120) console.warn("Voice-over longer than 2 minutes");
   setAudio(track);
-  if (getState().health?.transcription !== "none") {
-    try {
-      const fd = new FormData();
-      fd.append("audio", file);
-      const r = await fetch("/api/transcribe", { method: "POST", body: fd }).then((r) => r.json());
-      if (r.words?.length) setAudio({ ...getState().project.audio!, words: r.words, wordsSource: "transcription" });
-    } catch {
-      /* fall back to pasted script */
-    }
-  }
 }
 
 export function VoicePanel({ toast }: { toast: (s: string) => void }) {
@@ -31,6 +23,7 @@ export function VoicePanel({ toast }: { toast: (s: string) => void }) {
   const captions = useStudio((s) => s.project.captions);
   const [script, setScript] = useState("");
   const [busy, setBusy] = useState(false);
+  const [stages, setStages] = useState<Stage[] | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const c = useClock();
 
@@ -38,7 +31,7 @@ export function VoicePanel({ toast }: { toast: (s: string) => void }) {
     if (!f) return;
     setBusy(true);
     try {
-      await ingestVoiceover(f);
+      await ingestVoiceover(f, setStages);
       const a = getState().project.audio!;
       toast(`Voice-over ${a.duration.toFixed(1)}s · ${a.pauses.length} pauses${a.words ? ` · ${a.words.length} words transcribed` : ""}`);
     } catch (e: any) {
@@ -70,6 +63,8 @@ export function VoicePanel({ toast }: { toast: (s: string) => void }) {
       )}
       <input ref={fileRef} type="file" hidden accept="audio/*" onChange={(e) => onFile(e.target.files?.[0])} />
 
+      {busy && stages && <StageList title="Listening to the voice-over" stages={stages} />}
+      {audio?.insight && !busy && <VoiceReport track={audio} />}
       {audio && (
         <>
           <div className="field">

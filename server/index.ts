@@ -6,7 +6,7 @@ import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { claudeShotList, claudePickClip } from "./shots";
-import { claudeWriteFormat, claudeWriteScript } from "./formats";
+import { claudeWriteFormat, claudeWriteScript, claudeListen } from "./formats";
 import { speak, voiceAvailable } from "./voice";
 import { licenseFreepikVideo, licensesToday, freepikVideoStatus, probeFreepikVideo } from "./freepikVideo";
 import { runAgentTurn, claudeConfigured, resetConversation, claudeCheck, probeClaude } from "./agent";
@@ -139,6 +139,20 @@ app.post("/api/script", async (req, res) => {
     }
     const b = req.body ?? {};
     res.json({ script: await claudeWriteScript({ format: b.format ?? {}, brief: b.brief ?? {}, seconds: b.seconds }) });
+  } catch (e: any) {
+    res.status(503).json({ error: e?.message ?? String(e) });
+  }
+});
+
+// Claude listens to the analysed audio: fills the brief and recommends formats (one agent turn).
+app.post("/api/listen", async (req, res) => {
+  try {
+    if (req.user) {
+      const turn = await takeAgentTurn(req.user);
+      if (!turn.ok) return void res.status(429).json({ error: `You've used today's ${turn.limit} agent turns.` });
+    }
+    const b = req.body ?? {};
+    res.json(await claudeListen({ transcript: String(b.transcript ?? ""), voice: b.voice, music: b.music, formats: b.formats ?? [] }));
   } catch (e: any) {
     res.status(503).json({ error: e?.message ?? String(e) });
   }

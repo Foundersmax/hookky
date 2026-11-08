@@ -27,12 +27,22 @@ function studioState() {
     pauses: p.audio.pauses.slice(0, 80).map((x) => [x.s, x.e]),
     transcript_source: p.audio.wordsSource ?? "none (ask the user to paste the script or enable transcription)",
     sentences: p.audio.words ? sentences(p.audio.words).map((s) => ({ s: s.s, e: s.e, text: s.text })) : undefined,
+    // How it's read: highlight the stressed words, cut at the dramatic pauses, match the pace.
+    ...(p.audio.insight && { delivery: { pace: p.audio.insight.pace, wpm: p.audio.insight.wpm, mood: p.audio.insight.mood, stressed_words: p.audio.insight.stressedWords.slice(0, 20), dramatic_pauses: p.audio.insight.dramatic.map((x) => [x.s, x.e]) } }),
+  };
+  const mu = p.music && {
+    file: p.music.name,
+    bpm: p.music.bpm,
+    drop: p.music.drop,
+    start: p.music.start,
+    ...(p.music.insight && { mood: p.music.insight.mood, sections: p.music.insight.sections.map((x) => [x.kind, x.s, x.e]) }),
   };
   return {
     project: { title: p.title, aspect: p.aspect, style: p.style, brand: p.brand, captions: p.captions, total_seconds: +totalDuration(p).toFixed(2) },
     scenes: p.scenes.map(({ id, ...s }, i) => ({ index: i, ...s })),
     assets: assets.slice(-60).filter((a) => a.kind !== "font").map((a) => ({ id: a.id, title: a.title.slice(0, 60), source: a.source, kind: a.kind, w: a.w, h: a.h, ...(a.kind === "video" && { seconds: a.duration }), palette: a.palette })),
     voiceover: vo || null,
+    music: mu || null,
     brand_kits: kits.map((k) => ({ name: k.name, style: k.style, default: !!k.isDefault, brand: (({ bg, fg, accent, muted, fontDisplay, fontBody, logo }) => ({ bg, fg, accent, muted, fontDisplay, fontBody, logo }))(k.brand) })),
     director_notes: currentNotes().slice(0, 10).map((n) => `[${n.level}] ${n.message}`),
   };

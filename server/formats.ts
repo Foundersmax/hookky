@@ -93,3 +93,44 @@ export async function claudeWriteScript(input: { format: { name: string; hook: s
     throw new Error(known ? known.message.replace(/ Using the local director for now\./, "") : String((e as Error)?.message ?? e));
   }
 }
+
+/** Claude listens (through the transcript and the audio analysis) and fills the brief and picks formats. */
+export async function claudeListen(input: { transcript: string; voice?: Record<string, unknown>; music?: Record<string, unknown>; formats: { id: string; name: string; section: string; hook: string }[] }) {
+  if (!claudeConfigured()) throw new Error("Claude isn't configured on the server.");
+  const formats = (Array.isArray(input.formats) ? input.formats : []).slice(0, 40).map((f) => `${clean(f.id, 30)} (${clean(f.section, 10)}): ${clean(f.name, 40)}, ${clean(f.hook, 60)}`).join("\n");
+  const { client, model } = claude();
+  const tool = {
+    name: "audio_brief",
+    description: "What the ad is about and which formats suit this audio.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        product: { type: "string" }, what: { type: "string", description: "what it is, under 10 words" }, audience: { type: "string" },
+        benefits: { type: "array", items: { type: "string" }, maxItems: 4, description: "short, from what's said" },
+        offer: { type: "string" }, cta: { type: "string", description: "button text, 1-3 words" }, url: { type: "string" },
+        recommended: { type: "array", items: { type: "object", properties: { id: { type: "string" }, why: { type: "string", description: "under 10 words" } }, required: ["id", "why"] }, maxItems: 4 },
+      },
+      required: ["recommended"],
+    },
+  };
+  try {
+    const msg = await client.messages.create({
+      model,
+      max_tokens: 1200,
+      tools: [tool],
+      tool_choice: { type: "tool", name: "audio_brief" },
+      system: "You are a creative director listening to a client's voice-over (and music) before editing an ad. From the transcript and the audio analysis, fill in the brief using only what is actually said, and recommend the formats from the list whose structure, energy and mood best fit this audio. Leave fields empty rather than guessing.",
+      messages: [{ role: "user", content: `Transcript:\n${clean(input.transcript, 4000)}\n\nVoice analysis: ${JSON.stringify(input.voice ?? {}).slice(0, 1500)}\nMusic analysis: ${JSON.stringify(input.music ?? {}).slice(0, 800)}\n\nFormats:\n${formats}` }],
+    });
+    const use = msg.content.find((b) => b.type === "tool_use") as { input?: Record<string, any> } | undefined;
+    const r = use?.input ?? {};
+    const ids = new Set((input.formats ?? []).map((f) => f.id));
+    return {
+      brief: { product: clean(r.product, 60), what: clean(r.what, 120), audience: clean(r.audience, 80), benefits: (Array.isArray(r.benefits) ? r.benefits : []).map((b: unknown) => clean(b, 80)).filter(Boolean).slice(0, 4), offer: clean(r.offer, 80), cta: clean(r.cta, 30), url: clean(r.url, 80) },
+      recommended: (Array.isArray(r.recommended) ? r.recommended : []).filter((x: any) => ids.has(x?.id)).map((x: any) => ({ id: String(x.id), why: clean(x.why, 80) })).slice(0, 4),
+    };
+  } catch (e) {
+    const known = explainClaudeError(e);
+    throw new Error(known ? known.message.replace(/ Using the local director for now\./, "") : String((e as Error)?.message ?? e));
+  }
+}

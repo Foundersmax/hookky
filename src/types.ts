@@ -154,6 +154,8 @@ export interface MusicTrack {
   energy?: number[];
   /** where the music lifts the most (seconds into the file) */
   drop?: number;
+  /** what the track sounds like: sections, mood, loudness (from the audio analysis) */
+  insight?: import("./audio/insight").MusicInsight;
 }
 
 export interface AudioTrack {
@@ -166,6 +168,8 @@ export interface AudioTrack {
   pauses: { s: number; e: number }[];
   words?: Word[];
   wordsSource?: "transcription" | "script-estimate";
+  /** how it's spoken and what it says (from the audio analysis) */
+  insight?: import("./audio/insight").VoiceInsight;
 }
 
 export interface Project {

@@ -1,7 +1,8 @@
 // Making a creative format in the studio: voice-over (uploaded or generated), music, the format
 // built around them, Claude's rewrite when available, then stock footage cast for every shot the
 // library can't fill. The scenes land at once and fill in as footage arrives; one undo step.
-import type { Aspect, MusicTrack, Scene } from "./types";
+import type { Aspect, AudioTrack, MusicTrack, Scene } from "./types";
+import { mixLevel } from "./audio/insight";
 import { getState, setState, applyStoryboard, setAudio, libraryId, updateProject } from "./store";
 import { sanitizeScene } from "./sanitize";
 import { ingestVoiceover } from "./components/VoicePanel";
@@ -21,8 +22,12 @@ export interface CreateInput {
   keepBrand: boolean;
   /** a new voice-over file (uploaded or generated); `dropVoice` removes the project's */
   voiceFile?: File;
+  /** a voice-over already listened to (words and insight), used as is */
+  voiceTrack?: AudioTrack;
   dropVoice?: boolean;
   musicFile?: File;
+  /** a music track already analysed */
+  musicTrack?: MusicTrack;
   dropMusic?: boolean;
   /** fill shots the library can't with stock footage */
   useStock: boolean;
@@ -41,12 +46,13 @@ export async function createFormat(input: CreateInput): Promise<string> {
 
   // 1. Sound.
   if (input.dropVoice) setAudio(undefined);
-  if (input.voiceFile) {
+  if (input.voiceTrack) setAudio(input.voiceTrack);
+  else if (input.voiceFile) {
     step("Listening to the voice-over");
     await ingestVoiceover(input.voiceFile);
   }
-  let music: MusicTrack | undefined = input.dropMusic ? undefined : getState().project.music;
-  if (input.musicFile || music) {
+  let music: MusicTrack | undefined = input.dropMusic ? undefined : input.musicTrack ?? getState().project.music;
+  if (!input.musicTrack && (input.musicFile || music)) {
     step("Finding the beat");
     try {
       music = await loadMusic(input.musicFile ?? music!);
@@ -65,7 +71,7 @@ export async function createFormat(input: CreateInput): Promise<string> {
   step(audio ? "Cutting to the voice-over" : "Building the draft");
   let scenes: Omit<Scene, "id">[];
   let captions = false;
-  if (audio) ({ scenes, captions } = buildWithVoice(f, brief, { duration: audio.duration, pauses: audio.pauses, words: audio.words }, images));
+  if (audio) ({ scenes, captions } = buildWithVoice(f, brief, { duration: audio.duration, pauses: audio.pauses, words: audio.words, insight: audio.insight }, images));
   else scenes = buildFormat(f, brief, images);
   let title = `${brief.product} · ${f.name}`;
 
@@ -96,6 +102,15 @@ export async function createFormat(input: CreateInput): Promise<string> {
     const total = scenes.reduce((a, s) => a + s.duration, 0);
     const win = musicWindow({ duration: music.duration ?? 0, bpm: music.bpm, beats: music.beats, downbeats: music.downbeats, energy: music.energy, drop: music.drop }, total, 0.35);
     musicStart = win.start;
+    // With a voice-over, the music's drop lands where the product is revealed.
+    if (audio && music.drop !== undefined) {
+      const k = scenes.findIndex((x) => x.template === "logo-reveal" || ((x.template === "spotlight" || x.template === "text-mask" || x.template === "product-hero") && (x.headline ?? "").toLowerCase().includes(brief.product.toLowerCase())));
+      const at = k > 0 ? scenes.slice(0, k).reduce((a, x) => a + x.duration, 0) : -1;
+      if (at > 0 && music.drop - at >= 0) {
+        musicStart = +(music.drop - at).toFixed(3);
+        notes.push(`the music's drop lands on the reveal at ${at.toFixed(1)}s`);
+      }
+    }
     if (!audio && music.beats?.length) scenes = snapToBeats(scenes, beatsInCut({ ...music, start: musicStart }, total + 1));
   }
 
@@ -106,7 +121,15 @@ export async function createFormat(input: CreateInput): Promise<string> {
       ...st.project,
       captions,
       brand: input.keepBrand ? st.project.brand : { ...st.project.brand, name: brief.product },
-      music: music ? { ...music, start: musicStart ?? 0, volume: audio ? Math.min(music.volume, 0.35) : Math.max(music.volume, 0.8), duck: audio ? Math.max(music.duck ?? 0.6, 0.6) : 0 } : undefined,
+      // The mix from the analysis: music about 12 dB under the voice, dipping more under a slow read.
+      music: music
+        ? {
+            ...music,
+            start: musicStart ?? 0,
+            volume: audio ? (audio.insight?.rms && music.insight?.rms ? mixLevel(audio.insight.rms, music.insight.rms) : Math.min(music.volume, 0.35)) : Math.max(music.volume, 0.8),
+            duck: audio ? (audio.insight?.pace === "fast" || audio.insight?.pace === "brisk" ? 0.55 : 0.7) : 0,
+          }
+        : undefined,
     },
   }));
   clock.seek(0);
