@@ -125,7 +125,7 @@ export function LibraryPanel({ toast }: { toast: (s: string) => void }) {
       {hasServer && (<>
       <div className="field">
         <div className="row" style={{ justifyContent: "space-between" }}>
-          <label>Search {media === "video" ? "stock video" : "visual sources"}</label>
+          <label>Search</label>
           <div className="seg opt-seg" role="radiogroup" aria-label="Media type">
             {(["photo", "video"] as const).map((m) => (
               <button key={m} role="radio" aria-checked={media === m} className={media === m ? "on" : ""} onClick={() => setMedia(m)}>
@@ -135,37 +135,34 @@ export function LibraryPanel({ toast }: { toast: (s: string) => void }) {
           </div>
         </div>
         <div className="row" style={{ gap: 6 }}>
-          <input type="text" placeholder={media === "video" ? "e.g. slow pour of coffee, macro" : "e.g. matte black earbuds, studio light"} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && search()} />
+          <input type="text" placeholder={media === "video" ? "Clips, e.g. slow coffee pour" : "Photos, e.g. matte black earbuds"} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && search()} />
           <button className="btn icon primary" onClick={search} disabled={busy} style={{ flex: "none" }}>
             <Icon name="search" />
           </button>
         </div>
         <div className="sources">
-          {(media === "video" ? VIDEO_IDS : SEARCH_IDS).map((id) => {
+          {(media === "video" ? VIDEO_IDS : SEARCH_IDS).filter((id) => configured(id)).map((id) => {
             const c = connectors.find((x) => x.id === id);
             const on = sources.includes(id);
             return (
               <button
                 key={id}
-                className={`src-chip ${on ? "on" : ""} ${c?.configured ? "ok" : "off"}`}
-                title={c?.note}
+                className={`src-chip filter ${on ? "on" : ""}`}
+                aria-pressed={on}
+                title={on ? `Searching only the selected sources` : `Search only ${c?.label.split(" ")[0] ?? id} (none selected = all)`}
                 onClick={() => setSources((s) => (on ? s.filter((x) => x !== id) : [...s, id]))}
               >
-                <span className="dot" />
                 {c?.label.split(" ")[0] ?? id}
               </button>
             );
           })}
         </div>
-        <span className="tiny">
-          Green = connected. Unselected = search all connected sources. Keys go in <code>.env</code>.
-          {media === "video" && ` Clips match your ${aspect} format where the source supports it.`}
-        </span>
+        {media === "video" && !VIDEO_IDS.some((id) => configured(id)) && <span className="tiny">No stock video source is connected yet.</span>}
       </div>
       <div className="field">
-        <label>Import from any link</label>
+        <label>Import from a link</label>
         <div className="row" style={{ gap: 6 }}>
-          <input type="url" placeholder="Pinterest pin, Behance, Dribbble, product page…" value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === "Enter" && importUrl()} />
+          <input type="url" placeholder="Pinterest, Behance, any page…" value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === "Enter" && importUrl()} />
           <button className="btn icon" onClick={importUrl} disabled={busy} style={{ flex: "none" }}>
             <Icon name="link" />
           </button>
@@ -173,7 +170,7 @@ export function LibraryPanel({ toast }: { toast: (s: string) => void }) {
       </div>
       </>)}
       <div className="drop" onClick={() => fileRef.current?.click()}>
-        <Icon name="image" /> Upload product shots, logos, references, video clips
+        <Icon name="image" /> Upload images or clips
         <input ref={fileRef} type="file" hidden multiple accept="image/*,video/*" onChange={async (e) => {
           const files = [...(e.target.files ?? [])];
           e.target.value = "";

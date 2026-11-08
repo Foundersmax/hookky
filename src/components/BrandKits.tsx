@@ -92,7 +92,7 @@ export function BrandKits() {
           </button>
         )
       )}
-      <span className="tiny">{kits.length ? "Kits keep colours, fonts, logo and style; your library keeps the files." : "Save colours, fonts, logo and style once, then apply them to any project or ask the agent to."}</span>
+      {!kits.length && <span className="tiny">Save colours, fonts and logo to reuse in any project.</span>}
     </div>
   );
 }

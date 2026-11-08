@@ -186,6 +186,40 @@ const ZPatch = z.object({ ops: z.array(z.object({ op: z.enum(["update", "insert"
 // ---------------------------------------------------------------- conversations (append-only, server-held)
 type Msg = Anthropic.Beta.BetaMessageParam;
 const conversations = new Map<string, Msg[]>();
+/** Conversations kept in memory (least recently used are dropped). */
+const MAX_CONVERSATIONS = 60;
+/** Only the most recent user turns keep their images; older ones become a short note. */
+const KEEP_IMAGE_TURNS = 4;
+
+class ContextOverflow extends Error {}
+
+function conversation(id: string): Msg[] {
+  const h = conversations.get(id) ?? [];
+  conversations.delete(id); // re-insert: Map order doubles as least-recently-used order
+  conversations.set(id, h);
+  while (conversations.size > MAX_CONVERSATIONS) conversations.delete(conversations.keys().next().value!);
+  return h;
+}
+
+/**
+ * Keep a conversation valid and bounded: a turn stopped mid-tool-call gets its missing tool
+ * results, and images in older turns (references, contact sheets) are replaced by a note so a
+ * long session doesn't hold megabytes of base64 per user.
+ */
+export function tidyHistory(history: Msg[]) {
+  const last = history[history.length - 1];
+  if (last?.role === "assistant" && Array.isArray(last.content)) {
+    const ids = last.content.filter((b: any) => b.type === "tool_use").map((b: any) => b.id as string);
+    if (ids.length) history.push({ role: "user", content: ids.map((id) => ({ type: "tool_result" as const, tool_use_id: id, is_error: true, content: "Stopped by the user before this finished." })) });
+  }
+  let seen = 0;
+  for (let i = history.length - 1; i >= 0; i--) {
+    const m = history[i];
+    if (m.role !== "user" || !Array.isArray(m.content) || !m.content.some((b: any) => b.type === "image")) continue;
+    if (++seen <= KEEP_IMAGE_TURNS) continue;
+    m.content = m.content.map((b: any) => (b.type === "image" ? { type: "text" as const, text: "[image from an earlier turn, no longer attached]" } : b));
+  }
+}
 
 export interface TurnInput {
   conversationId: string;
@@ -217,18 +251,40 @@ export function turnContent(input: TurnInput): Anthropic.Beta.BetaContentBlockPa
 }
 
 export async function runAgentTurn(input: TurnInput, res: Response) {
-  const send = (e: AgentEvent) => res.write(`data: ${JSON.stringify(e)}\n\n`);
-  const history = conversations.get(input.conversationId) ?? [];
-  conversations.set(input.conversationId, history);
-
-  history.push({ role: "user", content: turnContent(input) });
+  const send = (e: AgentEvent) => void (!res.writableEnded && res.write(`data: ${JSON.stringify(e)}\n\n`));
+  const history = conversation(String(input.conversationId || "default"));
+  tidyHistory(history);
+  const turn: Msg = { role: "user", content: turnContent(input) };
+  // A previous turn that ended on a user message (stopped early): fold this one into it.
+  const prev = history[history.length - 1];
+  if (prev?.role === "user" && Array.isArray(prev.content)) prev.content = [...prev.content, ...(turn.content as Anthropic.Beta.BetaContentBlockParam[])];
+  else history.push(turn);
   const shadow = new Shadow(input.state);
 
   let closed = false;
-  res.on("close", () => (closed = true));
+  const abort = new AbortController();
+  res.on("close", () => {
+    closed = true;
+    abort.abort(); // stop generating (and paying for) a reply nobody will read
+  });
 
+  let restarted = false;
   for (let step = 0; step < 10 && !closed; step++) {
-    const message = await streamOnce(history, send);
+    let message: Anthropic.Beta.BetaMessage | null;
+    try {
+      message = await streamOnce(history, send, abort.signal);
+    } catch (e) {
+      if (!(e instanceof ContextOverflow) || restarted) {
+        send({ type: "error", message: "This conversation is too long for the agent. Start a new conversation (↻ in the chat header)." });
+        return;
+      }
+      // The thread outgrew the context window: continue from just this turn.
+      restarted = true;
+      history.splice(0, history.length, { role: "user", content: turnContent(input) });
+      send({ type: "activity", label: "Starting a fresh thread (the conversation got long)" });
+      step--;
+      continue;
+    }
     if (!message) return;
     history.push({ role: "assistant", content: message.content as Anthropic.Beta.BetaContentBlockParam[] });
 
@@ -256,7 +312,7 @@ export async function runAgentTurn(input: TurnInput, res: Response) {
   }
 }
 
-async function streamOnce(history: Msg[], send: (e: AgentEvent) => void): Promise<Anthropic.Beta.BetaMessage | null> {
+async function streamOnce(history: Msg[], send: (e: AgentEvent) => void, signal?: AbortSignal): Promise<Anthropic.Beta.BetaMessage | null> {
   const allTools: Anthropic.Beta.BetaToolUnion[] = webSearchEnabled
     ? [...tools, { type: "web_search_20260209", name: "web_search", max_uses: 3 } as Anthropic.Beta.BetaToolUnion]
     : tools;
@@ -272,7 +328,7 @@ async function streamOnce(history: Msg[], send: (e: AgentEvent) => void): Promis
       betas: ["server-side-fallback-2026-07-01"],
       // Server-side refusal fallback, routed by category.
       ...({ fallbacks: "default" } as object),
-    });
+    }, { signal });
     stream.on("text", (delta) => send({ type: "text", delta }));
     stream.on("thinking", (delta) => send({ type: "thinking", delta }));
     stream.on("streamEvent", (ev) => {
@@ -284,10 +340,12 @@ async function streamOnce(history: Msg[], send: (e: AgentEvent) => void): Promis
     });
     return await stream.finalMessage();
   } catch (e) {
+    if (signal?.aborted) return null;
     if (e instanceof Anthropic.BadRequestError && webSearchEnabled && /web_search/i.test(e.message)) {
       webSearchEnabled = false; // org has web search disabled — continue without it
-      return streamOnce(history, send);
+      return streamOnce(history, send, signal);
     }
+    if (e instanceof Anthropic.BadRequestError && /prompt is too long|context (window|length)|too many (input )?tokens/i.test(e.message)) throw new ContextOverflow();
     const authProblem = e instanceof Anthropic.AuthenticationError || /authentication method|api[_ ]?key/i.test(String((e as Error)?.message));
     if (authProblem) send({ type: "error", message: "Claude credentials are missing or invalid — using the local director. Add ANTHROPIC_API_KEY to .env." });
     else if (e instanceof Anthropic.RateLimitError) send({ type: "error", message: "Rate limited by the API — try again in a moment." });
@@ -424,4 +482,4 @@ export function resetConversation(id: string) {
 }
 
 /** Internals exposed for unit tests only. */
-export const __test = { Shadow, runTool, turnContent };
+export const __test = { Shadow, runTool, turnContent, tidyHistory, conversation };

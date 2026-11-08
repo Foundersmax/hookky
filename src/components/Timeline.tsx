@@ -315,8 +315,7 @@ export function Timeline() {
   return (
     <div className="timeline">
       <div className="tl-head">
-        <span className="label">Timeline</span>
-        <span className="tiny tl-hint">Drag scenes to reorder · ⌘/Ctrl + scroll to zoom · double-click to zoom to a scene{audio && snapOn ? " · hold Alt to resize without snapping" : ""}</span>
+        <span className="label" title={`Drag scenes to reorder · ⌘/Ctrl + scroll to zoom · double-click to zoom to a scene${audio && snapOn ? " · hold Alt to resize without snapping" : ""}`}>Timeline</span>
         <span className="spacer" />
         {snapNote && <span className="tiny tl-note" role="status">{snapNote}</span>}
         <div className="tl-snap" role="group" aria-label="Snap to pauses">
@@ -419,7 +418,7 @@ export function Timeline() {
             <div className="playhead" style={{ left: c.time * pxs - 1 }} />
           </div>
           <div className="tl-audio" onPointerDown={seekFromEvent}>
-            {project.audio ? <canvas ref={wave} style={{ width }} /> : <div className="empty">Drop a voice-over in the chat or the Voice tab to sync the animation</div>}
+            {project.audio ? <canvas ref={wave} style={{ width }} /> : <div className="empty">Drop a voice-over to sync</div>}
           </div>
         </div>
       </div>

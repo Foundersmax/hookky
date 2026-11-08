@@ -126,9 +126,21 @@ export function askForDirections(brief = "") {
   return sendToAgent(t ? `Pitch me 3 creative directions for this, then wait for me to pick: ${t}` : "Pitch me 3 creative directions for this project, then wait for me to pick one.", [], { display: t ? undefined : "Pitch me 3 directions" });
 }
 
+let inFlight: AbortController | null = null;
+/** Stop the agent's current reply (edits it already made stay, and can be undone). */
+export function stopAgent() {
+  inFlight?.abort();
+}
+
+/** Longest message sent to the agent; anything longer is cut with a note. */
+const MAX_MESSAGE = 20000;
+
 export async function sendToAgent(text: string, attachments: ChatAttachment[] = [], opts: SendOptions = {}) {
   const s = getState();
   if (s.busy) return;
+  if (text.length > MAX_MESSAGE) text = `${text.slice(0, MAX_MESSAGE)}\n\n[Message cut at ${MAX_MESSAGE.toLocaleString()} characters]`;
+  const ctl = new AbortController();
+  inFlight = ctl;
   pushChat({ id: uid("m"), role: "user", text: opts.display ?? text, attachments, ...(opts.review && { review: true }) });
   const replyId = uid("m");
   pushChat({ id: replyId, role: "assistant", text: "", pending: true, activity: [] });
@@ -171,7 +183,7 @@ export async function sendToAgent(text: string, attachments: ChatAttachment[] = 
           onText: (t) => updateChat(replyId, (m) => ({ ...m, text: t })),
           onActivity: (label) => (activity.push(label), updateChat(replyId, (m) => ({ ...m, activity: [...activity] }))),
           onDirections: (d) => showDirections(sanitizeDirections(d)),
-        }, undefined, frames);
+        }, ctl.signal, frames);
         updateChat(replyId, (m) => ({ ...m, text: r.text.trim() || "Done — have a look at the preview.", pending: false }));
       } catch (e: any) {
         const code = e?.code ?? "upstream_error";
@@ -209,6 +221,7 @@ export async function sendToAgent(text: string, attachments: ChatAttachment[] = 
     );
     const res = await fetch("/api/agent", {
       method: "POST",
+      signal: ctl.signal,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ conversationId: s.conversationId, text, state: studioState(), images, frames: (opts.sheets ?? []).map((sh) => ({ mediaType: "image/jpeg", data: sh.url.split(",")[1] })) }),
     });
@@ -240,13 +253,15 @@ export async function sendToAgent(text: string, attachments: ChatAttachment[] = 
       } else updateChat(replyId, (m) => ({ ...m, text: fatal, error: true, pending: false }));
     } else updateChat(replyId, (m) => ({ ...m, pending: false, text: m.text || "Done — have a look at the preview." }));
   } catch (e: any) {
-    runLocal(`Couldn't reach Claude (${e.message}). Used the local director instead.`);
+    if (ctl.signal.aborted) updateChat(replyId, (m) => ({ ...m, text: m.text ? `${m.text}\n\n(Stopped.)` : "Stopped.", pending: false }));
+    else runLocal(`Couldn't reach Claude (${e.message}). Used the local director instead.`);
   } finally {
+    if (inFlight === ctl) inFlight = null;
     setState({ busy: false });
     // A fresh storyboard from Claude gets one look at its own rendered frames (the hosted and
     // fallback paths return early, so this lives here).
     const reply = getState().chat.find((m) => m.id === replyId);
-    if (!opts.review && buildCount() > builtBefore && !reply?.error && autoReviewOn() && canReview()) void reviewFrames(true).catch(() => {});
+    if (!ctl.signal.aborted && !opts.review && buildCount() > builtBefore && !reply?.error && autoReviewOn() && canReview()) void reviewFrames(true).catch(() => {});
   }
 }
 

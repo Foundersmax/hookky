@@ -99,7 +99,7 @@ export function BrandPanel() {
             })}
           </ul>
         ) : (
-          <span className="tiny">Upload your brand's .woff2, .woff, .ttf or .otf files. Each weight is its own file.</span>
+          <span className="tiny">.woff2, .ttf or .otf, one file per weight.</span>
         )}
         <button className="btn" onClick={() => fontInput.current?.click()} disabled={busy}>
           <Icon name="plus" /> {busy ? "Adding…" : "Upload font files"}
@@ -142,7 +142,7 @@ export function BrandPanel() {
           <option value="">— none (uses brand name) —</option>
           {assets.filter((a) => a.kind !== "font").map((a) => <option key={a.id} value={a.id}>{a.title.slice(0, 40)}</option>)}
         </select>
-        <span className="tiny">Upload a PNG/SVG with a transparent background for best results.</span>
+        <span className="tiny">A transparent PNG or SVG works best.</span>
       </div>
     </>
   );

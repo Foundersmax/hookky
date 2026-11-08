@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { useStudio, addAssets, setAudio, getState, pushChat } from "../store";
-import { sendToAgent, resetAgent, reviewFrames, askForDirections } from "../agent/client";
+import { useStudio, addAssets, setAudio, getState, pushChat, setState } from "../store";
+import { sendToAgent, resetAgent, reviewFrames, askForDirections, stopAgent } from "../agent/client";
 import { DirectionCards } from "./DirectionCards";
 import type { Asset, ChatAttachment } from "../types";
 import { Icon } from "./Icon";
@@ -10,13 +10,11 @@ import { extractPalette } from "../engine/images";
 import { ingestVoiceover } from "./VoicePanel";
 import { VideoStore } from "../engine/videos";
 
-const STARTERS: { t: string; s: string; server?: boolean; directions?: boolean }[] = [
-  { t: "Pitch me 3 directions", s: "Type your product below first, and I'll sketch three different looks to pick from.", directions: true },
-  { t: "30s launch ad for a minimalist smartwatch", s: "\"Orbit\" — titanium, 10-day battery, sleep coaching. Swiss style, pre-order CTA." },
-  { t: "Vertical reel for a skincare drop", s: "Blush style, 9:16, soft and premium, captions on." },
-  { t: "Turn my voice-over into motion graphics", s: "Upload a 30–60s VO and I'll storyboard it in sync." },
-  { t: "Find references on Pinterest & Freepik", s: "Moodboard for matte-black audio gear, studio lighting.", server: true },
-  { t: "15s teaser for a coffee subscription", s: "\"Ritual\" — beans roasted weekly, delivered fresh. Editorial style, square format.", server: false },
+const STARTERS: { t: string; s: string; directions?: boolean; upload?: boolean }[] = [
+  { t: "Pitch me 3 directions", s: "Type your product first, then tap this for three looks to pick from.", directions: true },
+  { t: "30s launch ad for a smartwatch", s: "30s launch ad for a minimalist smartwatch called \"Orbit\": titanium, 10-day battery, sleep coaching. Swiss style, pre-order CTA." },
+  { t: "Vertical reel for a skincare drop", s: "Vertical 9:16 reel for a skincare drop. Blush style, soft and premium, captions on." },
+  { t: "Animate my voice-over", s: "Upload a 30–60s voice-over and I'll storyboard it in sync.", upload: true },
 ];
 
 export async function fileToUploadAsset(f: File): Promise<Asset> {
@@ -114,6 +112,8 @@ export function ChatPanel() {
       } else if (f.type.startsWith("audio/") || /\.(mp3|wav|m4a|aac|ogg|flac)$/i.test(f.name)) {
         setPending((p) => [...p, { kind: "audio", name: f.name }]);
         await ingestVoiceover(f);
+      } else {
+        setState({ notice: `${f.name} isn't supported here. Drop images, video clips or audio.` });
       }
     }
   }
@@ -153,12 +153,16 @@ export function ChatPanel() {
           <div className="welcome">
             <LogoMark size={36} />
             <h3>What are we launching?</h3>
-            <p>Describe the product, drop references or a voice-over, or paste a link from Pinterest, Freepik, Envato — anywhere.</p>
+            <p>Describe a product, drop images or a voice-over, or paste a link.</p>
             <div className="chips">
-              {STARTERS.filter((s) => s.server === undefined || s.server === !!health?.connectors.length).map((s) => (
-                <button key={s.t} className={`chip ${s.directions ? "accent" : ""}`} onClick={() => (s.directions ? (text.trim() ? (askForDirections(text), setText("")) : askForDirections()) : submit(`${s.t}. ${s.s}`))}>
+              {STARTERS.map((s) => (
+                <button
+                  key={s.t}
+                  className={`chip ${s.directions ? "accent" : ""}`}
+                  title={s.s}
+                  onClick={() => (s.directions ? (text.trim() ? (askForDirections(text), setText("")) : askForDirections()) : s.upload ? fileRef.current?.click() : submit(s.s))}
+                >
                   {s.t}
-                  <small>{s.s}</small>
                 </button>
               ))}
             </div>
@@ -252,13 +256,16 @@ export function ChatPanel() {
             </button>
             <input ref={fileRef} type="file" hidden multiple accept="image/*,audio/*,video/*" onChange={(e) => e.target.files && addFiles(e.target.files)} />
             <span className="tiny" style={{ flex: 1 }}>Images · voice-over · links</span>
-            <button className="btn primary" disabled={busy || (!text.trim() && !pending.length)} onClick={() => submit()}>
-              <Icon name="send" size={14} /> {busy ? "Working" : "Send"}
-            </button>
+            {busy ? (
+              <button className="btn" onClick={stopAgent} title="Stop the agent's reply">
+                <span className="stop-square" aria-hidden="true" /> Stop
+              </button>
+            ) : (
+              <button className="btn primary" disabled={!text.trim() && !pending.length} onClick={() => submit()}>
+                <Icon name="send" size={14} /> Send
+              </button>
+            )}
           </div>
-        </div>
-        <div className="hint">
-          <kbd>Enter</kbd> send · <kbd>Shift</kbd>+<kbd>Enter</kbd> newline · drop files anywhere here
         </div>
       </div>
     </aside>

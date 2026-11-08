@@ -12,6 +12,9 @@ import { safeFetch, readLimited, BlockedUrlError } from "./safeFetch";
 import { transcribe, transcriptionProvider } from "./transcribe";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+
+// A stray rejected promise must not take the studio down for everyone; log it and keep serving.
+process.on("unhandledRejection", (e) => console.error("Unhandled rejection:", e));
 /** The app bundle this server serves (lets CI confirm a deploy without signing in). */
 const build = (() => {
   try {

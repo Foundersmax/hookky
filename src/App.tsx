@@ -233,21 +233,20 @@ export function App() {
             <Icon name="panelRight" />
           </button>
         </div>
-        <button className="btn icon ghost" title="Undo (⌘Z)" onClick={undo}>
+        <button className="btn icon ghost hide-sm" title="Undo (⌘Z)" aria-label="Undo" onClick={undo}>
           <Icon name="undo" />
         </button>
-        <button className="btn icon ghost" title="Redo (⇧⌘Z)" onClick={redo}>
+        <button className="btn icon ghost hide-sm" title="Redo (⇧⌘Z)" aria-label="Redo" onClick={redo}>
           <Icon name="redo" />
         </button>
-        <Versions toast={toast} />
+        <div className="hide-xs" style={{ display: "contents" }}>
+          <Versions toast={toast} />
+        </div>
         </>)}
-        <button className="btn ghost cmdk" title="Command bar (⌘K)" aria-label="Command bar" onClick={() => setShowPalette(true)}>
+        <button className="btn ghost cmdk hide-xs" title="Command bar (⌘K)" aria-label="Command bar" onClick={() => setShowPalette(true)}>
           <Icon name="search" /> <span>Search or ask…</span> <kbd>⌘K</kbd>
         </button>
-        <button className="btn icon ghost" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts" onClick={() => setShowKeys(true)}>
-          <Icon name="keyboard" />
-        </button>
-        <button className="btn icon ghost" title="Toggle theme" onClick={toggleTheme}>
+        <button className="btn icon ghost hide-xs" title="Toggle theme" aria-label="Toggle theme" onClick={toggleTheme}>
           <Icon name="sun" />
         </button>
         {view === "studio" ? (

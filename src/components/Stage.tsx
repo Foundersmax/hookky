@@ -273,15 +273,15 @@ export function Stage() {
         <button className={`btn icon ghost`} title="Loop" style={{ color: c.loop ? "var(--text)" : "var(--text-3)" }} onClick={() => ((clock.loop = !clock.loop), clock.seek(clock.time))}>
           <Icon name="loop" />
         </button>
-        <span className="scene-info">
-          Scene {cur ? cur.index + 1 : 0}/{tl.length} · {cur?.scene.template} · {W}×{H}
+        <span className="scene-info" title={`${cur?.scene.template ?? ""} · ${W}×${H}`}>
+          Scene {cur ? cur.index + 1 : 0}/{tl.length}
         </span>
         <span className="spacer" />
-        <label className="toggle">
+        <label className="toggle hide-sm">
           <input type="checkbox" checked={project.captions} onChange={(e) => updateProject((p) => ({ ...p, captions: e.target.checked }))} />
           Captions
         </label>
-        <label className="toggle">
+        <label className="toggle hide-sm">
           <input type="checkbox" checked={project.grain} onChange={(e) => updateProject((p) => ({ ...p, grain: e.target.checked }))} />
           Film grain
         </label>

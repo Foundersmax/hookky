@@ -114,3 +114,39 @@ test("set_brand applies a saved brand kit by name and reports unknown ones", asy
   const miss = await runTool("set_brand", { kit: "Orbit" }, () => {}, shadow);
   assert.match(miss, /No brand kit called "Orbit" \(kits: Acme\)/);
 });
+
+test("a turn stopped mid-tool-call is repaired so the next turn is valid", () => {
+  const { tidyHistory } = __test;
+  const history: any[] = [
+    { role: "user", content: [{ type: "text", text: "make an ad" }] },
+    { role: "assistant", content: [{ type: "text", text: "On it." }, { type: "tool_use", id: "t1", name: "create_storyboard", input: {} }, { type: "tool_use", id: "t2", name: "set_brand", input: {} }] },
+  ];
+  tidyHistory(history);
+  assert.equal(history.length, 3);
+  assert.deepEqual(history[2].content.map((b: any) => [b.type, b.tool_use_id, b.is_error]), [["tool_result", "t1", true], ["tool_result", "t2", true]]);
+  tidyHistory(history);
+  assert.equal(history.length, 3, "idempotent");
+});
+
+test("only the latest turns keep their images", () => {
+  const { tidyHistory } = __test;
+  const img = { type: "image", source: { type: "base64", media_type: "image/jpeg", data: "AAAA" } };
+  const history: any[] = [];
+  for (let i = 0; i < 6; i++) history.push({ role: "user", content: [img, { type: "text", text: `turn ${i}` }] }, { role: "assistant", content: [{ type: "text", text: "ok" }] });
+  tidyHistory(history);
+  const withImages = history.filter((m) => m.role === "user" && m.content.some((b: any) => b.type === "image")).length;
+  assert.equal(withImages, 4);
+  assert.match(history[0].content[0].text, /no longer attached/);
+  assert.equal(history[0].content[1].text, "turn 0", "the words stay");
+});
+
+test("the server keeps a bounded number of conversations", () => {
+  const { conversation } = __test;
+  const first = conversation("conv-first");
+  first.push({ role: "user", content: "hi" } as any);
+  for (let i = 0; i < 70; i++) conversation(`conv-${i}`);
+  assert.equal(conversation("conv-first").length, 0, "the oldest one was dropped");
+  const kept = conversation("conv-69");
+  kept.push({ role: "user", content: "x" } as any);
+  assert.equal(conversation("conv-69").length, 1, "recent ones are kept");
+});

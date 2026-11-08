@@ -167,17 +167,16 @@ export function ExportPanel({ toast }: { toast: (s: string) => void }) {
           <label>Formats</label>
           <div className="sources">
             {ASPECTS.map((a) => (
-              <button key={a} className={`src-chip ${formats.includes(a) ? "on ok" : ""}`} aria-pressed={formats.includes(a)} onClick={() => setFormats((f) => (f.includes(a) ? f.filter((x) => x !== a) : [...f, a]))}>
-                <span className="dot" /> {a} <span className="tiny">{outputSize(a, prefs.scale).join("×")}</span>
+              <button key={a} className={`src-chip filter ${formats.includes(a) ? "on" : ""}`} title={outputSize(a, prefs.scale).join("×")} aria-pressed={formats.includes(a)} onClick={() => setFormats((f) => (f.includes(a) ? f.filter((x) => x !== a) : [...f, a]))}>
+                {a}
               </button>
             ))}
           </div>
-          <span className="tiny">Layouts adapt per format, so every cut-down renders in one go.</span>
         </div>
         <Seg label="Quality" value={prefs.scale} onChange={(scale) => setPrefs({ scale })} options={[{ v: 1, label: "1080p" }, { v: 2, label: "4K", hint: "Twice the resolution; files are about 4× larger and take longer" }]} />
         <Seg label="Frame rate" value={prefs.fps} onChange={(fps) => setPrefs({ fps })} options={[{ v: 30, label: "30 fps" }, { v: 60, label: "60 fps", hint: "Smoother motion; twice the frames to render" }]} />
         <div className="muted">
-          {total.toFixed(1)}s · {ext.toUpperCase()}
+          {formats.length === 1 ? outputSize(formats[0], prefs.scale).join("×") : `${formats.length} formats`} · {total.toFixed(1)}s · {ext.toUpperCase()}
           {project.audio ? " · with voice-over" : ""}
           {project.music ? " · with music" : ""}
           {project.captions ? " · captions burned in" : ""}
@@ -185,7 +184,7 @@ export function ExportPanel({ toast }: { toast: (s: string) => void }) {
         <button className="btn primary" disabled={!formats.length || busy} onClick={exportVideos}>
           <Icon name="download" /> Export {formats.length > 1 ? `${formats.length} videos` : "video"}
         </button>
-        <span className="tiny">{typeof VideoEncoder !== "undefined" ? "Frame-accurate render, usually faster than real time." : "This browser renders in real time: keep the tab visible until it finishes."}</span>
+        {typeof VideoEncoder === "undefined" && <span className="tiny">This browser renders in real time: keep the tab visible until it finishes.</span>}
       </div>
 
       <div className="card">
@@ -224,7 +223,6 @@ export function ExportPanel({ toast }: { toast: (s: string) => void }) {
           <button className="btn" disabled={!captions.cues.length} onClick={() => saveCaptions("srt")}>Download .srt</button>
           <button className="btn" disabled={!captions.cues.length} onClick={() => saveCaptions("vtt")}>Download .vtt</button>
         </div>
-        <span className="tiny">Upload alongside the video on YouTube, LinkedIn or Meta, or import into your editor.</span>
       </div>
 
       <div className="card">

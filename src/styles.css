@@ -594,3 +594,30 @@ select.sel { height: 30px; border-radius: 8px; background: transparent; font-siz
 .btn.danger { color: var(--danger); }
 .kit-name-form { gap: 6px; }
 .kit-name-form input { flex: 1; min-width: 0; border: 1px solid var(--line); background: var(--panel-2); border-radius: 8px; padding: 6px 8px; }
+
+/* ---------- minimal pass: quieter chrome, compact controls */
+.src-chip.filter { padding: 3px 10px; }
+.src-chip.filter.on { background: var(--text); color: var(--bg); border-color: var(--text); }
+.presets { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.preset .pv { height: 36px; padding: 6px 8px; font-size: 15px; }
+.preset .pv i { width: 8px; height: 8px; margin-bottom: 3px; }
+.preset .nm { padding: 4px 8px; font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chip { padding: 8px 11px; }
+.welcome p { margin-bottom: 12px; }
+.scene-info { font-variant-numeric: tabular-nums; }
+
+/* Phones: the top bar wraps and grows; the preview comes first, then the chat, then the panels. */
+@media (max-width: 900px) {
+  .app { grid-template-rows: auto 1fr; }
+  .topbar { height: auto; padding-block: 8px; }
+  .hide-sm { display: none !important; }
+  .main { grid-template-areas: "center" "chat" "side"; }
+  .main > .workspace { display: contents; }
+  .main > .workspace > .center { grid-area: center; }
+  .main > .workspace > .side { grid-area: side; }
+  .main > .chat { height: min(72vh, 600px); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .transport { flex-wrap: nowrap; }
+}
+
+.stop-square { width: 9px; height: 9px; border-radius: 2px; background: currentColor; display: inline-block; }
+@media (max-width: 480px) { .topbar .hide-xs { display: none !important; } .topbar select.sel { max-width: 92px; } }
