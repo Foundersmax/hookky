@@ -3,6 +3,8 @@
 // short brief; with Claude available the server rewrites that draft (copy, emphasis, effects)
 // while keeping its structure. Pure (no DOM).
 import type { Aspect, Effect, Grade, Scene, TransitionId } from "./types";
+import { voiceSlots, clip as clipWords, type VoiceIn } from "./soundTemplates";
+import { LOOKS_PROD, assemble, planShots, queriesFor, type ProdLook, type Shot, type ShotType } from "./footage/plan";
 
 export interface Brief {
   /** product or brand name */
@@ -20,12 +22,21 @@ export interface Brief {
 }
 
 export const CATEGORIES = ["Social hooks", "E-commerce", "Apps & SaaS", "Brand & story", "Local & events", "Promos & offers"] as const;
+
+/** The three kinds of format: pure type, footage with type on it, and footage that speaks for itself. */
+export const SECTIONS = [
+  { id: "text", label: "Text animations", note: "Kinetic type, no footage needed" },
+  { id: "mixed", label: "Footage + text", note: "Your images and clips, with animated copy" },
+  { id: "footage", label: "Footage", note: "Image and video edits; words only where they count" },
+] as const;
+export type Section = (typeof SECTIONS)[number]["id"];
 export type Category = (typeof CATEGORIES)[number];
 
 type Beat = Omit<Scene, "id">;
 export interface Format {
   id: string;
   name: string;
+  section: Section;
   category: Category;
   /** the attention device, in a few words */
   hook: string;
@@ -37,6 +48,8 @@ export interface Format {
   build: (b: Brief, images: string[]) => Beat[];
   /** colour for the gallery card */
   swatch: [string, string];
+  /** footage formats: the production look their clips are graded with */
+  look?: ProdLook;
 }
 
 // ---------------------------------------------------------------- copy helpers
@@ -96,7 +109,7 @@ const end = (b: Brief, extra: Partial<Beat> = {}): Beat => ({ template: "cta-end
 export const FORMATS: Format[] = [
   // ---- social hooks
   {
-    id: "pov-hook", name: "POV Hook", category: "Social hooks", hook: "Native POV caption", aspect: "9:16", style: "noir", swatch: ["#0B0B0C", "#C8FF3D"],
+    id: "pov-hook", section: "mixed", name: "POV Hook", category: "Social hooks", hook: "Native POV caption", aspect: "9:16", style: "noir", swatch: ["#0B0B0C", "#C8FF3D"],
     blurb: "Opens like a creator's post: a POV caption over footage, then the product lands.",
     beats: "1 pov-caption hook naming the audience's moment (POV: …) · 2 word-stack of the core promise · 3 spotlight or product reveal · 4 one proof/benefit · 5 end card",
     build: (b, im) => [
@@ -108,7 +121,7 @@ export const FORMATS: Format[] = [
     ],
   },
   {
-    id: "stop-scroll", name: "Pattern Interrupt", category: "Social hooks", hook: "Glitch + slam text", aspect: "9:16", style: "noir", swatch: ["#000000", "#FF3D6E"],
+    id: "stop-scroll", section: "text", name: "Pattern Interrupt", category: "Social hooks", hook: "Glitch + slam text", aspect: "9:16", style: "noir", swatch: ["#000000", "#FF3D6E"],
     blurb: "A glitch and a wall of type break the scroll in the first second.",
     beats: "1 word-stack pattern interrupt (2-4 punchy words) with glitch · 2 glitch transition into text-mask product name · 3-4 fast kinetic benefits with zoom-punch · 5 end card",
     build: (b, im) => [
@@ -119,7 +132,7 @@ export const FORMATS: Format[] = [
     ],
   },
   {
-    id: "group-chat", name: "Group Chat", category: "Social hooks", hook: "A chat thread", aspect: "9:16", style: "clean", swatch: ["#FFFFFF", "#0A66FF"],
+    id: "group-chat", section: "text", name: "Group Chat", category: "Social hooks", hook: "A chat thread", aspect: "9:16", style: "clean", swatch: ["#FFFFFF", "#0A66FF"],
     blurb: "Friends talk the product up in a chat; the viewer reads along before they know it's an ad.",
     beats: "1 chat: 4-6 short casual messages between friends discovering the product (lowercase, emoji ok), the brand's side marked with > · 2 product reveal · 3 rating or benefit · 4 end card",
     build: (b, im) => [
@@ -130,7 +143,7 @@ export const FORMATS: Format[] = [
     ],
   },
   {
-    id: "notifications", name: "Notification Storm", category: "Social hooks", hook: "Lock screen pinging", aspect: "9:16", style: "aurora", swatch: ["#0C0D19", "#8B6CFF"],
+    id: "notifications", section: "text", name: "Notification Storm", category: "Social hooks", hook: "Lock screen pinging", aspect: "9:16", style: "aurora", swatch: ["#0C0D19", "#8B6CFF"],
     blurb: "A lock screen filling with orders and messages: instant FOMO.",
     beats: "1 notification: 3-4 notifications (orders, friends asking, low stock) then a headline · 2 word-stack of why · 3 spotlight product · 4 end card",
     build: (b, im) => [
@@ -141,7 +154,7 @@ export const FORMATS: Format[] = [
     ],
   },
   {
-    id: "myth-fact", name: "Myth vs Fact", category: "Social hooks", hook: "Busting a myth", aspect: "4:5", style: "swiss", swatch: ["#F3F0E9", "#FF4D1A"],
+    id: "myth-fact", section: "text", name: "Myth vs Fact", category: "Social hooks", hook: "Busting a myth", aspect: "4:5", style: "swiss", swatch: ["#F3F0E9", "#FF4D1A"],
     blurb: "Name the belief that stops people buying, then flip it. Contrarian hooks hold attention.",
     beats: "1 title-reveal kicker 'Myth' on invert: a common belief in the category · 2 title-reveal kicker 'Fact' with the truth · (repeat once) · 3 product reveal · 4 end card",
     build: (b) => [
@@ -153,7 +166,7 @@ export const FORMATS: Format[] = [
     ],
   },
   {
-    id: "three-reasons", name: "3 Reasons", category: "Social hooks", hook: "Numbered listicle", aspect: "9:16", style: "swiss", swatch: ["#F3F0E9", "#111111"],
+    id: "three-reasons", section: "text", name: "3 Reasons", category: "Social hooks", hook: "Numbered listicle", aspect: "9:16", style: "swiss", swatch: ["#F3F0E9", "#111111"],
     blurb: "\"3 reasons …\" promises a payoff, so people watch to the end.",
     beats: "1 word-stack title '3 reasons {audience} switch to {product}' · 2-4 each reason: stat-counter or title-reveal with kicker 'Reason N' and zoom-punch · 5 end card",
     build: (b) => [
@@ -164,7 +177,7 @@ export const FORMATS: Format[] = [
   },
   // ---- e-commerce
   {
-    id: "product-drop", name: "Product Drop", category: "E-commerce", hook: "Countdown to reveal", aspect: "9:16", style: "noir", swatch: ["#0B0B0C", "#C8FF3D"],
+    id: "product-drop", section: "mixed", name: "Product Drop", category: "E-commerce", hook: "Countdown to reveal", aspect: "9:16", style: "noir", swatch: ["#0B0B0C", "#C8FF3D"],
     blurb: "3-2-1, a spotlight sweeps and lands on the product, then the confetti.",
     beats: "1 countdown 3 → 'Now live' · 2 spotlight on the product · 3 text-mask product name · 4 feature-list of 3 benefits · 5 end card with confetti",
     build: (b, im) => [
@@ -176,7 +189,7 @@ export const FORMATS: Format[] = [
     ],
   },
   {
-    id: "unboxing", name: "Unboxing Reveal", category: "E-commerce", hook: "Light-burn reveal", aspect: "4:5", style: "blush", swatch: ["#F6E9E4", "#C8553D"],
+    id: "unboxing", section: "mixed", name: "Unboxing Reveal", category: "E-commerce", hook: "Light-burn reveal", aspect: "4:5", style: "blush", swatch: ["#F6E9E4", "#C8553D"],
     blurb: "The anticipation of opening the box: warm film light, a slow reveal, then proof.",
     beats: "1 shape-burst with 'Open me' energy · 2 product-hero with film-burn and roll · 3 two fullbleed detail shots with benefits · 4 rating · 5 end card",
     build: (b, im) => [
@@ -188,7 +201,7 @@ export const FORMATS: Format[] = [
     ],
   },
   {
-    id: "social-proof", name: "Social Proof Wall", category: "E-commerce", hook: "Stars + reviews", aspect: "1:1", style: "clean", swatch: ["#FFFFFF", "#0A66FF"],
+    id: "social-proof", section: "text", name: "Social Proof Wall", category: "E-commerce", hook: "Stars + reviews", aspect: "1:1", style: "clean", swatch: ["#FFFFFF", "#0A66FF"],
     blurb: "Stars fill, reviews pile up, orders ping. Let customers sell it.",
     beats: "1 rating with a strong review quote · 2 testimonials (2-3 short quotes) · 3 notification of orders · 4 end card",
     build: (b) => [
@@ -199,7 +212,7 @@ export const FORMATS: Format[] = [
     ],
   },
   {
-    id: "transformation", name: "Transformation", category: "E-commerce", hook: "Before → after", aspect: "9:16", style: "blush", swatch: ["#F6E9E4", "#C8553D"],
+    id: "transformation", section: "mixed", name: "Transformation", category: "E-commerce", hook: "Before → after", aspect: "9:16", style: "blush", swatch: ["#F6E9E4", "#C8553D"],
     blurb: "The before, the after, and the proof. The oldest format in advertising because it works.",
     beats: "1 pov-caption 'POV: day 1' · 2 before-after (images[0] before, images[1] after) · 3 word-stack result · 4 rating · 5 end card",
     build: (b, im) => [
@@ -212,7 +225,7 @@ export const FORMATS: Format[] = [
   },
   // ---- apps & SaaS
   {
-    id: "app-demo", name: "App Walkthrough", category: "Apps & SaaS", hook: "Phone demo", aspect: "9:16", style: "clean", swatch: ["#FFFFFF", "#0A66FF"],
+    id: "app-demo", section: "mixed", name: "App Walkthrough", category: "Apps & SaaS", hook: "Phone demo", aspect: "9:16", style: "clean", swatch: ["#FFFFFF", "#0A66FF"],
     blurb: "Show, don't tell: the app in a phone, step by step, with the outcome in big type.",
     beats: "1 word-stack outcome promise · 2-4 device-mockup steps (kicker 'Step N', headline the action) with screenshots · 5 stat-counter result · 6 end card",
     build: (b, im) => [
@@ -223,7 +236,7 @@ export const FORMATS: Format[] = [
     ],
   },
   {
-    id: "switch", name: "Switch & Save", category: "Apps & SaaS", hook: "Them vs us table", aspect: "1:1", style: "clean", swatch: ["#FFFFFF", "#0A66FF"],
+    id: "switch", section: "text", name: "Switch & Save", category: "Apps & SaaS", hook: "Them vs us table", aspect: "1:1", style: "clean", swatch: ["#FFFFFF", "#0A66FF"],
     blurb: "A side-by-side that makes the choice obvious: crosses for them, ticks for you.",
     beats: "1 kinetic hook 'Still using X?' · 2 versus table, 4 rows (feature or 'feature | them | us') · 3 stat-counter of the saving · 4 end card",
     build: (b) => [
@@ -234,7 +247,7 @@ export const FORMATS: Format[] = [
     ],
   },
   {
-    id: "problem-solution", name: "Problem → Solution", category: "Apps & SaaS", hook: "Mono to colour", aspect: "16:9", style: "noir", swatch: ["#0B0B0C", "#C8FF3D"],
+    id: "problem-solution", section: "text", name: "Problem → Solution", category: "Apps & SaaS", hook: "Mono to colour", aspect: "16:9", style: "noir", swatch: ["#0B0B0C", "#C8FF3D"],
     blurb: "The problem in grey, a glitch, then the world turns to colour with your product.",
     beats: "1-2 kinetic/title in mono grade naming the pain (frustration, wasted time) · 3 glitch transition into logo-reveal in full colour · 4 feature-list · 5 end card",
     build: (b) => [
@@ -246,7 +259,7 @@ export const FORMATS: Format[] = [
     ],
   },
   {
-    id: "launch-trailer", name: "Launch Trailer", category: "Apps & SaaS", hook: "Cinematic trailer", aspect: "16:9", style: "noir", swatch: ["#0B0B0C", "#E08A3C"],
+    id: "launch-trailer", section: "mixed", name: "Launch Trailer", category: "Apps & SaaS", hook: "Cinematic trailer", aspect: "16:9", style: "noir", swatch: ["#0B0B0C", "#E08A3C"],
     blurb: "Letterbox, slow titles, a film-burn reveal. Launches that feel like premieres.",
     beats: "1-2 slow title-reveals (dramatic motion, letterbox) building tension · 3 text-mask product name with film-burn · 4 fullbleed shot · 5 logo-reveal · 6 end card with launch date",
     build: (b, im) => [
@@ -259,7 +272,7 @@ export const FORMATS: Format[] = [
   },
   // ---- brand & story
   {
-    id: "founder", name: "Founder Story", category: "Brand & story", hook: "A personal why", aspect: "4:5", style: "editorial", swatch: ["#EEEAE3", "#2F55FF"],
+    id: "founder", section: "mixed", name: "Founder Story", category: "Brand & story", hook: "A personal why", aspect: "4:5", style: "editorial", swatch: ["#EEEAE3", "#2F55FF"],
     blurb: "Why it exists, in the founder's voice. Trust beats features.",
     beats: "1 quote 'I started X because…' · 2 fullbleed/photo with the moment · 3 quote of the belief · 4 title-reveal of the mission · 5 end card",
     build: (b, im) => [
@@ -270,7 +283,7 @@ export const FORMATS: Format[] = [
     ],
   },
   {
-    id: "manifesto", name: "Manifesto", category: "Brand & story", hook: "Kinetic poster type", aspect: "9:16", style: "swiss", swatch: ["#F3F0E9", "#FF4D1A"],
+    id: "manifesto", section: "text", name: "Manifesto", category: "Brand & story", hook: "Kinetic poster type", aspect: "9:16", style: "swiss", swatch: ["#F3F0E9", "#FF4D1A"],
     blurb: "A rhythm of bold statements, each slamming in. Brand films for social.",
     beats: "4-5 word-stack statements (3-5 words each, 'We believe…', 'No more…'), alternating backgrounds, whip transitions, zoom-punch · logo-reveal · end card",
     build: (b) => [
@@ -280,7 +293,7 @@ export const FORMATS: Format[] = [
     ],
   },
   {
-    id: "podcast", name: "Podcast Teaser", category: "Brand & story", hook: "Audiogram + POV", aspect: "1:1", style: "aurora", swatch: ["#0C0D19", "#8B6CFF"],
+    id: "podcast", section: "mixed", name: "Podcast Teaser", category: "Brand & story", hook: "Audiogram + POV", aspect: "1:1", style: "aurora", swatch: ["#0C0D19", "#8B6CFF"],
     blurb: "A breathing audiogram with live captions. Add a voice-over clip in the Voice tab.",
     beats: "1 pov-caption hook from the episode · 2 audiogram (kicker show, headline episode) · 3 end card 'Listen now'",
     build: (b, im) => [
@@ -291,7 +304,7 @@ export const FORMATS: Format[] = [
   },
   // ---- local & events
   {
-    id: "event", name: "Event Countdown", category: "Local & events", hook: "Countdown + date", aspect: "9:16", style: "aurora", swatch: ["#0C0D19", "#8B6CFF"],
+    id: "event", section: "mixed", name: "Event Countdown", category: "Local & events", hook: "Countdown + date", aspect: "9:16", style: "aurora", swatch: ["#0C0D19", "#8B6CFF"],
     blurb: "Build the night: countdown, the name in giant footage letters, the details, the tickets.",
     beats: "1 countdown to the event · 2 text-mask event name · 3 feature-list date/time/place (benefits) · 4 pov-caption 'POV: you got tickets' · 5 end card 'Get tickets'",
     build: (b, im) => [
@@ -303,7 +316,7 @@ export const FORMATS: Format[] = [
     ],
   },
   {
-    id: "menu", name: "Menu Hero", category: "Local & events", hook: "Spotlight on the dish", aspect: "4:5", style: "blush", swatch: ["#F6E9E4", "#C8553D"],
+    id: "menu", section: "mixed", name: "Menu Hero", category: "Local & events", hook: "Spotlight on the dish", aspect: "4:5", style: "blush", swatch: ["#F6E9E4", "#C8553D"],
     blurb: "One dish in the spotlight, words you can taste, the rating, and where to find you.",
     beats: "1 spotlight on the signature dish · 2 word-stack of taste words · 3 rating from diners · 4 end card with address/booking",
     build: (b, im) => [
@@ -314,7 +327,7 @@ export const FORMATS: Format[] = [
     ],
   },
   {
-    id: "hiring", name: "We're Hiring", category: "Local & events", hook: "Recruiting slam", aspect: "1:1", style: "swiss", swatch: ["#F3F0E9", "#111111"],
+    id: "hiring", section: "text", name: "We're Hiring", category: "Local & events", hook: "Recruiting slam", aspect: "1:1", style: "swiss", swatch: ["#F3F0E9", "#111111"],
     blurb: "Recruiting that doesn't look like a job board: a slam title, the perks, a chat from the team.",
     beats: "1 word-stack 'We're hiring' · 2 chat from a teammate · 3 feature-list perks · 4 end card 'Apply'",
     build: (b) => [
@@ -326,7 +339,7 @@ export const FORMATS: Format[] = [
   },
   // ---- promos & offers
   {
-    id: "flash-sale", name: "Flash Sale", category: "Promos & offers", hook: "Offer explosion", aspect: "9:16", style: "aurora", swatch: ["#0C0D19", "#FF3D6E"],
+    id: "flash-sale", section: "mixed", name: "Flash Sale", category: "Promos & offers", hook: "Offer explosion", aspect: "9:16", style: "aurora", swatch: ["#0C0D19", "#FF3D6E"],
     blurb: "SALE slams in, the discount counts up with confetti, a countdown creates urgency.",
     beats: "1 word-stack 'SALE' with glitch · 2 stat-counter of the discount with confetti and zoom-punch · 3 product shot · 4 countdown 'ends in' · 5 end card",
     build: (b, im) => [
@@ -338,7 +351,7 @@ export const FORMATS: Format[] = [
     ],
   },
   {
-    id: "last-chance", name: "Last Chance", category: "Promos & offers", hook: "Urgency notifications", aspect: "9:16", style: "noir", swatch: ["#0B0B0C", "#FF4D1A"],
+    id: "last-chance", section: "text", name: "Last Chance", category: "Promos & offers", hook: "Urgency notifications", aspect: "9:16", style: "noir", swatch: ["#0B0B0C", "#FF4D1A"],
     blurb: "Low-stock alerts and a ticking clock: urgency that converts.",
     beats: "1 notification low-stock alerts · 2 word-stack 'Last chance' · 3 stat-counter offer · 4 end card",
     build: (b) => [
@@ -349,6 +362,204 @@ export const FORMATS: Format[] = [
     ],
   },
 ];
+
+
+// ---------------------------------------------------------------- footage formats
+const briefText = (b: Brief) => `${b.product}, ${b.what}, for ${b.audience}`;
+interface Take {
+  type: ShotType;
+  /** what the shot shows (turned into stock searches in the brief's world) */
+  idea: string;
+  d: number;
+  /** words on the shot, if any */
+  text?: string;
+  kicker?: string;
+}
+/** A footage edit: full-bleed shots in one look, a title on the opener, the end card over the last shot. */
+function reel(b: Brief, im: string[], look: ProdLook, takes: Take[], o: { title?: string; transitions?: TransitionId[]; extra?: Effect[] } = {}): Beat[] {
+  const L = LOOKS_PROD[look];
+  const effects = [...new Set([...L.effects, ...(o.extra ?? [])])].slice(0, 4);
+  const beats: Beat[] = takes.map((t, i) => {
+    const query = queriesFor(t.idea, briefText(b), t.type, b.product)[0] ?? t.idea;
+    const image = img(im, i);
+    const tr = o.transitions?.[i % (o.transitions?.length || 1)] ?? L.transition;
+    if (!image) return { template: "title-reveal", duration: t.d, headline: em(words(t.text ?? t.idea, 5)), kicker: t.kicker, background: "gradient", ...T(i ? tr : "cut"), ...fx(L.grade, [], L.amount) };
+    return {
+      template: "fullbleed", duration: t.d, image, ...(t.text && { headline: em(words(t.text, 5)) }), ...(t.kicker && { kicker: t.kicker }),
+      ...T(i ? tr : "cut"), ...fx(L.grade, effects, L.amount), ...(L.speed !== 1 && { clipSpeed: L.speed }), shot: { type: t.type, query },
+    };
+  });
+  if (o.title && beats[0]) beats[0] = { ...beats[0], kicker: b.product, headline: em(words(o.title, 6)) };
+  const last = img(im, takes.length);
+  beats.push(end(b, { ...(last && { backdrop: [last] }), ...fx(L.grade, L.effects.filter((e) => e !== "letterbox").slice(0, 2), L.amount), shot: { type: "wide", query: queriesFor(b.what, briefText(b), "product", b.product)[0] ?? b.what } }));
+  return beats;
+}
+
+const FOOTAGE: Format[] = [
+  {
+    id: "cinematic-montage", section: "footage", name: "Cinematic Montage", category: "Brand & story", hook: "Trailer-grade edit", aspect: "16:9", style: "noir", look: "cinematic", swatch: ["#12606a", "#e08a3c"],
+    blurb: "Wide, close, detail, people: a graded, letterboxed montage of your world, titled once.",
+    beats: "establishing wide → people moment → product close-up → detail → wide payoff → end card over footage",
+    build: (b, im) => reel(b, im, "cinematic", [
+      { type: "establishing", idea: "city sunrise aerial", d: 3 },
+      { type: "people", idea: b.audience, d: 2.6 },
+      { type: "product", idea: b.what, d: 2.8 },
+      { type: "detail", idea: b.benefits[0], d: 2.4 },
+      { type: "wide", idea: b.benefits[1] ?? b.what, d: 2.8 },
+    ], { title: b.what, transitions: ["cut", "fade", "cut", "spin"] }),
+  },
+  {
+    id: "beat-montage", section: "footage", name: "Beat Montage", category: "Social hooks", hook: "Fast cuts on the beat", aspect: "9:16", style: "noir", look: "commercial", swatch: ["#0B0B0C", "#FF3D6E"],
+    blurb: "Eight quick shots punched in on the beat. Add a music track and every cut lands on it.",
+    beats: "8 shots of about a second each, whip transitions and zoom punches, snapped to the music's beats → end card",
+    build: (b, im) => reel(b, im, "commercial", [b.what, b.audience, ...b.benefits, b.product, "city night lights", "people laughing", "running feet"].slice(0, 8).map((idea, i): Take => ({ type: (["product", "people", "close-up", "detail", "wide", "medium", "people", "close-up"] as ShotType[])[i], idea, d: 1.2 })), { transitions: ["whip", "cut", "glitch", "cut"], extra: ["zoom-punch"] }),
+  },
+  {
+    id: "lookbook", section: "footage", name: "Lookbook", category: "E-commerce", hook: "Editorial product reel", aspect: "4:5", style: "editorial", look: "commercial", swatch: ["#EEEAE3", "#2F55FF"],
+    blurb: "An editorial sequence of product looks, one small label each, slow pushes.",
+    beats: "4-6 product/lifestyle shots, each with a 1-2 word label (kicker) → end card",
+    build: (b, im) => reel(b, im, "commercial", [b.what, ...b.benefits, b.product].slice(0, 5).map((idea, i): Take => ({ type: i % 2 ? "detail" : "product", idea, d: 2.4, kicker: words(i ? b.benefits[i - 1] ?? b.product : b.product, 3) })), { transitions: ["fade", "slide"] }),
+  },
+  {
+    id: "day-in-life", section: "footage", name: "Day in the Life", category: "Brand & story", hook: "Morning to night", aspect: "9:16", style: "clean", look: "documentary", swatch: ["#d8c39a", "#8a6a45"],
+    blurb: "A real day with your audience, time-stamped from sunrise to night, the product in it.",
+    beats: "7:00 morning → 9:00 out → 12:30 midday with the product → 18:00 moving → 22:00 night → end card",
+    build: (b, im) => reel(b, im, "documentary", [
+      { type: "establishing", idea: "sunrise window light", d: 2.4, text: "7:00 am" },
+      { type: "people", idea: `${b.audience} morning coffee`, d: 2.4, text: "9:00 am" },
+      { type: "product", idea: b.what, d: 2.6, text: "12:30 pm" },
+      { type: "people", idea: `${b.audience} ${b.benefits[0]}`, d: 2.4, text: "6:00 pm" },
+      { type: "wide", idea: "city night lights", d: 2.4, text: "10:00 pm" },
+    ], { transitions: ["cut", "whip"] }),
+  },
+  {
+    id: "detail-reel", section: "footage", name: "Detail Reel", category: "E-commerce", hook: "Macro craftsmanship", aspect: "1:1", style: "noir", look: "noir", swatch: ["#000000", "#dddddd"],
+    blurb: "Close-ups and macro detail in hard black and white. Craft you can almost touch.",
+    beats: "5 macro/close-up shots of the product and materials, slow motion, one word each → end card",
+    build: (b, im) => reel(b, im, "noir", [b.what, ...b.benefits, "hands holding product"].slice(0, 5).map((idea, i): Take => ({ type: i % 2 ? "detail" : "close-up", idea: `${idea} close up`, d: 2.2, ...(i === 2 && { text: words(b.benefits[0], 3) }) })), { transitions: ["cut", "fade"] }),
+  },
+  {
+    id: "place-tour", section: "footage", name: "Place Tour", category: "Local & events", hook: "Aerial to inside", aspect: "16:9", style: "aurora", look: "cinematic", swatch: ["#0C0D19", "#8B6CFF"],
+    blurb: "For venues, stays, homes and cities: from the air, through the door, to the people enjoying it.",
+    beats: "aerial establishing → exterior → interior → people enjoying → night → end card",
+    build: (b, im) => reel(b, im, "cinematic", [
+      { type: "establishing", idea: `${b.what} aerial`, d: 3 },
+      { type: "wide", idea: `${b.what} exterior`, d: 2.6 },
+      { type: "medium", idea: `${b.what} interior`, d: 2.6 },
+      { type: "people", idea: `people enjoying ${b.what}`, d: 2.6 },
+      { type: "wide", idea: "city night lights", d: 2.6 },
+    ], { title: b.product, transitions: ["fade", "cut"] }),
+  },
+  {
+    id: "mood-film", section: "footage", name: "Mood Film", category: "Brand & story", hook: "Dreamy slow motion", aspect: "4:5", style: "blush", look: "dreamy", swatch: ["#f3c6d8", "#c8d8ff"],
+    blurb: "Soft light, slow motion, floating textures. A feeling first, the product second.",
+    beats: "light/nature textures → the audience in a calm moment → product in soft light → one line → end card",
+    build: (b, im) => reel(b, im, "dreamy", [
+      { type: "abstract", idea: "sunlight through leaves", d: 2.8 },
+      { type: "people", idea: `${b.audience} calm moment`, d: 2.8 },
+      { type: "product", idea: b.what, d: 3, text: b.benefits[0] },
+      { type: "abstract", idea: "water slow motion", d: 2.6 },
+    ], { transitions: ["fade"] }),
+  },
+  {
+    id: "photo-story", section: "footage", name: "Photo Story", category: "Brand & story", hook: "Your photos, moving", aspect: "9:16", style: "editorial", look: "documentary", swatch: ["#EEEAE3", "#1B1A18"],
+    blurb: "Your own photos and clips with slow pushes and film colour. Perfect over a voice-over.",
+    beats: "your library images in order, Ken Burns moves, a title on the first, end card",
+    build: (b, im) => reel(b, im, "documentary", [b.what, ...b.benefits, b.product].slice(0, 5).map((idea, i): Take => ({ type: i ? "medium" : "establishing", idea, d: 2.6 })), { title: b.product, transitions: ["fade"] }),
+  },
+];
+FORMATS.push(...FOOTAGE);
+
+// ---------------------------------------------------------------- voice-over
+/** Templates whose headline can carry the spoken words, and how many words each holds. */
+const CARRY: Partial<Record<Scene["template"], number>> = { "title-reveal": 6, "kinetic-words": 10, "word-stack": 6, "pov-caption": 10, fullbleed: 6, spotlight: 4, quote: 16, "split-feature": 6, "product-hero": 4, "device-mockup": 5, marquee: 4 };
+
+/**
+ * Build a format around a voice-over: one beat per spoken phrase (cut in the pauses), the
+ * format's beats as the palette, and the words on screen taken from what's said. Footage
+ * formats become a shot per line with subtitles.
+ */
+export function buildWithVoice(f: Format, raw: Partial<Brief>, voice: VoiceIn, images: string[]): { scenes: Beat[]; captions: boolean } {
+  const b = fill(raw);
+  const hasWords = !!voice.words?.length;
+  if (f.section === "footage") {
+    const shots: Shot[] = planShots(voice, briefText(b), { text: "clean", brand: b.product, min: 2, max: 3.8 }).map((sh, i) => ({ ...sh, clip: img(images, i) }));
+    const L = LOOKS_PROD[f.look ?? "cinematic"];
+    const scenes = assemble(shots, { look: f.look ?? "cinematic", text: "subtitles", brand: b.product, title: "", cta: b.cta, url: b.url }).map((s) => (s.template === "fullbleed" && L.speed !== 1 && !s.clipSpeed ? { ...s, clipSpeed: L.speed } : s));
+    return { scenes, captions: hasWords };
+  }
+  const slots = voiceSlots(voice, 1.8, 3.8);
+  const palette = f.build(b, images);
+  const n = slots.length;
+  // The brand's reveal beat goes where the product is named, wherever that is in the read.
+  const named = (t?: string) => !!t && new RegExp(`\\b${b.product.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(t);
+  const isReveal = (x: Beat) => x.template === "logo-reveal" || (["text-mask", "spotlight", "product-hero"].includes(x.template) && named(x.headline));
+  const reveal = palette.slice(1, -1).find(isReveal);
+  const mention = reveal ? slots.findIndex((sl, i) => i > 0 && !(i === n - 1 && n > 2) && named(sl.text)) : -1;
+  const rest = palette.slice(1, -1).filter((x) => !(reveal && mention >= 0 && x === reveal));
+  const body = rest.length ? rest : palette.slice(1, -1).length ? palette.slice(1, -1) : palette;
+  let bi = 0;
+  const r2 = (x: number) => Math.round(x * 100) / 100;
+  const usedOnce = new Set<number>();
+  const scenes = slots.map((slot, i): Beat => {
+    let beat = i === 0 ? palette[0] : i === n - 1 && n > 2 ? palette[palette.length - 1] : i === mention && reveal ? reveal : body[bi++ % body.length];
+    // Proof beats (a rating, a chat, a table) play once; after that the narration carries on as type.
+    const k = body.indexOf(beat);
+    if (i > 0 && !(i === n - 1 && n > 2) && !CARRY[beat.template] && hasWords) {
+      if (usedOnce.has(k)) beat = { template: "kinetic-words", duration: beat.duration, background: i % 2 ? "invert" : "solid", transition: "whip", grade: beat.grade, effects: beat.effects?.filter((e) => e !== "confetti"), fxAmount: beat.fxAmount };
+      else usedOnce.add(k);
+    }
+    const max = beat === reveal ? undefined : CARRY[beat.template];
+    const spoken = hasWords && slot.text ? slot.text : "";
+    const duration = +(r2(slot.e) - r2(slot.s)).toFixed(2);
+    // Giant-letter beats show the line's key word instead of the whole line.
+    const key = beat.template === "text-mask" && beat !== reveal && spoken ? keyWord(spoken, b.product) : undefined;
+    return { ...beat, duration, ...(spoken && max && { headline: em(clipWords(spoken, max).replace(/…$/, "")) }), ...(key && { headline: key }), ...(i === 0 && { transition: "cut" as const }) };
+  });
+  return { scenes, captions: false };
+}
+
+/** The strongest single word of a line (a number, else the longest meaningful word, not the brand). */
+function keyWord(line: string, brand: string): string | undefined {
+  const ws = line.replace(/[^\p{L}\p{N}%' -]/gu, " ").split(/\s+/).filter((w) => w.length > 2 && !STOP.has(w.toLowerCase()) && w.toLowerCase() !== brand.toLowerCase());
+  return ws.sort((a, c) => Number(/\d/.test(c)) - Number(/\d/.test(a)) || c.length - a.length)[0];
+}
+
+/** Move cuts onto the music's beats (within 0.35 s), keeping every scene at least 0.8 s. */
+export function snapToBeats<S extends { duration: number }>(scenes: S[], beats: number[]): S[] {
+  if (!beats.length || scenes.length < 2) return scenes;
+  let t = 0, prev = 0;
+  return scenes.map((s, i) => {
+    t += s.duration;
+    let end = t;
+    if (i < scenes.length - 1) {
+      const near = beats.filter((x) => Math.abs(x - t) <= 0.35 && x - prev >= 0.8).sort((a, c) => Math.abs(a - t) - Math.abs(c - t))[0];
+      if (near !== undefined) end = near;
+    }
+    const d = +(end - prev).toFixed(3);
+    prev = end;
+    return { ...s, duration: d };
+  });
+}
+
+/** A narration for generating a voice-over: a hook, what it is, the benefits, the offer, the ask. */
+export function scriptFor(f: Format, raw: Partial<Brief>): string {
+  const b = fill(raw);
+  const hook: Record<Category, string> = {
+    "Social hooks": `Okay, ${b.audience}, stop scrolling for a second.`,
+    "E-commerce": `This is the one everyone's been asking about.`,
+    "Apps & SaaS": `What if the hard part just… took care of itself?`,
+    "Brand & story": `Some things are made with a little more care.`,
+    "Local & events": `Here's where you want to be.`,
+    "Promos & offers": `Quick, this won't last.`,
+  };
+  const lines = [hook[f.category], `Meet ${b.product}: ${b.what}.`, ...b.benefits.slice(0, 3).map((x) => `${cap(x.replace(/\.$/, ""))}.`), ...(b.offer ? [`${cap(b.offer.replace(/\.$/, ""))}.`] : []), `${cap(b.cta)}${b.url ? ` at ${b.url}` : ""}.`];
+  return lines.join(" ");
+}
+
+/** Placeholder refs the studio swaps for stock footage it casts (valid asset refs, so they survive cleaning). */
+export const stockRef = (i: number) => `asset:stock_${i}`;
+export const isStockRef = (r?: string) => !!r && /^asset:stock_\d+$/.test(r);
 
 export const formatById = (id: string) => FORMATS.find((f) => f.id === id);
 

@@ -45,3 +45,61 @@ test("formats: briefs fill sensibly and offers become counters", () => {
   assert.equal(offerStat("free shipping"), undefined);
   assert.equal(em("Ten-day battery life"), "Ten-day *battery* life");
 });
+
+import { SECTIONS, buildWithVoice, snapToBeats, scriptFor, stockRef, isStockRef } from "./formats";
+
+function voice(lines: string[]) {
+  const words: { w: string; s: number; e: number }[] = [], pauses: { s: number; e: number }[] = [];
+  let t = 0.3;
+  lines.forEach((l, i) => {
+    for (const w of l.split(" ")) words.push({ w, s: +t.toFixed(2), e: +(t + 0.3).toFixed(2) }), (t += 0.34);
+    if (i < lines.length - 1) pauses.push({ s: +t.toFixed(2), e: +(t + 0.5).toFixed(2) }), (t += 0.5);
+  });
+  return { duration: +(t + 0.3).toFixed(2), pauses, words };
+}
+const VO = voice(["Okay runners, stop scrolling for a second.", "Meet Orbit, the smartwatch that coaches your sleep.", "Ten days on one charge.", "Sleep coaching that actually works.", "Thirty percent off this week.", "Pre-order at orbit dot watch."]);
+
+test("formats: three sections, each with plenty of formats; text formats never need footage", () => {
+  for (const s of SECTIONS) assert.ok(FORMATS.filter((f) => f.section === s.id).length >= 8, s.id);
+  for (const f of FORMATS.filter((f) => f.section === "text")) {
+    const scenes = buildFormat(f, brief, []);
+    assert.ok(!scenes.some((s) => s.image || s.images?.length || s.backdrop?.length), f.id);
+  }
+  for (const f of FORMATS.filter((f) => f.section === "footage")) {
+    const scenes = buildFormat(f, brief, ["asset:a", "asset:b", "asset:c", "asset:d", "asset:e", "asset:f", "asset:g", "asset:h", "asset:i"]);
+    assert.ok(scenes.filter((s) => s.template === "fullbleed").length >= 3, f.id);
+    assert.ok(scenes.filter((s) => s.template === "fullbleed").every((s) => s.shot?.query), `${f.id}: every shot says what to cast`);
+  }
+});
+
+test("formats: every format rebuilds around a voice-over, cut in its pauses, as long as it", () => {
+  for (const f of FORMATS) {
+    const { scenes, captions } = buildWithVoice(f, brief, VO, [stockRef(0), stockRef(1), stockRef(2), stockRef(3), stockRef(4), stockRef(5), stockRef(6), stockRef(7)]);
+    const total = scenes.reduce((a, s) => a + s.duration, 0);
+    assert.ok(Math.abs(total - VO.duration) < 0.03, `${f.id}: ${total} vs ${VO.duration}`);
+    let t = 0;
+    for (const s of scenes.slice(0, -1)) {
+      t += s.duration;
+      assert.ok(f.section === "footage" || VO.pauses.some((p) => t >= p.s - 0.02 && t <= p.e + 0.02), `${f.id}: cut at ${t.toFixed(2)} in a pause`);
+    }
+    for (const s of scenes) assert.equal(sanitizeScene(s).template, s.template);
+    assert.equal(captions, f.section === "footage", `${f.id}: subtitles only where nothing else says the words`);
+    if (f.section !== "footage") {
+      // the words on screen are what's being said
+      const spoken = scenes.filter((s) => s.headline && /stop|sleep|charge|coaching|percent|orbit/i.test(s.headline));
+      assert.ok(spoken.length >= 2, `${f.id}: ${scenes.map((s) => s.headline).join(" | ")}`);
+    }
+    assert.equal(scenes.at(-1)!.template, "cta-end", f.id);
+  }
+});
+
+test("formats: cuts snap to the beat, scripts read like an ad, stock refs survive cleaning", () => {
+  const snapped = snapToBeats([{ duration: 2.1 }, { duration: 1.9 }, { duration: 2 }], [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6]);
+  assert.deepEqual(snapped.map((s) => s.duration), [2, 2, 2]);
+  const sc = scriptFor(FORMATS[0], brief);
+  assert.match(sc, /Meet Orbit/);
+  assert.match(sc, /30% off launch week/i);
+  assert.match(sc, /orbit\.watch/);
+  assert.equal(sanitizeScene({ template: "fullbleed", duration: 2, image: stockRef(3) }).image, "asset:stock_3");
+  assert.ok(isStockRef("asset:stock_3") && !isStockRef("asset:up_1"));
+});

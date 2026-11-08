@@ -321,3 +321,19 @@ export function assemble(shots: Shot[], o: EditOptions): Omit<Scene, "id">[] {
 export const wordsIn = (words: Word[] | undefined, s: number, e: number) => (words ?? []).filter((w) => w.s >= s - 0.05 && w.s < e).map((w) => w.w).join(" ");
 
 export const isVideo = (a?: Asset) => a?.kind === "video";
+
+/** Stock searches for one line of copy (or narration) in a brief's world: what's said, the product, the audience. */
+export function queriesFor(line: string, brief: string, type: ShotType = "medium", brand?: string): string[] {
+  const subject = subjectOf(brief);
+  const persona = personaOf(brief);
+  const kw = keywords(line, brand ? brand.split(/\s+/) : []);
+  const pool: string[] = [];
+  if (type === "product") pool.push(...subject.queries.map((q) => cast(q, persona)));
+  for (const k of kw.slice(0, 3)) {
+    const lx = lexicon(k);
+    if (lx) pool.push(...lx.map((q) => cast(q, persona)));
+    else pool.push(MODIFIER[type] ? `${k} ${MODIFIER[type]}` : k);
+  }
+  pool.push(...subject.queries.map((q) => cast(q, persona)), persona ? `${persona} lifestyle` : "people lifestyle");
+  return [...new Set(pool.map((q) => q.trim().toLowerCase()).filter(Boolean))].slice(0, 4);
+}

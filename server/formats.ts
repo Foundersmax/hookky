@@ -71,3 +71,25 @@ export async function claudeWriteFormat(input: { format: { name: string; hook: s
     throw new Error(known ? known.message.replace(/ Using the local director for now\./, "") : String((e as Error)?.message ?? e));
   }
 }
+
+/** Claude writes the voice-over script for a format: spoken, timed for ~15-30 s, no stage directions. */
+export async function claudeWriteScript(input: { format: { name: string; hook: string; beats: string; section?: string }; brief: Record<string, unknown>; seconds?: number }): Promise<string> {
+  if (!claudeConfigured()) throw new Error("Claude isn't configured on the server.");
+  const brief = Object.fromEntries(Object.entries(input.brief ?? {}).map(([k, v]) => [k, Array.isArray(v) ? v.map((x) => clean(x, 120)).slice(0, 6) : clean(v, 300)]));
+  const secs = Math.min(60, Math.max(10, Number(input.seconds) || 20));
+  const { client, model } = claude();
+  try {
+    const msg = await client.messages.create({
+      model,
+      max_tokens: 800,
+      system: `You write voice-over scripts for short social ads that stop the scroll. Write only the words to be spoken: no stage directions, no labels, no emoji, no quotation marks. Short sentences, one idea each, each ending with punctuation so the edit can cut between them. Open with a hook in the first sentence (a specific moment, a question, a bold claim the brief supports). Natural, human, platform-native. About ${Math.round(secs * 2.4)} words (${secs} seconds). End with the call to action. Never invent statistics, prices or reviews beyond the brief.`,
+      messages: [{ role: "user", content: `Format: ${clean(input.format?.name, 60)} (${clean(input.format?.hook, 80)}). Structure: ${clean(input.format?.beats, 500)}\n\nBrief:\n${JSON.stringify(brief, null, 1)}` }],
+    });
+    const text = msg.content.filter((b) => b.type === "text").map((b) => (b as { text: string }).text).join(" ").replace(/\s+/g, " ").trim();
+    if (text.length < 20) throw new Error("Claude returned an empty script.");
+    return text.slice(0, 1800);
+  } catch (e) {
+    const known = explainClaudeError(e);
+    throw new Error(known ? known.message.replace(/ Using the local director for now\./, "") : String((e as Error)?.message ?? e));
+  }
+}

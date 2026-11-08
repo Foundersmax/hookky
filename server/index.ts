@@ -6,7 +6,8 @@ import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { claudeShotList, claudePickClip } from "./shots";
-import { claudeWriteFormat } from "./formats";
+import { claudeWriteFormat, claudeWriteScript } from "./formats";
+import { speak, voiceAvailable } from "./voice";
 import { licenseFreepikVideo, licensesToday, freepikVideoStatus, probeFreepikVideo } from "./freepikVideo";
 import { runAgentTurn, claudeConfigured, resetConversation, claudeCheck, probeClaude } from "./agent";
 import { listConnectors, searchVisuals, searchVideos, importFromUrl, magnificUpscale, reportStockUse, type Orientation } from "./connectors";
@@ -68,7 +69,7 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 60 
 
 app.get("/api/health", (_req, res) => {
   void recheckClaude();
-  res.json({ agent: claudeConfigured() ? "claude" : "local", claude: claudeCheck(), ...(freepikVideoStatus() && { freepikVideo: { ...freepikVideoStatus(), licensedToday: licensesToday() } }), transcription: transcriptionProvider(), connectors: listConnectors(), accounts, ...(build && { build }), ...(process.env.RENDER_GIT_COMMIT && { commit: process.env.RENDER_GIT_COMMIT }) });
+  res.json({ agent: claudeConfigured() ? "claude" : "local", claude: claudeCheck(), voice: voiceAvailable(), ...(freepikVideoStatus() && { freepikVideo: { ...freepikVideoStatus(), licensedToday: licensesToday() } }), transcription: transcriptionProvider(), connectors: listConnectors(), accounts, ...(build && { build }), ...(process.env.RENDER_GIT_COMMIT && { commit: process.env.RENDER_GIT_COMMIT }) });
 });
 
 app.post("/api/agent", async (req, res) => {
@@ -126,6 +127,37 @@ app.post("/api/format", async (req, res) => {
     res.json(await claudeWriteFormat({ format: b.format ?? {}, brief: b.brief ?? {}, draft: b.draft ?? [] }));
   } catch (e: any) {
     res.status(503).json({ error: e?.message ?? String(e) });
+  }
+});
+
+// Claude writes a voice-over script for a format (one agent turn).
+app.post("/api/script", async (req, res) => {
+  try {
+    if (req.user) {
+      const turn = await takeAgentTurn(req.user);
+      if (!turn.ok) return void res.status(429).json({ error: `You've used today's ${turn.limit} agent turns.` });
+    }
+    const b = req.body ?? {};
+    res.json({ script: await claudeWriteScript({ format: b.format ?? {}, brief: b.brief ?? {}, seconds: b.seconds }) });
+  } catch (e: any) {
+    res.status(503).json({ error: e?.message ?? String(e) });
+  }
+});
+
+// A voice-over from a script (counts as an agent turn: it's a paid call). Returns MP3.
+app.post("/api/voice", async (req, res) => {
+  try {
+    if (req.user) {
+      const turn = await takeAgentTurn(req.user);
+      if (!turn.ok) return void res.status(429).json({ error: `You've used today's ${turn.limit} agent turns.` });
+    }
+    const b = req.body ?? {};
+    const mp3 = await speak(String(b.text ?? ""), String(b.voice ?? "nova"), String(b.tone ?? "energetic"));
+    res.setHeader("Content-Type", "audio/mpeg");
+    res.setHeader("Cache-Control", "no-store");
+    res.send(mp3);
+  } catch (e: any) {
+    res.status(e?.status ?? 502).json({ error: e?.message ?? String(e) });
   }
 });
 
