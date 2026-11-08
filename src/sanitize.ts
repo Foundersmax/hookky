@@ -90,6 +90,7 @@ export function sanitizeScene(input: unknown, keepId?: string): Scene {
     effects: ((list) => (list.length ? list : undefined))([...new Set((Array.isArray(s.effects) ? s.effects : []).filter((e: unknown) => (EFFECTS as readonly unknown[]).includes(e)))].slice(0, 4) as Scene["effects"] & {}),
     fxAmount: ((v) => (v === undefined ? undefined : +v.toFixed(2)))(num(s.fxAmount, 0, 1)),
     backdrop: Array.isArray(s.backdrop) ? list(s.backdrop, 8, ref) : undefined,
+    font: ((f) => (f && /^[\w .'-]+$/.test(f) ? f : undefined))(str(s.font, 60)),
     notes: str(s.notes, 400),
   };
   for (const k of Object.keys(scene) as (keyof Scene)[]) if (scene[k] === undefined) delete scene[k];

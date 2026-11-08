@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useStudio, setState, getState, undo, redo, updateProject, setBrand, createProject, flushSave } from "./store";
+import { useStudio, subscribeStore, setState, getState, undo, redo, updateProject, setBrand, createProject, flushSave } from "./store";
 import { ChatPanel } from "./components/ChatPanel";
 import { Stage } from "./components/Stage";
 import { Timeline, moveScene } from "./components/Timeline";
@@ -19,10 +19,11 @@ import { clock } from "./clock";
 import { images } from "./runtime";
 import { STYLE_PRESETS, FONT_CHOICES } from "./presets";
 import type { Aspect } from "./types";
-import { timeline } from "./engine/render";
+import { timeline, totalDuration } from "./engine/render";
 import { registerFonts } from "./fonts";
 import { reportStockUse } from "./stockUsage";
 import { fillVideoPosters } from "./videoPosters";
+import { musicGain, musicTime, voiceGain } from "./audio/mix";
 import { checkSession, watchSession } from "./auth";
 import { AuthScreen } from "./components/AuthScreen";
 import { AdminPanel } from "./components/AdminPanel";
@@ -137,7 +138,11 @@ export function App() {
     const a = new Audio(url);
     a.preload = "auto";
     clock.setAudio(a);
+    const level = () => (a.volume = Math.min(1, voiceGain(getState().project.audio)));
+    level();
+    const unsub = subscribeStore(level);
     return () => {
+      unsub();
       a.pause();
       clock.setAudio(null);
     };
@@ -148,13 +153,21 @@ export function App() {
     const el = new Audio(m.url);
     el.loop = true;
     clock.music = el;
-    const unsub = clock.subscribe(() => {
-      const vo = getState().project.audio;
-      const inPause = !vo || vo.pauses.some((p) => clock.time >= p.s && clock.time <= p.e) || clock.time > vo.duration;
-      el.volume = Math.min(1, (getState().project.music?.volume ?? 0.25) * (inPause ? 1 : 0.4));
-    });
+    clock.musicAt = (t) => {
+      const cur = getState().project.music;
+      return cur ? musicTime(cur, t, el.duration || cur.duration) : t;
+    };
+    // The same gain curve the export uses: volume, fades, and the dip under the voice-over.
+    const level = () => {
+      const p = getState().project;
+      el.volume = musicGain(p, clock.time, totalDuration(p));
+    };
+    level();
+    const unsub = clock.subscribe(level);
+    const unsubState = subscribeStore(level);
     return () => {
       unsub();
+      unsubState();
       el.pause();
       clock.music = null;
     };

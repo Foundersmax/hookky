@@ -4,7 +4,7 @@ import type { Response } from "express";
 import type { AgentEvent } from "../src/types";
 import { TEMPLATES, TRANSITIONS, BACKGROUNDS, MOTIONS, PACES, GRADES, EFFECTS } from "../src/types";
 import { LOOKS } from "../src/engine/fx";
-import { STYLE_PRESETS } from "../src/presets";
+import { STYLE_PRESETS, FONT_CHOICES } from "../src/presets";
 import { searchVisuals, searchVideos, importFromUrl, type Orientation } from "./connectors";
 import { directorPrompt } from "../src/agent/prompt";
 import { lintStoryboard, notesForAgent } from "../src/agent/lint";
@@ -53,6 +53,7 @@ const sceneSchema = {
     clipStart: { type: "number", description: "video clips only: seconds into the clip where the scene starts" },
     clipSpeed: { type: "number", description: "video clips only: 0.25–2, e.g. 0.5 for slow motion" },
     backdrop: { type: "array", items: { type: "string" }, maxItems: 8, description: "banner asset ids shown full-bleed behind the text, crossfading in turn" },
+    font: { type: "string", description: "display font for this scene only (a built-in name, or a brand font from the library); omit to use the brand font" },
     grade: { type: "string", enum: [...GRADES], description: "colour grade; keep one grade across the ad" },
     effects: { type: "array", items: { type: "string", enum: [...EFFECTS] }, maxItems: 4 },
     fxAmount: { type: "number", description: "effect strength 0–1 (0.5–0.8 is tasteful)" },
@@ -144,7 +145,7 @@ const tools: Anthropic.Beta.BetaToolUnion[] = [
         fg: { type: "string" },
         accent: { type: "string" },
         muted: { type: "string" },
-        fontDisplay: { type: "string", enum: ["Inter", "Inter Tight", "Space Grotesk", "Instrument Serif", "Syne", "DM Sans", "JetBrains Mono", "Fraunces", "Manrope"] },
+        fontDisplay: { type: "string", enum: FONT_CHOICES },
         fontBody: { type: "string", enum: ["Inter", "DM Sans", "JetBrains Mono", "Manrope"] },
         logo: { type: "string", description: "asset id of the logo" },
         aspect: { type: "string", enum: ["16:9", "9:16", "1:1", "4:5"] },

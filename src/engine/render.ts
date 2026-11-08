@@ -223,7 +223,8 @@ export class Renderer {
       portrait: H > W * 1.1,
       pad: Math.min(W, H) * 0.085,
       c: colorsFor(p.brand, scene),
-      brand: p.brand,
+      // A scene can set its own display font; everything else stays on brand.
+      brand: scene.font ? { ...p.brand, fontDisplay: scene.font } : p.brand,
       scene,
       t: lt,
       dur: scene.duration,
@@ -530,7 +531,7 @@ function headlineSize(g: G, scale = 1) {
 function textStack(g: G, opts: { x: number; y: number; maxW: number; align: "left" | "center"; size?: number; maxLines?: number; delay?: number; vcenter?: boolean; color?: string; mode?: "mask" | "words" | "rise" }) {
   const { ctx, c, u, scene } = g;
   const align = opts.align;
-  const H1 = scene.headline ? layoutText(ctx, scene.headline, F(g, opts.size ?? headlineSize(g)), opts.maxW, opts.maxLines ?? 3, /Serif|Fraunces/.test(g.brand.fontDisplay) ? 1.0 : 0.98) : null;
+  const H1 = scene.headline ? layoutText(ctx, scene.headline, F(g, opts.size ?? headlineSize(g)), opts.maxW, opts.maxLines ?? 3, /Serif|Fraunces|Playfair/.test(g.brand.fontDisplay) ? 1.0 : 0.98) : null;
   const S = scene.subline ? layoutText(ctx, stripMarks(scene.subline), B(g, 30 * u), Math.min(opts.maxW, 900 * u), 3, 1.35) : null;
   const gap = 34 * u;
   const kh = scene.kicker ? 60 * u : 0;
@@ -542,7 +543,7 @@ function textStack(g: G, opts: { x: number; y: number; maxW: number; align: "lef
     y += kh;
   }
   if (H1) hitLayout(g, "headline", H1, opts.x, y, align);
-  if (H1) y = drawLayout(ctx, H1, { x: opts.x, y, align, color: opts.color ?? c.fg, emColor: c.accent, t: g.t, delay: d + 0.12, dur: 0.85 * g.sp, stagger: 0.09, mode: opts.mode ?? "mask", easing: g.E, emItalic: /Serif|Fraunces/.test(g.brand.fontDisplay) });
+  if (H1) y = drawLayout(ctx, H1, { x: opts.x, y, align, color: opts.color ?? c.fg, emColor: c.accent, t: g.t, delay: d + 0.12, dur: 0.85 * g.sp, stagger: 0.09, mode: opts.mode ?? "mask", easing: g.E, emItalic: /Serif|Fraunces|Playfair/.test(g.brand.fontDisplay) });
   if (S) {
     y += gap;
     hitLayout(g, "subline", S, opts.x, y, align);

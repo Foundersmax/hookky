@@ -4,6 +4,7 @@ import { analyzeAudio, alignScript } from "../audio/analyze";
 import { clock, useClock } from "../clock";
 import { sendToAgent } from "../agent/client";
 import { Icon } from "./Icon";
+import { MusicControls, Slider } from "./MusicControls";
 import { fmt } from "./Stage";
 
 /** Analyse a VO file, attach it to the project, and transcribe if a provider is configured. */
@@ -31,7 +32,6 @@ export function VoicePanel({ toast }: { toast: (s: string) => void }) {
   const [script, setScript] = useState("");
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  const musicRef = useRef<HTMLInputElement>(null);
   const c = useClock();
 
   async function onFile(f?: File) {
@@ -61,6 +61,7 @@ export function VoicePanel({ toast }: { toast: (s: string) => void }) {
           <div className="muted">
             {audio.duration.toFixed(1)}s · {audio.pauses.length} natural pauses · {audio.words ? `${audio.words.length} words (${audio.wordsSource})` : "no transcript yet"}
           </div>
+          <Slider label="Volume" value={audio.volume ?? 1} min={0} max={1.5} step={0.01} show={`${Math.round((audio.volume ?? 1) * 100)}%`} onChange={(volume) => updateProject((p) => (p.audio ? { ...p, audio: { ...p.audio, volume } } : p))} />
           <div className="row" style={{ gap: 6 }}>
             <button className="btn" onClick={() => fileRef.current?.click()}>Replace</button>
             <button className="btn ghost" onClick={() => setAudio(undefined)}>Remove</button>
@@ -113,23 +114,7 @@ export function VoicePanel({ toast }: { toast: (s: string) => void }) {
       )}
 
       <div className="divider" />
-      <div className="field">
-        <label>Music bed</label>
-        {music ? (
-          <>
-            <div className="muted">{music.name}</div>
-            <input type="range" min={0} max={1} step={0.01} value={music.volume} onChange={(e) => setState((s) => ({ project: { ...s.project, music: { ...music, volume: +e.target.value } } }))} />
-            <button className="btn ghost" onClick={() => setState((s) => ({ project: { ...s.project, music: undefined } }))}>Remove music</button>
-          </>
-        ) : (
-          <button className="btn" onClick={() => musicRef.current?.click()}>Add music track</button>
-        )}
-        <input ref={musicRef} type="file" hidden accept="audio/*" onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) setState((s) => ({ project: { ...s.project, music: { name: f.name, url: URL.createObjectURL(f), volume: 0.25 } } }));
-        }} />
-        <span className="tiny">Ducked under the voice-over in preview and export.</span>
-      </div>
+      <MusicControls />
     </>
   );
 }

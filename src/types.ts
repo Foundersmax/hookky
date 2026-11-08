@@ -84,6 +84,8 @@ export interface Scene {
   effects?: Effect[];
   /** Strength of the grade and effects, 0–1 (default 0.7). */
   fxAmount?: number;
+  /** Display font for this scene only (a built-in family or an uploaded brand font); the brand's otherwise. */
+  font?: string;
   /** Banners shown full-bleed behind the scene's text, crossfading in turn (asset refs, up to 8). */
   backdrop?: string[];
   notes?: string;
@@ -118,10 +120,29 @@ export interface Word {
   e: number;
 }
 
+/** The background music bed and how it sits in the mix. */
+export interface MusicTrack {
+  name: string;
+  url: string;
+  /** 0–1 */
+  volume: number;
+  /** Length of the file in seconds (it loops to fill the cut). */
+  duration?: number;
+  /** Where in the track the ad starts, seconds. */
+  start?: number;
+  /** Fade in at the start and out at the end of the cut, seconds. */
+  fadeIn?: number;
+  fadeOut?: number;
+  /** How far the music dips while the voice-over speaks, 0 (not at all) to 1 (silent). Default 0.6. */
+  duck?: number;
+}
+
 export interface AudioTrack {
   name: string;
   url: string;
   duration: number;
+  /** Voice-over loudness, 0–1.5 (1 = as recorded). */
+  volume?: number;
   peaks: number[];
   pauses: { s: number; e: number }[];
   words?: Word[];
@@ -138,7 +159,7 @@ export interface Project {
   captions: boolean;
   grain: boolean;
   audio?: AudioTrack;
-  music?: { name: string; url: string; volume: number };
+  music?: MusicTrack;
 }
 
 export interface Asset {

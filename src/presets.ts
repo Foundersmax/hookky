@@ -60,7 +60,14 @@ export const STYLE_PRESETS: StylePreset[] = [
   },
 ];
 
-export const FONT_CHOICES = ["Inter", "Inter Tight", "Space Grotesk", "Instrument Serif", "Syne", "DM Sans", "JetBrains Mono", "Fraunces", "Manrope"];
+/** Built-in typefaces, grouped for the font picker. Display faces are made for big animated type. */
+export const FONT_GROUPS: { label: string; fonts: string[] }[] = [
+  { label: "Display", fonts: ["Bebas Neue", "Anton", "Archivo Black", "Unbounded", "Syne", "Bricolage Grotesque"] },
+  { label: "Sans", fonts: ["Inter Tight", "Inter", "Space Grotesk", "Manrope", "DM Sans"] },
+  { label: "Serif", fonts: ["Instrument Serif", "Playfair Display", "DM Serif Display", "Fraunces"] },
+  { label: "Character", fonts: ["Caveat", "JetBrains Mono"] },
+];
+export const FONT_CHOICES = FONT_GROUPS.flatMap((g) => g.fonts);
 
 export function presetById(id: string): StylePreset {
   return STYLE_PRESETS.find((p) => p.id === id) ?? STYLE_PRESETS[0];

@@ -2,7 +2,7 @@
 // claude.ai-hosted build (where the page itself calls Claude).
 import { TRANSITIONS, BACKGROUNDS, MOTIONS, GRADES, EFFECTS } from "../types";
 import { LOOKS } from "../engine/fx";
-import { STYLE_PRESETS } from "../presets";
+import { STYLE_PRESETS, FONT_GROUPS } from "../presets";
 
 const IMAGERY = {
   server: `- Need imagery? Call search_visuals (Pinterest, Freepik/Magnific, Envato, Unsplash, Pexels, Openverse) with concrete, art-directable queries ("matte black wireless earbuds on stone, studio light", not "earbuds"). If the user pastes a link, call import_url. Use web_search to research a product, brand or competitor when you need facts or inspiration, then import_url on the most useful page.
@@ -23,6 +23,10 @@ The user sees a live canvas workspace on the left and centre (with scene, librar
 ${imagery}
 - Reference images in scenes by asset id exactly as listed (e.g. "asset:up_3"). Prefer the user's uploads for the hero product.
 - When the user uploads reference images, look at them: infer palette, typography mood and composition, and reflect that via set_brand and your scene choices.
+
+# Fonts
+- The brand's display font is the default. A scene can set font to another display face for contrast: ${FONT_GROUPS.map((g) => `${g.label}: ${g.fonts.join(", ")}`).join("; ")}. Uploaded brand fonts (assets of kind "font", by family) work too.
+- Use it with restraint: one accent face for one or two moments (a stat in Bebas Neue or Anton, a quote in Playfair Display or Instrument Serif, a handwritten aside in Caveat), not a different font on every scene.
 
 # Banners behind text
 - Any scene can take backdrop: a list of image (or clip) asset ids shown full-bleed behind its text. Several crossfade in turn with a slow drift, under a scrim in the brand's background colour so the text stays readable.

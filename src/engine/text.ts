@@ -39,14 +39,19 @@ export const fontString = (f: FontSpec) => `${f.italic ? "italic " : ""}${f.weig
 
 /** Display weights that look right per family. */
 export function displayWeight(family: string) {
-  if (/Instrument Serif/.test(family)) return 400;
+  // Single-weight faces must not be asked for bold, or the browser fakes it.
+  if (/Instrument Serif|Bebas Neue|Anton|Archivo Black|DM Serif Display/.test(family)) return 400;
+  if (/Playfair|Caveat/.test(family)) return 600;
+  if (/Unbounded|Bricolage/.test(family)) return 700;
   if (/Fraunces/.test(family)) return 500;
   if (/Mono/.test(family)) return 600;
   if (/Syne/.test(family)) return 700;
   return 650;
 }
 export function displayTracking(family: string) {
-  if (/Instrument Serif|Fraunces/.test(family)) return -0.02;
+  if (/Bebas Neue|Anton/.test(family)) return 0.01; // condensed caps want a touch of air
+  if (/Caveat/.test(family)) return 0;
+  if (/Instrument Serif|Fraunces|Playfair|DM Serif/.test(family)) return -0.02;
   if (/Mono/.test(family)) return -0.04;
   return -0.035;
 }

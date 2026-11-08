@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import type { Asset, AudioTrack, Brand, BrandKit, ChatMessage, PatchOp, Project, Scene, StoryboardInput } from "./types";
 import { kitFromProject, applyKitTo, sanitizeKit, findKit } from "./kits";
+import { cleanMusic } from "./audio/mix";
 import { TEMPLATES, TRANSITIONS, BACKGROUNDS } from "./types";
 import { presetById } from "./presets";
 import { uid, clamp } from "./engine/util";
@@ -81,7 +82,7 @@ function revive(raw: any, audio?: Blob, music?: Blob): Project {
   const project = sanitizeProject(raw, defaultProject());
   if (typeof raw?.id === "string" && raw.id) project.id = raw.id.slice(0, 40);
   if (audio && raw?.audio && typeof raw.audio.duration === "number") project.audio = { ...raw.audio, url: URL.createObjectURL(audio) };
-  if (music && raw?.music) project.music = { name: String(raw.music.name ?? "music"), volume: Number(raw.music.volume) || 0.25, url: URL.createObjectURL(music) };
+  if (music && raw?.music) project.music = cleanMusic(raw.music, URL.createObjectURL(music));
   db.markRestored(project.id, project.audio?.url, project.music?.url);
   return project;
 }
@@ -262,6 +263,12 @@ export function restoreVersion(v: Version) {
 }
 
 export const deleteVersion = (versionId: string) => db.deleteVersion(state.project.id, versionId);
+
+/** Listen to every state change outside React (returns an unsubscribe). */
+export function subscribeStore(fn: () => void) {
+  listeners.add(fn);
+  return () => void listeners.delete(fn);
+}
 
 export function useStudio<T>(sel: (s: StudioState) => T): T {
   return useSyncExternalStore(

@@ -5,7 +5,7 @@ import { Renderer } from "./engine/render";
 import { ASPECT_SIZE, TEMPLATES, BACKGROUNDS, TRANSITIONS, GRADES, EFFECTS, type Aspect, type Project, type Scene } from "./types";
 import { LOOKS, glitchActive } from "./engine/fx";
 import { sanitizeScene } from "./sanitize";
-import { STYLE_PRESETS } from "./presets";
+import { STYLE_PRESETS, FONT_CHOICES } from "./presets";
 
 const ASPECTS = Object.keys(ASPECT_SIZE) as Aspect[];
 const MOTIONS = ["calm", "snappy", "bouncy"] as const;
@@ -97,7 +97,7 @@ async function run() {
   // effects: every grade and every effect, in every format, at several moments and through transitions
   for (const aspect of ASPECTS) {
     r.resize(...ASPECT_SIZE[aspect], 0.25);
-    const looks: Partial<Scene>[] = [{ backdrop: ["img"] }, { backdrop: ["img", "img", "img"], background: "image" }, { backdrop: ["img", "missing"], grade: "duotone", effects: ["push-in"] },
+    const looks: Partial<Scene>[] = [...FONT_CHOICES.map((font) => ({ font })), { font: "Not A Real Font" }, { backdrop: ["img"] }, { backdrop: ["img", "img", "img"], background: "image" }, { backdrop: ["img", "missing"], grade: "duotone", effects: ["push-in"] },
       ...GRADES.map((grade) => ({ grade })), ...EFFECTS.map((e) => ({ effects: [e] })), ...LOOKS.map((l) => ({ grade: l.grade, effects: l.effects, fxAmount: l.amount }))];
     looks.forEach((fx, i) => {
       const template = TEMPLATES[i % TEMPLATES.length];

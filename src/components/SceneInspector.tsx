@@ -11,6 +11,7 @@ import { Framing } from "./Framing";
 import { ClipControls } from "./ClipControls";
 import { EffectsControls } from "./EffectsControls";
 import { BackdropControls } from "./BackdropControls";
+import { FontPicker } from "./FontPicker";
 
 const USES: Record<string, (keyof Scene)[]> = {
   "title-reveal": ["kicker", "headline", "subline", "align"],
@@ -130,6 +131,7 @@ export function SceneInspector() {
             )}
           </div>
           <p className="section-title">Text</p>
+          <FontPicker value={scene.font} onChange={(font) => edit({ font })} label="Font for this scene" />
           {uses.includes("kicker") && <Text label="Kicker" v={scene.kicker} on={(kicker) => edit({ kicker })} />}
           {uses.includes("headline") && <Text label={scene.template === "quote" ? "Quote" : "Headline · *accent*"} v={scene.headline} on={(headline) => edit({ headline })} area />}
           {uses.includes("subline") && <Text label="Subline" v={scene.subline} on={(subline) => edit({ subline })} />}

@@ -9,6 +9,8 @@ class Clock {
   loop = true;
   audio: HTMLAudioElement | null = null;
   music: HTMLAudioElement | null = null;
+  /** Where the music file should be at cut time t (start offset, looping); set by the app. */
+  musicAt: (t: number) => number = (t) => t % (this.music?.duration || 1e9);
   private last = 0;
   private listeners = new Set<L>();
   private raf = 0;
@@ -35,7 +37,7 @@ class Clock {
       this.audio.play().catch(() => {});
     }
     if (this.music) {
-      this.music.currentTime = this.time % (this.music.duration || 1e9);
+      this.music.currentTime = this.musicAt(this.time);
       this.music.play().catch(() => {});
     }
     const tick = () => {
@@ -73,7 +75,7 @@ class Clock {
   seek(t: number) {
     this.time = Math.max(0, Math.min(t, this.duration || t));
     if (this.audio) this.audio.currentTime = Math.min(this.time, this.audio.duration || this.time);
-    if (this.music && this.music.duration) this.music.currentTime = this.time % this.music.duration;
+    if (this.music && this.music.duration) this.music.currentTime = this.musicAt(this.time);
     this.emit();
   }
 }

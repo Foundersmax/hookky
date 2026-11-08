@@ -403,3 +403,52 @@ test("backdrops: up to 8 valid refs survive cleaning; Director's notes flag miss
   const ok = lintStoryboard({ scenes: [scene({ duration: 4, backdrop: ["asset:up_1", "asset:up_1"] })], brand, assetIds: new Set(["asset:up_1"]) });
   assert.ok(!ok.some((n) => n.code.startsWith("backdrop")));
 });
+
+// ---------------------------------------------------------------- music mix, project order, fonts
+import { musicGain, musicEnvelope, musicTime, cleanMusic, voiceGain } from "./audio/mix";
+import { arrange, moveId } from "./projectOrder";
+import { displayWeight } from "./engine/text";
+import { FONT_CHOICES } from "./presets";
+
+test("music mix: fades at the ends, dips under the voice, loops from the chosen start", () => {
+  const music = cleanMusic({ name: "bed.mp3", volume: 0.5, duration: 20, start: 5, fadeIn: 1, fadeOut: 2, duck: 0.8 }, "blob:x");
+  const vo = { name: "vo", url: "", duration: 10, peaks: [], pauses: [{ s: 4, e: 6 }] }; // speech 0–4 and 6–10
+  const p = { music, audio: vo };
+  const noVo = { music, audio: undefined };
+  assert.equal(musicGain(noVo, 0, 12), 0, "silent at the very start (fade in)");
+  assert.ok(Math.abs(musicGain(noVo, 0.5, 12) - 0.25) < 1e-9, "halfway through the fade in");
+  assert.ok(Math.abs(musicGain(noVo, 5, 12) - 0.5) < 1e-9, "full volume in the middle");
+  assert.ok(Math.abs(musicGain(noVo, 11, 12) - 0.25) < 1e-9, "fading out");
+  assert.ok(Math.abs(musicGain(p, 2, 12) - 0.1) < 1e-9, "dips 80% while the voice speaks");
+  assert.ok(Math.abs(musicGain(p, 5, 12) - 0.5) < 1e-9, "back up in the pause");
+  assert.ok(Math.abs(musicGain(p, 11, 12) - 0.25) < 1e-9, "after the voice ends, only the fade applies");
+  assert.equal(musicTime(music, 0), 5, "starts where the user chose");
+  assert.equal(musicTime(music, 18), 3, "and loops");
+  const env = musicEnvelope(p, 12);
+  assert.equal(env[0].t, 0);
+  assert.ok(Math.abs(env[env.length - 1].t - 12) < 0.05);
+  assert.ok(env.every((k) => k.v >= 0 && k.v <= 1));
+  // Old saves (name, url, volume only) get sensible defaults; junk is clamped.
+  const old = cleanMusic({ name: "old.mp3", volume: 0.3 } as any, "blob:y");
+  assert.deepEqual([old.volume, old.start, old.fadeIn, old.fadeOut, old.duck], [0.3, 0, 0.5, 1.5, 0.6]);
+  assert.equal(cleanMusic({ volume: 9, duck: -1, fadeIn: 99 } as any, "u").volume, 1);
+  assert.equal(voiceGain({ ...vo, volume: 4 }), 1.5);
+  assert.equal(voiceGain(undefined), 1);
+});
+
+test("projects arrange by recent, name or the user's own order", () => {
+  const m = (id: string, title: string, updatedAt: number) => ({ id, title, aspect: "16:9" as const, style: "noir", scenes: 1, duration: 3, updatedAt, createdAt: 0 });
+  const list = [m("a", "Zeta", 1), m("b", "alpha", 3), m("c", "Beta 10", 2), m("d", "Beta 9", 4)];
+  assert.deepEqual(arrange(list, "recent", []).map((p) => p.id), ["d", "b", "c", "a"]);
+  assert.deepEqual(arrange(list, "name", []).map((p) => p.title), ["alpha", "Beta 9", "Beta 10", "Zeta"], "case-insensitive, numbers in order");
+  assert.deepEqual(arrange(list, "custom", ["c", "a"]).map((p) => p.id), ["d", "b", "c", "a"], "new projects first, then the saved order");
+  assert.deepEqual(moveId(["a", "b", "c", "d"], "d", "b"), ["a", "d", "b", "c"]);
+  assert.deepEqual(moveId(["a", "b", "c"], "a", null), ["b", "c", "a"]);
+});
+
+test("scene fonts: valid names kept, single-weight faces never asked for bold", () => {
+  assert.equal(sanitizeScene({ template: "title-reveal", duration: 3, font: "Bebas Neue" }).font, "Bebas Neue");
+  assert.equal(sanitizeScene({ template: "title-reveal", duration: 3, font: 'x"; color:red' }).font, undefined);
+  for (const f of ["Bebas Neue", "Anton", "Archivo Black", "DM Serif Display"]) assert.equal(displayWeight(f), 400, f);
+  assert.equal(new Set(FONT_CHOICES).size, FONT_CHOICES.length, "no duplicate fonts");
+});

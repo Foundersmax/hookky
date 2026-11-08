@@ -233,6 +233,16 @@ export async function saveLibrary(assets: Asset[]) {
   await put("library", assets.map((a) => (keep.has(a.id) ? { ...a, src: CLIP } : a)));
 }
 
+/** The user's own arrangement of the projects page (ids, first to last). */
+export async function loadProjectOrder(): Promise<string[]> {
+  if (!(await db())) return [];
+  const v = await get<unknown>("projectOrder");
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+}
+export async function saveProjectOrder(ids: string[]) {
+  if (await db()) await put("projectOrder", ids);
+}
+
 export async function loadKits(): Promise<unknown[]> {
   if (!(await db())) return [];
   const v = await get<unknown[]>("kits");

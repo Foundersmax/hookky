@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useStudio, openProject, createProject, duplicateProject, renameProject, deleteProject, defaultProject } from "../store";
 import { STARTERS } from "../starters";
 import { posterFor } from "./thumbs";
-import { loadProject, type ProjectMeta } from "../persist";
+import { loadProject, loadProjectOrder, saveProjectOrder, type ProjectMeta } from "../persist";
+import { arrange, moveId, type SortMode } from "../projectOrder";
 import { Renderer, totalDuration } from "../engine/render";
 import { ASPECT_SIZE } from "../types";
 import { sanitizeProject } from "../sanitize";
@@ -50,10 +51,19 @@ function useHoverPreview(meta: ProjectMeta) {
   return { canvas, active, setActive };
 }
 
-function ProjectCard({ meta, current }: { meta: ProjectMeta; current: boolean }) {
+interface CardActions {
+  trash: (m: ProjectMeta) => void;
+  moveBy: (m: ProjectMeta, dir: -1 | 1) => void;
+  drag: { id: string | null; over: string | null };
+  onDragStart: (m: ProjectMeta) => void;
+  onDragOver: (m: ProjectMeta) => void;
+  onDrop: (m: ProjectMeta) => void;
+  onDragEnd: () => void;
+}
+
+function ProjectCard({ meta, current, actions, first, last }: { meta: ProjectMeta; current: boolean; actions: CardActions; first: boolean; last: boolean }) {
   const { canvas, active, setActive } = useHoverPreview(meta);
   const [menu, setMenu] = useState(false);
-  const [confirm, setConfirm] = useState(false);
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(meta.title);
   useEffect(() => setTitle(meta.title), [meta.title]);
@@ -65,7 +75,27 @@ function ProjectCard({ meta, current }: { meta: ProjectMeta; current: boolean })
   };
 
   return (
-    <article className={`pcard ${current ? "current" : ""}`} onPointerEnter={() => setActive(true)} onPointerLeave={() => (setActive(false), setMenu(false), setConfirm(false))}>
+    <article
+      className={`pcard ${current ? "current" : ""} ${actions.drag.id === meta.id ? "dragging" : ""} ${actions.drag.over === meta.id && actions.drag.id !== meta.id ? "drop-before" : ""}`}
+      onPointerEnter={() => setActive(true)}
+      onPointerLeave={() => (setActive(false), setMenu(false))}
+      draggable={!editing}
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("application/x-hookky-project", meta.id);
+        actions.onDragStart(meta);
+      }}
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes("application/x-hookky-project")) return;
+        e.preventDefault();
+        actions.onDragOver(meta);
+      }}
+      onDrop={(e) => (e.preventDefault(), actions.onDrop(meta))}
+      onDragEnd={actions.onDragEnd}
+    >
+      <button className="pcard-trash" aria-label={`Delete ${meta.title}`} title="Delete (you can undo)" onClick={() => actions.trash(meta)}>
+        <Icon name="trash" size={14} />
+      </button>
       <button className="pcard-media" onClick={() => openProject(meta.id)} aria-label={`Open ${meta.title}`}>
         <div className="pcard-frame" style={{ aspectRatio: `${W} / ${H}` }}>
           {meta.thumb ? <img src={meta.thumb} alt="" draggable={false} /> : <span className="pcard-empty" />}
@@ -97,7 +127,7 @@ function ProjectCard({ meta, current }: { meta: ProjectMeta; current: boolean })
           </p>
         </div>
         <div className="pcard-menu">
-          <button className="btn icon ghost" aria-label="Project actions" aria-expanded={menu} onClick={() => (setMenu((m) => !m), setConfirm(false))}>
+          <button className="btn icon ghost" aria-label="Project actions" aria-expanded={menu} onClick={() => setMenu((m) => !m)}>
             <Icon name="more" />
           </button>
           {menu && (
@@ -105,11 +135,9 @@ function ProjectCard({ meta, current }: { meta: ProjectMeta; current: boolean })
               <button role="menuitem" onClick={() => openProject(meta.id)}>Open</button>
               <button role="menuitem" onClick={() => (setMenu(false), setEditing(true))}>Rename</button>
               <button role="menuitem" onClick={() => (setMenu(false), duplicateProject(meta.id))}>Duplicate</button>
-              {confirm ? (
-                <button role="menuitem" className="danger" onClick={() => (setMenu(false), deleteProject(meta.id))}>Delete for good</button>
-              ) : (
-                <button role="menuitem" className="danger" onClick={() => setConfirm(true)}>Delete…</button>
-              )}
+              {!first && <button role="menuitem" onClick={() => (setMenu(false), actions.moveBy(meta, -1))}>Move earlier</button>}
+              {!last && <button role="menuitem" onClick={() => (setMenu(false), actions.moveBy(meta, 1))}>Move later</button>}
+              <button role="menuitem" className="danger" onClick={() => (setMenu(false), actions.trash(meta))}>Delete</button>
             </div>
           )}
         </div>
@@ -118,13 +146,90 @@ function ProjectCard({ meta, current }: { meta: ProjectMeta; current: boolean })
   );
 }
 
+const SORT_KEY = "hookky.projectSort";
+const UNDO_MS = 6000;
+const readSort = (): SortMode => {
+  try {
+    const v = localStorage.getItem(SORT_KEY);
+    return v === "name" || v === "custom" ? v : "recent";
+  } catch {
+    return "recent";
+  }
+};
+
 export function Home() {
   const projects = useStudio((s) => s.projects);
   const currentId = useStudio((s) => s.project.id);
   const [q, setQ] = useState("");
+  const [mode, setModeState] = useState<SortMode>(readSort);
+  const [order, setOrder] = useState<string[]>([]);
+  const [drag, setDrag] = useState<{ id: string | null; over: string | null }>({ id: null, over: null });
+  // Deleted cards hide at once and are removed for good after a few seconds unless undone.
+  const [trashed, setTrashed] = useState<ProjectMeta[]>([]);
+  const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const starterPosters = useMemo(() => STARTERS.map((s) => ({ ...s, project: s.build() })).map((s) => ({ ...s, poster: (() => { try { return posterFor(s.project, 160); } catch { return ""; } })() })), []);
-  const shown = projects.filter((p) => p.title.toLowerCase().includes(q.trim().toLowerCase()));
 
+  useEffect(() => {
+    loadProjectOrder().then(setOrder).catch(() => {});
+    // Leaving the page finishes any pending deletes.
+    const pending = timers.current;
+    return () => {
+      for (const [id, t] of pending) (clearTimeout(t), deleteProject(id));
+      pending.clear();
+    };
+  }, []);
+
+  const setMode = (m: SortMode) => {
+    setModeState(m);
+    try {
+      localStorage.setItem(SORT_KEY, m);
+    } catch {}
+  };
+  const hidden = new Set(trashed.map((t) => t.id));
+  const arranged = arrange(projects.filter((p) => !hidden.has(p.id)), mode, order);
+  const shown = arranged.filter((p) => p.title.toLowerCase().includes(q.trim().toLowerCase()));
+
+  /** Save a new custom order (switching to Custom), starting from what's on screen. */
+  const commitOrder = (ids: string[]) => {
+    setOrder(ids);
+    setMode("custom");
+    saveProjectOrder(ids).catch(() => {});
+  };
+  const actions: CardActions = {
+    drag,
+    trash: (m) => {
+      setTrashed((t) => [...t.filter((x) => x.id !== m.id), m]);
+      timers.current.set(
+        m.id,
+        setTimeout(() => {
+          timers.current.delete(m.id);
+          deleteProject(m.id);
+          setTrashed((t) => t.filter((x) => x.id !== m.id));
+        }, UNDO_MS),
+      );
+    },
+    moveBy: (m, dir) => {
+      const ids = arranged.map((p) => p.id);
+      const i = ids.indexOf(m.id);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= ids.length) return;
+      [ids[i], ids[j]] = [ids[j], ids[i]];
+      commitOrder(ids);
+    },
+    onDragStart: (m) => setDrag({ id: m.id, over: null }),
+    onDragOver: (m) => setDrag((d) => (d.over === m.id ? d : { ...d, over: m.id })),
+    onDrop: (m) => {
+      if (drag.id && drag.id !== m.id) commitOrder(moveId(arranged.map((p) => p.id), drag.id, m.id));
+      setDrag({ id: null, over: null });
+    },
+    onDragEnd: () => setDrag({ id: null, over: null }),
+  };
+  const undo = (m: ProjectMeta) => {
+    clearTimeout(timers.current.get(m.id));
+    timers.current.delete(m.id);
+    setTrashed((t) => t.filter((x) => x.id !== m.id));
+  };
+  const lastTrashed = trashed[trashed.length - 1];
   return (
     <main className="home">
       <div className="home-wrap">
@@ -153,8 +258,18 @@ export function Home() {
         <section className="home-projects" aria-labelledby="projects-title">
           <div className="home-head">
             <h2 id="projects-title">
-              Projects <span className="count">{projects.length}</span>
+              Projects <span className="count">{arranged.length}</span>
             </h2>
+            <span className="spacer" />
+            {arranged.length > 1 && (
+              <div className="seg opt-seg" role="radiogroup" aria-label="Arrange projects">
+                {(["recent", "name", "custom"] as const).map((m) => (
+                  <button key={m} role="radio" aria-checked={mode === m} className={mode === m ? "on" : ""} onClick={() => setMode(m)} title={m === "custom" ? "Drag cards to arrange them" : undefined}>
+                    {m === "recent" ? "Recent" : m === "name" ? "Name" : "Custom"}
+                  </button>
+                ))}
+              </div>
+            )}
             {projects.length > 3 && (
               <label className="search">
                 <Icon name="search" />
@@ -164,12 +279,22 @@ export function Home() {
           </div>
           {shown.length ? (
             <div className="pgrid">
-              {shown.map((m) => (
-                <ProjectCard key={m.id} meta={m} current={m.id === currentId} />
+              {shown.map((m, i) => (
+                <ProjectCard key={m.id} meta={m} current={m.id === currentId} actions={actions} first={i === 0} last={i === shown.length - 1} />
               ))}
             </div>
           ) : (
-            <p className="muted home-empty">{projects.length ? `No projects match “${q}”.` : "Your projects will appear here. Pick a starter above to begin."}</p>
+            <p className="muted home-empty">{arranged.length ? `No projects match “${q}”.` : "Your projects will appear here. Pick a starter above to begin."}</p>
+          )}
+          {lastTrashed && (
+            <div className="undo-bar" role="status">
+              <span>
+                Deleted “{lastTrashed.title}”{trashed.length > 1 ? ` and ${trashed.length - 1} more` : ""}
+              </span>
+              <button className="btn" onClick={() => trashed.forEach(undo)}>
+                Undo
+              </button>
+            </div>
           )}
         </section>
       </div>

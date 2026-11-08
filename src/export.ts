@@ -5,7 +5,7 @@ import { ASPECT_SIZE } from "./types";
 import { Renderer, totalDuration, visibleAt, clipTimeAt } from "./engine/render";
 import { VideoSeeker } from "./engine/videos";
 import { images } from "./runtime";
-import { speechRegions } from "./audio/analyze";
+import { musicEnvelope, voiceGain, musicTime } from "./audio/mix";
 import { Muxer, ArrayBufferTarget } from "mp4-muxer";
 import { downloadsCap, isHosted } from "./host";
 
@@ -103,7 +103,9 @@ async function mixAudio(p: Project, duration: number): Promise<AudioBuffer | nul
   if (p.audio) {
     const src = oc.createBufferSource();
     src.buffer = await decode(p.audio.url);
-    src.connect(oc.destination);
+    const g = oc.createGain();
+    g.gain.value = voiceGain(p.audio);
+    src.connect(g).connect(oc.destination);
     src.start(0);
   }
   if (p.music) {
@@ -111,16 +113,12 @@ async function mixAudio(p: Project, duration: number): Promise<AudioBuffer | nul
     src.buffer = await decode(p.music.url);
     src.loop = true;
     const g = oc.createGain();
-    const v = p.music.volume;
-    g.gain.setValueAtTime(v, 0);
-    if (p.audio)
-      for (const reg of speechRegions(p.audio)) {
-        g.gain.setTargetAtTime(v * 0.4, reg.s, 0.08);
-        g.gain.setTargetAtTime(v, reg.e, 0.25);
-      }
-    g.gain.setTargetAtTime(0, Math.max(0, duration - 0.8), 0.25);
+    // The exact curve the preview plays: volume, fades and the dip under the voice-over.
+    const env = musicEnvelope(p, duration);
+    g.gain.setValueAtTime(env[0]?.v ?? 0, 0);
+    for (const k of env.slice(1)) g.gain.linearRampToValueAtTime(k.v, k.t);
     src.connect(g).connect(oc.destination);
-    src.start(0);
+    src.start(0, musicTime(p.music, 0, src.buffer.duration));
   }
   return oc.startRendering();
 }
@@ -236,7 +234,9 @@ async function exportRealtime(
   if (p.audio) {
     const src = ac.createBufferSource();
     src.buffer = await decode(p.audio.url);
-    src.connect(dest);
+    const vg = ac.createGain();
+    vg.gain.value = voiceGain(p.audio);
+    src.connect(vg).connect(dest);
     sources.push(src);
   }
   let musicGain: GainNode | undefined;
@@ -259,16 +259,11 @@ async function exportRealtime(
   rec.start(250);
 
   const t0 = ac.currentTime + 0.15;
-  for (const s of sources) s.start(t0);
-  if (musicGain && p.audio) {
-    // duck music under speech
-    const v = p.music!.volume;
-    musicGain.gain.setValueAtTime(v, t0);
-    for (const reg of speechRegions(p.audio)) {
-      musicGain.gain.setTargetAtTime(v * 0.4, t0 + reg.s, 0.08);
-      musicGain.gain.setTargetAtTime(v, t0 + reg.e, 0.25);
-    }
-    musicGain.gain.setTargetAtTime(0, t0 + duration - 0.6, 0.2); // fade out
+  for (const s of sources) s.start(t0, s.loop && p.music ? musicTime(p.music, 0, s.buffer?.duration) : 0);
+  if (musicGain) {
+    const env = musicEnvelope(p, duration);
+    musicGain.gain.setValueAtTime(env[0]?.v ?? 0, t0);
+    for (const k of env.slice(1)) musicGain.gain.linearRampToValueAtTime(k.v, t0 + k.t);
   }
 
   await new Promise<void>((resolve, reject) => {
