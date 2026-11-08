@@ -2,7 +2,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import type { Response } from "express";
 import type { AgentEvent } from "../src/types";
-import { TEMPLATES, TRANSITIONS, BACKGROUNDS, MOTIONS, PACES } from "../src/types";
+import { TEMPLATES, TRANSITIONS, BACKGROUNDS, MOTIONS, PACES, GRADES, EFFECTS } from "../src/types";
+import { LOOKS } from "../src/engine/fx";
 import { STYLE_PRESETS } from "../src/presets";
 import { searchVisuals, searchVideos, importFromUrl, type Orientation } from "./connectors";
 import { directorPrompt } from "../src/agent/prompt";
@@ -51,6 +52,9 @@ const sceneSchema = {
     accent: { type: "string", description: "hex override" },
     clipStart: { type: "number", description: "video clips only: seconds into the clip where the scene starts" },
     clipSpeed: { type: "number", description: "video clips only: 0.25–2, e.g. 0.5 for slow motion" },
+    grade: { type: "string", enum: [...GRADES], description: "colour grade; keep one grade across the ad" },
+    effects: { type: "array", items: { type: "string", enum: [...EFFECTS] }, maxItems: 4 },
+    fxAmount: { type: "number", description: "effect strength 0–1 (0.5–0.8 is tasteful)" },
     notes: { type: "string", description: "director's note, not rendered" },
   },
   required: ["template", "duration"],
@@ -76,6 +80,7 @@ const tools: Anthropic.Beta.BetaToolUnion[] = [
               motion: { type: "string", enum: [...MOTIONS] },
               pace: { type: "string", enum: [...PACES] },
               hook: { type: "string", description: "opening headline, ≤ 6 words, *word* = accent" },
+              look: { type: "string", enum: LOOKS.map((l) => l.id), description: "optional effects look for the whole ad" },
               accent: { type: "string", description: "optional hex accent override" },
             },
             required: ["name", "pitch", "style", "motion", "pace", "hook"],

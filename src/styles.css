@@ -676,3 +676,12 @@ select.sel { height: 30px; border-radius: 8px; background: transparent; font-siz
 .limit-field { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); margin-left: auto; }
 .limit-field input { width: 74px; height: 28px; border: 1px solid var(--line); background: var(--panel-2); border-radius: 8px; padding: 0 8px; color: var(--text); }
 @media (max-width: 640px) { .limit-field { margin-left: 0; } .person-main { flex-wrap: wrap; } }
+
+/* Effects in the Scene panel */
+.fx-controls { gap: 8px; }
+.fx-looks, .fx-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.fx-detail { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.fx-detail select { flex: 1; max-width: 170px; border: 1px solid var(--line); background: var(--panel-2); border-radius: 8px; padding: 5px 8px; color: var(--text); }
+.src-chip.filter:disabled { opacity: .4; cursor: default; }
+.link-btn { border: 0; background: none; padding: 0; font-size: 12px; color: var(--text-2); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; align-self: flex-start; }
+.link-btn:hover { color: var(--text); }

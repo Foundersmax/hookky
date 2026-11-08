@@ -9,6 +9,7 @@ import { toAgentImage } from "../engine/images";
 import { hostedTurn } from "./hosted";
 import { sanitizeBrand, sanitizeDirections } from "../sanitize";
 import { lintStoryboard } from "./lint";
+import { LOOKS } from "../engine/fx";
 
 /** Director's notes for the current project. */
 export function currentNotes() {
@@ -51,7 +52,7 @@ const PACE_FACTOR = { punchy: 0.85, steady: 1, cinematic: 1.2 } as const;
 
 /** What a direction-pick message asks the agent to do. */
 export function directionBrief(d: Direction, n: number) {
-  return `Build direction ${n} “${d.name}”: ${d.pitch} Style preset: ${d.style}. Motion: ${d.motion}. Pacing: ${d.pace}. Open with the line: ${d.hook}${d.accent ? `. Accent colour ${d.accent}` : ""}. Use the brief from earlier in our conversation.`;
+  return `Build direction ${n} “${d.name}”: ${d.pitch} Style preset: ${d.style}. Motion: ${d.motion}. Pacing: ${d.pace}. Open with the line: ${d.hook}${d.accent ? `. Accent colour ${d.accent}` : ""}${d.look ? `. Effects look: ${d.look} on every scene` : ""}. Use the brief from earlier in our conversation.`;
 }
 
 /** Build the direction the user picked from a directions card. */
@@ -72,8 +73,9 @@ function buildDirectionLocally(messageId: string, index: number) {
   if (!r.storyboard) return "Tell me about the product first, then pick a direction.";
   const factor = project.audio ? 1 : PACE_FACTOR[d.pace];
   let hooked = false;
+  const look = LOOKS.find((l) => l.id === d.look);
   const scenes = r.storyboard.scenes.map((s) => {
-    const out = { ...s, motion: d.motion, duration: +(s.duration * factor).toFixed(2) };
+    const out = { ...s, motion: d.motion, duration: +(s.duration * factor).toFixed(2), ...(look && { grade: look.grade, effects: [...look.effects], fxAmount: look.amount }) };
     if (!hooked && s.template === "title-reveal") (hooked = true), (out.headline = d.hook);
     return out;
   });

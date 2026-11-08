@@ -9,6 +9,7 @@ import { Icon } from "./Icon";
 import { DirectorNotes } from "./DirectorNotes";
 import { Framing } from "./Framing";
 import { ClipControls } from "./ClipControls";
+import { EffectsControls } from "./EffectsControls";
 
 const USES: Record<string, (keyof Scene)[]> = {
   "title-reveal": ["kicker", "headline", "subline", "align"],
@@ -126,6 +127,7 @@ export function SceneInspector() {
               </div>
             )}
           </div>
+          <EffectsControls key={scene.id} scene={scene} onChange={edit} />
           {uses.includes("kicker") && <Text label="Kicker" v={scene.kicker} on={(kicker) => edit({ kicker })} />}
           {uses.includes("headline") && <Text label={scene.template === "quote" ? "Quote" : "Headline · *accent*"} v={scene.headline} on={(headline) => edit({ headline })} area />}
           {uses.includes("subline") && <Text label="Subline" v={scene.subline} on={(subline) => edit({ subline })} />}

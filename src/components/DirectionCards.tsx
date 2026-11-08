@@ -7,6 +7,7 @@ import { presetById } from "../presets";
 import { brandWithStyle } from "../storyboard";
 import { useStudio } from "../store";
 import { pickDirection } from "../agent/client";
+import { LOOKS } from "../engine/fx";
 
 const PREVIEW_H = 112;
 const LOOP = 3.2;
@@ -16,7 +17,8 @@ const SETTLED = 1.9;
 function previewProject(p: Project, d: Direction): Project {
   const preset = presetById(d.style);
   const brand = { ...brandWithStyle(p.brand, d.style), ...(d.accent && { accent: d.accent }) };
-  const scene: Scene = { id: "preview", template: "title-reveal", duration: LOOP, kicker: brand.name || undefined, headline: d.hook, background: preset.defaultBackground, motion: d.motion, transition: "cut", align: "center" };
+  const look = LOOKS.find((l) => l.id === d.look);
+  const scene: Scene = { id: "preview", template: "title-reveal", duration: LOOP, kicker: brand.name || undefined, headline: d.hook, background: preset.defaultBackground, motion: d.motion, transition: "cut", align: "center", ...(look && { grade: look.grade, effects: [...look.effects], fxAmount: look.amount }) };
   return { ...p, aspect: "16:9", style: d.style, brand, scenes: [scene], captions: false, grain: false, audio: undefined };
 }
 
@@ -91,7 +93,10 @@ export function DirectionCards({ m }: { m: ChatMessage }) {
               <div className="dir-name">{d.name}</div>
               {d.pitch && <p className="dir-pitch">{d.pitch}</p>}
               <div className="dir-foot">
-                <span className="dir-tags">{presetById(d.style).label} · {d.motion[0].toUpperCase() + d.motion.slice(1)} · {PACE_LABEL[d.pace]}</span>
+                <span className="dir-tags">
+                  {presetById(d.style).label} · {d.motion[0].toUpperCase() + d.motion.slice(1)} · {PACE_LABEL[d.pace]}
+                  {d.look && ` · ${LOOKS.find((l) => l.id === d.look)?.label ?? ""}`}
+                </span>
                 <button className={`btn ${picked ? "" : "primary"} dir-go`} disabled={busy} onClick={() => pickDirection(m.id, i)} aria-label={`${picked ? "Build again" : "Build"}: ${d.name}`}>
                   {picked ? "Rebuild" : m.picked !== undefined ? "Try this" : "Build"}
                 </button>

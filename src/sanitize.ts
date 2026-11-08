@@ -2,8 +2,9 @@
 // an opened project file, an older saved version). Whatever comes in, what comes out is
 // something the renderer can draw without throwing.
 import type { Brand, Project, Scene, Stat, Aspect, Direction } from "./types";
-import { TEMPLATES, TRANSITIONS, BACKGROUNDS, MOTIONS, PACES } from "./types";
+import { TEMPLATES, TRANSITIONS, BACKGROUNDS, MOTIONS, PACES, GRADES, EFFECTS } from "./types";
 import { STYLE_PRESETS } from "./presets";
+import { LOOKS } from "./engine/fx";
 import { uid } from "./engine/util";
 
 const MAX_TEXT = 280;
@@ -85,6 +86,9 @@ export function sanitizeScene(input: unknown, keepId?: string): Scene {
     zoom: num(s.zoom, 1, 3),
     clipStart: num(s.clipStart, 0, 3600) || undefined,
     clipSpeed: ((v) => (v === undefined || v === 1 ? undefined : +v.toFixed(2)))(num(s.clipSpeed, 0.1, 4)),
+    grade: ((g) => (g && g !== "none" ? g : undefined))(oneOf(s.grade, GRADES)),
+    effects: ((list) => (list.length ? list : undefined))([...new Set((Array.isArray(s.effects) ? s.effects : []).filter((e: unknown) => (EFFECTS as readonly unknown[]).includes(e)))].slice(0, 4) as Scene["effects"] & {}),
+    fxAmount: ((v) => (v === undefined ? undefined : +v.toFixed(2)))(num(s.fxAmount, 0, 1)),
     notes: str(s.notes, 400),
   };
   for (const k of Object.keys(scene) as (keyof Scene)[]) if (scene[k] === undefined) delete scene[k];
@@ -150,6 +154,7 @@ export function sanitizeDirections(input: unknown): Direction[] {
       pace: oneOf(o.pace, PACES) ?? "steady",
       hook,
       accent: hex(o.accent),
+      look: oneOf(o.look, LOOKS.map((l) => l.id)),
     });
     if (out.length === 3) break;
   }

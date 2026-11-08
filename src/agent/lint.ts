@@ -48,6 +48,16 @@ export function lintStoryboard({ scenes, brand, assetIds, audio }: LintInput): N
     if (off.length) add(null, "tip", "cuts-off-pause", `${off.length} cut${off.length > 1 ? "s land" : " lands"} mid-speech (after scene ${off.slice(0, 4).join(", ")}${off.length > 4 ? "…" : ""}). Snap cuts to pauses.`);
   }
 
+  // effects: one look per ad, punctuation used as punctuation
+  const graded = [...new Set(scenes.map((s) => s.grade).filter((g) => g && g !== "none"))];
+  if (graded.length > 2) add(null, "tip", "fx-grades", `${graded.length} different colour grades across the cut. One grade on every scene reads as one campaign.`);
+  const loud = scenes.filter((s) => s.effects?.some((e) => e === "flash" || e === "glitch" || e === "shake")).length;
+  if (scenes.length >= 4 && loud / scenes.length > 0.6) add(null, "tip", "fx-overused", "Flash, glitch or shake on most cuts loses its punch. Keep them for two or three beats.");
+  scenes.forEach((s, i) => {
+    if (s.effects?.includes("confetti") && i < scenes.length - 2 && !s.cta && s.template !== "stat-counter") add(i, "tip", "fx-confetti", `Scene ${i + 1}: confetti lands best on the payoff (a stat, the offer or the end card).`);
+    if (s.effects?.includes("focus-pull") && s.duration < 1.6) add(i, "tip", "fx-short", `Scene ${i + 1}: a focus pull needs about 1.6 s to read.`);
+  });
+
   // per-scene checks
   scenes.forEach((s, i) => {
     const n = i + 1;

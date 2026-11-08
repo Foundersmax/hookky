@@ -34,6 +34,13 @@ export type BackgroundId = (typeof BACKGROUNDS)[number];
 export const MOTIONS = ["snappy", "calm", "bouncy", "smooth", "dramatic"] as const;
 export type Motion = (typeof MOTIONS)[number];
 
+/** Colour grades applied to a whole scene. "duotone" maps it onto the brand background and accent. */
+export const GRADES = ["none", "mono", "noir", "warm-film", "cool", "teal-orange", "faded", "vivid", "duotone"] as const;
+export type Grade = (typeof GRADES)[number];
+/** Post effects: camera moves, energy, atmosphere. Rendered by the engine, so exports match the preview. */
+export const EFFECTS = ["push-in", "pulse", "shake", "focus-pull", "flash", "rgb-split", "glitch", "light-leak", "vignette", "bokeh", "dust", "sparkle", "confetti", "scanlines", "halftone"] as const;
+export type Effect = (typeof EFFECTS)[number];
+
 export interface Stat {
   value: number;
   prefix?: string;
@@ -71,6 +78,12 @@ export interface Scene {
   /** Video clips in this scene: where in the clip to start (seconds) and playback speed (1 = normal). */
   clipStart?: number;
   clipSpeed?: number;
+  /** Colour grade for the scene. */
+  grade?: Grade;
+  /** Post effects (up to 4). */
+  effects?: Effect[];
+  /** Strength of the grade and effects, 0–1 (default 0.7). */
+  fxAmount?: number;
   notes?: string;
 }
 
@@ -170,6 +183,8 @@ export interface Direction {
   /** Opening headline, *word* = accent. */
   hook: string;
   accent?: string;
+  /** Effects look for the whole ad (an id from LOOKS). */
+  look?: string;
 }
 
 export interface ChatMessage {

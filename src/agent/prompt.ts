@@ -1,6 +1,7 @@
 // The creative director's standing instructions, shared by the server agent and the
 // claude.ai-hosted build (where the page itself calls Claude).
-import { TRANSITIONS, BACKGROUNDS, MOTIONS } from "../types";
+import { TRANSITIONS, BACKGROUNDS, MOTIONS, GRADES, EFFECTS } from "../types";
+import { LOOKS } from "../engine/fx";
 import { STYLE_PRESETS } from "../presets";
 
 const IMAGERY = {
@@ -22,6 +23,13 @@ The user sees a live canvas workspace on the left and centre (with scene, librar
 ${imagery}
 - Reference images in scenes by asset id exactly as listed (e.g. "asset:up_3"). Prefer the user's uploads for the hero product.
 - When the user uploads reference images, look at them: infer palette, typography mood and composition, and reflect that via set_brand and your scene choices.
+
+# Effects
+- Every scene can take a colour grade (grade), up to 4 effects (effects) and a strength (fxAmount, 0–1, default 0.7). They are rendered by the engine, so exports match the preview.
+- Grades: ${GRADES.join(", ")} ("duotone" maps the frame onto the brand background and accent).
+- Effects: ${EFFECTS.join(", ")}. Camera: push-in (slow move in), pulse (bumps on the voice-over's words), shake (impact at the cut), focus-pull (sharpens in). Energy: flash, rgb-split, glitch. Atmosphere: light-leak, vignette, bokeh, dust, sparkle, confetti, scanlines, halftone.
+- Looks (grade + effects that belong together): ${LOOKS.map((l) => `${l.id} = ${l.grade} + ${l.effects.join("/")}`).join("; ")}.
+- Taste: one grade on every scene of an ad. Put punctuation where it means something: flash, glitch or shake on two or three beat cuts; confetti or sparkle on the payoff (stat, offer, end card); push-in on hero shots; focus-pull on the opening; pulse on kinetic voice-over scenes. Keep text legible: strength 0.5–0.8, and no heavy grade on scenes whose message is colour. When a direction has a look, apply it to every scene.
 
 # Brand kits
 - <studio_state> lists the user's saved brand_kits. When the user names one ("use our Acme kit"), or the brief is clearly for that brand, call set_brand {kit: "<name>"} first and then leave style out of create_storyboard so the kit's colours and fonts stay. Mention which kit you used. In creative directions for a brand with a kit, keep the kit's colours and fonts and vary the idea, motion and pacing instead.

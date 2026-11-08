@@ -6,6 +6,7 @@ import { TEMPLATES, type Aspect, type Scene } from "../types";
 import { clock } from "../clock";
 import { sendToAgent, reviewFrames, askForDirections, autoReviewOn, setAutoReview } from "../agent/client";
 import { score } from "../fuzzy";
+import { LOOKS } from "../engine/fx";
 
 export interface PaletteHost {
   close: () => void;
@@ -110,6 +111,15 @@ export function CommandPalette({ host }: { host: PaletteHost }) {
       }
       for (const a of ["16:9", "9:16", "1:1", "4:5"] as Aspect[])
         if (a !== project.aspect) add("Format", `aspect-${a}`, `Format: ${{ "16:9": "landscape", "9:16": "vertical", "1:1": "square", "4:5": "portrait" }[a]} (${a})`, () => updateProject((p) => ({ ...p, aspect: a })), { hint: { "16:9": "YouTube, web", "9:16": "Reels, TikTok, Shorts", "1:1": "feed posts", "4:5": "Instagram feed" }[a] });
+      for (const l of LOOKS) {
+        const fx = { grade: l.grade, effects: [...l.effects], fxAmount: l.amount };
+        add("Effects", `look-${l.id}`, `Look: ${l.label} on this scene`, () => {
+          const i = getState().selected;
+          updateProject((p) => ({ ...p, scenes: p.scenes.map((s, j) => (j === i ? { ...s, ...fx } : s)) }));
+        }, { hint: l.note });
+        add("Effects", `look-all-${l.id}`, `Look: ${l.label} on every scene`, () => updateProject((p) => ({ ...p, scenes: p.scenes.map((s) => ({ ...s, ...fx })) })));
+      }
+      add("Effects", "fx-off", "Remove all effects", () => updateProject((p) => ({ ...p, scenes: p.scenes.map(({ grade: _g, effects: _e, fxAmount: _a, ...s }) => s) })));
       for (const k of kits) add("Brand kits", `kit-${k.id}`, `Apply kit: ${k.name}`, () => (applyKit(k.id), host.toast(`Applied “${k.name}”`)), { hint: k.isDefault ? "default for new projects" : undefined });
       for (const s of STYLE_PRESETS) if (s.id !== project.style) add("Style", `style-${s.id}`, `Style: ${s.label}`, () => setBrand({ style: s.id }), { hint: s.mood });
       for (const t of TEMPLATES)

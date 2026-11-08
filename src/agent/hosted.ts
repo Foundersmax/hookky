@@ -10,7 +10,7 @@ import { directorPrompt } from "./prompt";
 import { sanitizeBrand, sanitizeDirections } from "../sanitize";
 import { lintStoryboard, notesForAgent } from "./lint";
 
-const SCENE_FIELDS = `Each scene: {template (${TEMPLATES.join("|")}), duration (s), kicker?, headline? (*word* = accent), subline?, items?: string[], stat?: {value, prefix?, suffix?, decimals?, label?}, image?: asset id, images?: asset ids, cta?, url?, author?, background? (${BACKGROUNDS.join("|")}), align? (left|center), transition? (${TRANSITIONS.join("|")}), motion? (${MOTIONS.join("|")}), accent? (hex), clipStart? (s into a video clip), clipSpeed? (0.25–2)}`;
+const SCENE_FIELDS = `Each scene: {template (${TEMPLATES.join("|")}), duration (s), kicker?, headline? (*word* = accent), subline?, items?: string[], stat?: {value, prefix?, suffix?, decimals?, label?}, image?: asset id, images?: asset ids, cta?, url?, author?, background? (${BACKGROUNDS.join("|")}), align? (left|center), transition? (${TRANSITIONS.join("|")}), motion? (${MOTIONS.join("|")}), accent? (hex), clipStart?, clipSpeed?, grade?, effects?: [], fxAmount? (see Effects)}`;
 
 /** Director's notes on the live project, for tool results. */
 function review() {
@@ -24,7 +24,7 @@ const asObj = (v: unknown) => (v && typeof v === "object" ? (v as Record<string,
 export const hostedTools = (activity: (label: string) => void, onDirections: (d: unknown) => void = () => {}) => [
   {
     name: "propose_directions",
-    description: `Pitch 3 distinct creative directions as cards the user picks from, before building. Each: {name (2-3 words), pitch (1 sentence), style (preset id), motion (${MOTIONS.join("|")}), pace (${PACES.join("|")}), hook (opening headline, *word* = accent), accent? (hex)}. Then stop and wait for the pick.`,
+    description: `Pitch 3 distinct creative directions as cards the user picks from, before building. Each: {name (2-3 words), pitch (1 sentence), style (preset id), motion (${MOTIONS.join("|")}), pace (${PACES.join("|")}), hook (opening headline, *word* = accent), accent? (hex), look? (effects look id)}. Then stop and wait for the pick.`,
     inputSchema: {
       type: "object" as const,
       properties: { directions: { type: "array", items: { type: "object" }, minItems: 3, maxItems: 3 } },

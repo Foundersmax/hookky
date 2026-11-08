@@ -344,3 +344,49 @@ test("each used Coverr clip is queued for one usage report", async () => {
   const p = { ...fallback, scenes: [scene({ template: "fullbleed", image: "asset:c1" }), scene({ template: "image-mosaic", images: ["asset:p1", "asset:c1"] })] };
   assert.deepEqual(pendingReports(p, [...assets]), [{ source: "coverr", id: "v1" }]);
 });
+
+// ---------------------------------------------------------------- effects
+import { LOOKS, beatsIn, cameraFor } from "./engine/fx";
+import { GRADES, EFFECTS } from "./types";
+
+test("grades and effects are cleaned: valid ids only, at most four effects, strength 0–1", () => {
+  const s = sanitizeScene({ template: "title-reveal", duration: 3, grade: "noir", effects: ["glitch", "glitch", "nope", "flash", 4, "dust", "vignette", "confetti"], fxAmount: 7 });
+  assert.equal(s.grade, "noir");
+  assert.deepEqual(s.effects, ["glitch", "flash", "dust", "vignette"]);
+  assert.equal(s.fxAmount, 1);
+  const none = sanitizeScene({ template: "title-reveal", duration: 3, grade: "none", effects: [] });
+  assert.deepEqual([none.grade, none.effects, none.fxAmount], [undefined, undefined, undefined], "no-ops stay off the scene");
+  for (const l of LOOKS) {
+    assert.ok((GRADES as readonly string[]).includes(l.grade), l.id);
+    for (const e of l.effects) assert.ok((EFFECTS as readonly string[]).includes(e), `${l.id}: ${e}`);
+  }
+});
+
+test("the camera: push-in grows with time, pulse hits on voice-over words, shake settles", () => {
+  const base = { project: { ...fallback }, brand, dur: 4, start: 0 };
+  const sc = (effects: any[]) => ({ id: "s", template: "title-reveal" as const, duration: 4, effects });
+  const at = (effects: any[], t: number, project = base.project) => cameraFor({ ...base, project, scene: sc(effects), t }, 1920, 1080);
+  assert.ok(at(["push-in"], 3.5).scale > at(["push-in"], 0.5).scale);
+  const withVo = { ...fallback, audio: { name: "vo", url: "", duration: 4, peaks: [], pauses: [], words: [{ w: "Meet", s: 1, e: 1.3 }] } };
+  assert.deepEqual(beatsIn(withVo, 0, 4), [1]);
+  assert.ok(at(["pulse"], 1.02, withVo).scale > at(["pulse"], 0.9, withVo).scale, "a bump right after the word");
+  const early = at(["shake"], 0.02), late = at(["shake"], 2.5);
+  assert.ok(Math.hypot(early.dx, early.dy) > Math.hypot(late.dx, late.dy), "the impact settles");
+});
+
+test("Director's notes flag mixed grades and overused punctuation", () => {
+  const sc = (over: Partial<Scene>) => scene({ duration: 3, ...over });
+  const mixed = lintStoryboard({ scenes: [sc({ grade: "noir" }), sc({ grade: "vivid" }), sc({ grade: "cool" })], brand });
+  assert.ok(mixed.some((n) => n.code === "fx-grades"));
+  const loud = lintStoryboard({ scenes: [1, 2, 3, 4].map(() => sc({ effects: ["flash"] })), brand });
+  assert.ok(loud.some((n) => n.code === "fx-overused"));
+  const tasteful = lintStoryboard({ scenes: [sc({ grade: "noir", effects: ["push-in"] }), sc({ grade: "noir" }), sc({ grade: "noir", effects: ["flash"] }), sc({ grade: "noir", template: "cta-end", cta: "Buy", effects: ["confetti"] })], brand });
+  assert.ok(!tasteful.some((n) => n.code.startsWith("fx-")), JSON.stringify(tasteful.filter((n) => n.code.startsWith("fx-"))));
+});
+
+test("offline directions carry looks, and every look survives the cleaner", () => {
+  const ds = localDirections('Launch ad for "Dew", a skincare serum', { ...fallback, brand: { ...brand, name: "" } });
+  assert.ok(ds.some((d) => d.look));
+  assert.deepEqual(sanitizeDirections(ds).map((d) => d.look), ds.map((d) => d.look));
+  assert.equal(sanitizeDirections([{ name: "x", hook: "y", look: "made-up" }])[0].look, undefined);
+});

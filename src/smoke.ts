@@ -2,7 +2,8 @@
 // aspect ratio with every background, motion and transition at several moments, plus random junk
 // scenes through the cleaner. Fails on any thrown error or on a blank frame. Run: npm run test:engine
 import { Renderer } from "./engine/render";
-import { ASPECT_SIZE, TEMPLATES, BACKGROUNDS, TRANSITIONS, type Aspect, type Project, type Scene } from "./types";
+import { ASPECT_SIZE, TEMPLATES, BACKGROUNDS, TRANSITIONS, GRADES, EFFECTS, type Aspect, type Project, type Scene } from "./types";
+import { LOOKS, glitchActive } from "./engine/fx";
 import { sanitizeScene } from "./sanitize";
 import { STYLE_PRESETS } from "./presets";
 
@@ -93,15 +94,45 @@ async function run() {
     });
   }
 
+  // effects: every grade and every effect, in every format, at several moments and through transitions
+  for (const aspect of ASPECTS) {
+    r.resize(...ASPECT_SIZE[aspect], 0.25);
+    const looks: Partial<Scene>[] = [...GRADES.map((grade) => ({ grade })), ...EFFECTS.map((e) => ({ effects: [e] })), ...LOOKS.map((l) => ({ grade: l.grade, effects: l.effects, fxAmount: l.amount }))];
+    looks.forEach((fx, i) => {
+      const template = TEMPLATES[i % TEMPLATES.length];
+      const a: Scene = { id: `fx${i}`, template, duration: 3, transition: "cut", ...content(template), ...fx };
+      const b: Scene = { id: `fy${i}`, template: "title-reveal", duration: 3, transition: TRANSITIONS[i % TRANSITIONS.length], ...content("title-reveal"), ...fx };
+      const p: Project = { id: "p", title: "t", aspect, style: "noir", brand, captions: false, grain: i % 2 === 0, scenes: [a, b], audio: i % 3 ? undefined : { name: "vo", url: "", duration: 6, peaks: [], pauses: [], words: [{ w: "Meet", s: 0.2, e: 0.5 }, { w: "Orbit", s: 0.6, e: 1 }] } };
+      for (const t of [0, 0.05, 0.3, 1.5, 2.9, 3.1, 4.5]) {
+        renderErrors = [];
+        try {
+          r.render(p, t, getImage);
+        } catch (e) {
+          failures.push(`${aspect} fx ${JSON.stringify(fx)} t=${t}: threw ${(e as Error).message}`);
+        }
+        if (renderErrors.length) failures.push(`${aspect} fx ${JSON.stringify(fx)} t=${t}: ${renderErrors[0]}`);
+        frames++;
+      }
+      r.render(p, 1.5, getImage);
+      if (!nonBlank(canvas)) failures.push(`${aspect} fx ${JSON.stringify(fx)}: blank frame at 1.5s`);
+    });
+  }
+
   // fuzz: random junk through the cleaner must always render
   let seed = 7;
   const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   const junkValues: unknown[] = [null, undefined, 0, -1, 1e9, NaN, "", "x".repeat(5000), "*", "**", "* *", "\u0000\u0007", [], [null], {}, { value: "a" }, true, "#zz", "javascript:x", "asset:missing"];
   const pick = () => junkValues[Math.floor(rnd() * junkValues.length)];
-  const fields = ["template", "duration", "kicker", "headline", "subline", "items", "stat", "image", "images", "cta", "url", "author", "background", "align", "transition", "motion", "accent"];
+  const fields = ["template", "duration", "kicker", "headline", "subline", "items", "stat", "image", "images", "cta", "url", "author", "background", "align", "transition", "motion", "accent", "grade", "effects", "fxAmount"];
   for (let k = 0; k < 300; k++) {
     const raw: Record<string, unknown> = {};
-    for (const f of fields) if (rnd() < 0.6) raw[f] = f === "template" && rnd() < 0.7 ? TEMPLATES[Math.floor(rnd() * TEMPLATES.length)] : pick();
+    for (const f of fields)
+      if (rnd() < 0.6)
+        raw[f] =
+          f === "template" && rnd() < 0.7 ? TEMPLATES[Math.floor(rnd() * TEMPLATES.length)]
+          : f === "grade" && rnd() < 0.6 ? GRADES[Math.floor(rnd() * GRADES.length)]
+          : f === "effects" && rnd() < 0.6 ? [EFFECTS[Math.floor(rnd() * EFFECTS.length)], pick(), EFFECTS[Math.floor(rnd() * EFFECTS.length)]]
+          : pick();
     const s = sanitizeScene(raw);
     const p: Project = { id: "p", title: "t", aspect: ASPECTS[k % 4], style: "noir", brand, captions: true, grain: false, scenes: [s, sanitizeScene({ ...raw, id: "z" })] };
     r.resize(...ASPECT_SIZE[p.aspect], 0.2);
@@ -123,3 +154,66 @@ async function run() {
 }
 
 run().catch((e) => ((window as any).__smoke = { frames: 0, failures: [`runner crashed: ${e?.message ?? e}`], failureCount: 1 }));
+
+/** Visual check: one frame of every Look (and the plain scene) on a single sheet. */
+(window as any).__looksSheet = async (aspect: Aspect = "16:9", t = 1.6) => {
+  await document.fonts.ready;
+  const ph = new Image();
+  ph.src = photo();
+  await ph.decode();
+  const getPhoto = (ref?: string) => (ref ? ph : undefined);
+  const [W, H] = ASPECT_SIZE[aspect];
+  const tileW = 480, tileH = Math.round((tileW * H) / W);
+  const looks = [{ id: "none", label: "No effects", grade: "none" as const, effects: [] as Scene["effects"] & {}, amount: 0.7 }, ...LOOKS];
+  const cols = 3, rows = Math.ceil(looks.length / cols);
+  const sheet = document.createElement("canvas");
+  sheet.width = cols * tileW + (cols + 1) * 12;
+  sheet.height = rows * (tileH + 30) + 12;
+  const g = sheet.getContext("2d")!;
+  g.fillStyle = "#18181b";
+  g.fillRect(0, 0, sheet.width, sheet.height);
+  const tile = document.createElement("canvas");
+  const r = new Renderer(tile, W, H, tileW / W);
+  const brand = { name: "Orbit", ...STYLE_PRESETS[1].brand };
+  looks.forEach((l, i) => {
+    const s: Scene = { id: `look-${l.id}`, template: "split-feature", duration: 4, kicker: "Introducing", headline: "Meet *Orbit*", subline: "Titanium body, ten-day battery.", image: "img", transition: "cut", grade: l.grade, effects: l.effects, fxAmount: l.amount };
+    const p: Project = { id: "p", title: "t", aspect, style: "noir", brand, captions: false, grain: false, scenes: [s] };
+    // Glitch is caught mid-burst (bursts are seeded per scene), confetti mid-flight.
+    let at = l.id === "celebrate" ? 0.7 : t;
+    if (l.id === "glitch") for (let x = 0.5; x < s.duration; x += 0.01) if (glitchActive({ scene: s, project: p, brand, t: x, dur: s.duration, start: 0 })) { at = x + 0.02; break; }
+    r.render(p, at, getPhoto);
+    const x = 12 + (i % cols) * (tileW + 12), y = 12 + Math.floor(i / cols) * (tileH + 30);
+    g.drawImage(tile, x, y + 18);
+    g.fillStyle = "#e4e4e7";
+    g.font = "600 13px Inter, sans-serif";
+    g.fillText(l.label, x, y + 12);
+  });
+  return sheet.toDataURL("image/jpeg", 0.9);
+};
+
+/** A small photo-like image (gradient sky, horizon, a product shape) for judging grades. */
+function photo() {
+  const c = document.createElement("canvas");
+  c.width = 640;
+  c.height = 480;
+  const g = c.getContext("2d")!;
+  const sky = g.createLinearGradient(0, 0, 0, 480);
+  sky.addColorStop(0, "#7fb3e6");
+  sky.addColorStop(0.55, "#f3c89b");
+  sky.addColorStop(1, "#5a4636");
+  g.fillStyle = sky;
+  g.fillRect(0, 0, 640, 480);
+  g.fillStyle = "#2b2f36";
+  g.beginPath();
+  g.roundRect(240, 150, 160, 220, 36);
+  g.fill();
+  g.fillStyle = "#c9d6e2";
+  g.beginPath();
+  g.roundRect(256, 168, 128, 184, 26);
+  g.fill();
+  g.fillStyle = "#e35d3a";
+  g.beginPath();
+  g.arc(320, 260, 34, 0, Math.PI * 2);
+  g.fill();
+  return c.toDataURL("image/png");
+}

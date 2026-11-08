@@ -2,6 +2,7 @@
 import type { Project, Scene, Brand, Word, TransitionId } from "../types";
 import { clamp, ease, lerp, win, rgba, mix, contrast, hash } from "./util";
 import { layoutText, drawLayout, drawLabel, displayWeight, displayTracking, stripMarks, measure, type FontSpec, type Layout } from "./text";
+import { hasFx, applyFx } from "./fx";
 
 /** Looks up a drawable by asset ref; `t` is the scene-local time (video clips use it). */
 export type ImageGetter = (ref?: string, t?: number, rate?: number) => HTMLImageElement | undefined;
@@ -175,7 +176,44 @@ export class Renderer {
     this.drawScene(ctx, p, e, lt, img, record);
   }
 
+  /** Scenes with a grade or effects are drawn here first, then composited with them. */
+  private fxLayer: HTMLCanvasElement | null = null;
+
   private drawScene(ctx: CanvasRenderingContext2D, p: Project, e: TimelineEntry, lt: number, img: ImageGetter, record = false) {
+    if (!hasFx(e.scene)) return this.drawSceneRaw(ctx, p, e, lt, img, record);
+    const layer = (this.fxLayer ??= document.createElement("canvas"));
+    const pw = Math.round(this.W * this.scale), ph = Math.round(this.H * this.scale);
+    if (layer.width !== pw || layer.height !== ph) {
+      layer.width = pw;
+      layer.height = ph;
+    }
+    const lctx = layer.getContext("2d")!;
+    lctx.setTransform(this.scale, 0, 0, this.scale, 0, 0);
+    const before = this.hits.length;
+    this.drawSceneRaw(lctx, p, e, lt, img, record);
+    let cam;
+    try {
+      cam = applyFx(ctx, layer, { scene: e.scene, project: p, brand: p.brand, t: lt, dur: e.scene.duration, start: e.start }, this.W, this.H, this.scale);
+    } catch (err) {
+      // An effect must never cost the frame: fall back to the plain scene.
+      reportOnce(e.scene, err);
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(layer, 0, 0);
+      ctx.restore();
+      return;
+    }
+    // Keep click-to-edit regions under the text after the camera moved it.
+    if (record && (cam.scale !== 1 || cam.dx || cam.dy)) {
+      const cx = this.W / 2, cy = this.H / 2;
+      for (let i = before; i < this.hits.length; i++) {
+        const h = this.hits[i];
+        this.hits[i] = { ...h, x: cx + (h.x - cx) * cam.scale + cam.dx, y: cy + (h.y - cy) * cam.scale + cam.dy, w: h.w * cam.scale, h: h.h * cam.scale };
+      }
+    }
+  }
+
+  private drawSceneRaw(ctx: CanvasRenderingContext2D, p: Project, e: TimelineEntry, lt: number, img: ImageGetter, record = false) {
     const { W, H } = this;
     const scene = e.scene;
     const motion = scene.motion ?? "snappy";
