@@ -8,5 +8,5 @@ jobs:
     steps:
       - run: |
           B=https://docs.magnific.com
-          curl -sL $B/llms.txt | grep -iE "kling-v2.5-pro|kling-v2-5|wan-2-5-t2v|ltx-2-pro|seedance-2-5|mystic|get-all-videos|download-an-video|hailuo" | head -40
-          for p in api-reference/videos/get-all-videos-by-order api-reference/videos/download-an-video ratelimits pricing; do echo "=================== $p"; curl -sL "$B/$p.md" | sed -n '1,700p'; done
+          curl -sL $B/llms.txt | grep -iE "option|kling-v2.5-pro|kling-v2-5-pro|wan-2-5-t2v|ltx-2-pro|seedance-2-5" | head -30
+          for p in api-reference/videos/get-one-video-by-id api-reference/videos/download-an-option-video api-reference/image-to-video/kling-v2.5-pro/overview api-reference/text-to-video/ltx-2-pro api-reference/mystic/post-mystic; do echo "=================== $p"; curl -sL "$B/$p.md" | sed -n '1,900p'; done
