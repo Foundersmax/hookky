@@ -6,6 +6,7 @@ import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { claudeShotList, claudePickClip } from "./shots";
+import { claudeWriteFormat } from "./formats";
 import { licenseFreepikVideo, licensesToday, freepikVideoStatus, probeFreepikVideo } from "./freepikVideo";
 import { runAgentTurn, claudeConfigured, resetConversation, claudeCheck, probeClaude } from "./agent";
 import { listConnectors, searchVisuals, searchVideos, importFromUrl, magnificUpscale, reportStockUse, type Orientation } from "./connectors";
@@ -109,6 +110,20 @@ app.post("/api/shots", async (req, res) => {
     const shots = (Array.isArray(b.shots) ? b.shots : []).map((s: any) => ({ line: String(s?.line ?? ""), type: String(s?.type ?? "medium"), queries: Array.isArray(s?.queries) ? s.queries.map(String) : [] }));
     if (!shots.length) return void res.status(400).json({ error: "No shots to plan." });
     res.json({ shots: await claudeShotList({ shots, brief: String(b.brief ?? ""), aspect: String(b.aspect ?? "16:9"), look: String(b.look ?? "cinematic"), text: String(b.text ?? "subtitles") }) });
+  } catch (e: any) {
+    res.status(503).json({ error: e?.message ?? String(e) });
+  }
+});
+
+// Claude writes a creative format from its draft (one agent turn).
+app.post("/api/format", async (req, res) => {
+  try {
+    if (req.user) {
+      const turn = await takeAgentTurn(req.user);
+      if (!turn.ok) return void res.status(429).json({ error: `You've used today's ${turn.limit} agent turns.` });
+    }
+    const b = req.body ?? {};
+    res.json(await claudeWriteFormat({ format: b.format ?? {}, brief: b.brief ?? {}, draft: b.draft ?? [] }));
   } catch (e: any) {
     res.status(503).json({ error: e?.message ?? String(e) });
   }

@@ -74,7 +74,7 @@ export async function probeClaude(): Promise<ClaudeCheck> {
 const SYSTEM = directorPrompt("server");
 
 // ---------------------------------------------------------------- tools
-const sceneSchema = {
+export const sceneSchema = {
   type: "object",
   properties: {
     template: { type: "string", enum: [...TEMPLATES] },

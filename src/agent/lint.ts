@@ -19,8 +19,8 @@ export interface LintInput {
 }
 
 const words = (s?: string) => (s ? s.replace(/\*/g, "").trim().split(/\s+/).filter(Boolean).length : 0);
-const IMAGE_TEMPLATES = new Set(["product-hero", "split-feature", "fullbleed", "device-mockup"]);
-const HEADLINE_MAX: Record<string, number> = { quote: 22, "kinetic-words": 10, "feature-list": 5, "image-mosaic": 6, testimonials: 5, "before-after": 5 };
+const IMAGE_TEMPLATES = new Set(["product-hero", "split-feature", "fullbleed", "device-mockup", "spotlight"]);
+const HEADLINE_MAX: Record<string, number> = { "text-mask": 3, "word-stack": 8, "pov-caption": 12, rating: 22, quote: 22, "kinetic-words": 10, "feature-list": 5, "image-mosaic": 6, testimonials: 5, "before-after": 5 };
 const READ_WPS = 3.2; // comfortable on-screen reading speed, words per second
 
 export function lintStoryboard({ scenes, brand, assetIds, audio }: LintInput): Note[] {
@@ -104,7 +104,9 @@ export function lintStoryboard({ scenes, brand, assetIds, audio }: LintInput): N
 
     // reading time: text that's on screen too briefly to read (the small kicker label is glanced, not read)
     const textWords = hw + words(s.subline) + (s.items ?? []).reduce((a, it) => a + words(it), 0) + words(s.stat?.label);
-    const needed = textWords / READ_WPS + 0.8;
+    // Chats and notifications reveal one line at a time: each needs about a second to land.
+    const staged = s.template === "chat" || s.template === "notification";
+    const needed = staged ? 0.6 + (s.items?.length ?? 0) * 1.1 + hw / READ_WPS : textWords / READ_WPS + 0.8;
     if (s.template !== "kinetic-words" && textWords && s.duration < needed) {
       const short = s.duration < needed * 0.8;
       add(i, short ? "warn" : "tip", "too-fast", `Scene ${n}: ${textWords} words in ${s.duration.toFixed(1)}s ${short ? "is too quick to read" : "is a little quick"}. Give it about ${needed.toFixed(1)}s or trim the copy.`);

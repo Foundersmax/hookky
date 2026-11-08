@@ -52,7 +52,7 @@ function previewProject(t: SoundTemplate, base: Project, copy: Copy, imgs: strin
 }
 
 /** A canvas that plays a project in a loop (only while `live`), or holds one telling frame. */
-function LoopPreview({ project, height, live, clockRef }: { project: Project; height: number; live: boolean; clockRef?: { current: (() => number) | null } }) {
+export function LoopPreview({ project, height, live, clockRef }: { project: Project; height: number; live: boolean; clockRef?: { current: (() => number) | null } }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [W, H] = ASPECT_SIZE[project.aspect];
   const total = project.scenes.reduce((a, s) => a + s.duration, 0);

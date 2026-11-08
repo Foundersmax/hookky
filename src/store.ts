@@ -37,8 +37,8 @@ export interface StudioState {
   /** what the app shows */
   view: "home" | "studio" | "admin";
   /** an open sheet over the studio */
-  sheet?: "sound" | "footage";
-  health?: { agent: "claude" | "hosted" | "local"; transcription: string; connectors: { id: string; label: string; configured: boolean; kind: string; note: string }[]; accounts?: boolean };
+  sheet?: "sound" | "footage" | "formats";
+  health?: { agent: "claude" | "hosted" | "local"; claude?: { state: string }; transcription: string; connectors: { id: string; label: string; configured: boolean; kind: string; note: string }[]; accounts?: boolean };
   /** Accounts (server with a database): who is signed in. "off" when the server has no accounts. */
   auth: { status: "checking" | "signed_out" | "signed_in" | "off"; user?: AuthUser; usage?: { today: number; limit: number | null } };
 }
@@ -438,7 +438,7 @@ export function updateChat(id: string, fn: (m: ChatMessage) => ChatMessage) {
 }
 
 // ---------------------------------------------------------------- direct editing
-const IMAGE_SLOT = new Set(["product-hero", "split-feature", "fullbleed", "logo-sting", "device-mockup", "logo-reveal", "audiogram"]);
+const IMAGE_SLOT = new Set(["product-hero", "split-feature", "fullbleed", "logo-sting", "device-mockup", "logo-reveal", "audiogram", "text-mask", "notification", "pov-caption", "spotlight"]);
 
 /** Put an image into a scene: its image slot, a mosaic tile, or (for text-only scenes) a soft image backdrop. */
 export function assignImage(index: number, assetId: string) {

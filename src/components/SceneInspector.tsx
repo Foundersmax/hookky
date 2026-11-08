@@ -35,11 +35,22 @@ const USES: Record<string, (keyof Scene)[]> = {
   "before-after": ["images", "items", "headline"],
   "logo-reveal": ["image", "headline", "subline"],
   audiogram: ["image", "kicker", "headline", "subline"],
+  "text-mask": ["image", "kicker", "headline", "subline"],
+  chat: ["kicker", "items", "headline"],
+  notification: ["image", "kicker", "items", "headline"],
+  "pov-caption": ["image", "kicker", "headline", "subline"],
+  versus: ["headline", "items", "kicker", "cta"],
+  rating: ["stat", "headline", "author"],
+  spotlight: ["image", "headline", "subline"],
+  "word-stack": ["headline"],
 };
 const ITEMS_LABEL: Record<string, string> = {
   testimonials: "Quotes, one per line: quote — name, role",
   "before-after": "Labels: before, then after",
   "price-card": "Features, one per line",
+  chat: "Messages, one per line (> for your side)",
+  notification: "Notifications: App: message",
+  versus: "Rows: feature (or feature | them | us)",
 };
 
 export function SceneInspector() {

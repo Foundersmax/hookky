@@ -237,6 +237,9 @@ export function Home() {
           <div className="home-head">
             <h2 id="start-title">Start something new</h2>
             <span className="row" style={{ flex: "none" }}>
+              <button className="btn primary" onClick={() => void createProject("blank").then(() => setState({ sheet: "formats" }))}>
+                <Icon name="sparkle" /> Creative formats
+              </button>
               <button className="btn" onClick={() => void createProject("blank").then(() => setState({ sheet: "footage" }))}>
                 <Icon name="clip" /> Footage from a voice-over
               </button>

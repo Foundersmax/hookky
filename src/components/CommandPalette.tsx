@@ -48,6 +48,14 @@ const STARTER_CONTENT: Partial<Record<Scene["template"], Partial<Scene>>> = {
   "before-after": { headline: "See the *difference*", items: ["Before", "After"] },
   "logo-reveal": { subline: "Made to move" },
   audiogram: { kicker: "Episode 12", headline: "The *quiet* launch", subline: "Upload a voice-over to see it move." },
+  "text-mask": { headline: "BOLD", subline: "Drop a clip: it plays inside the letters." },
+  chat: { kicker: "Orbit", items: ["does it actually work?", "> try it free for 7 days", "ok I'm sold 😍"], headline: "Try it *free*" },
+  notification: { kicker: "9:41", items: ["Orbit: Your order has shipped 📦", "Messages: where did you get that?"], headline: "Everyone's *asking*" },
+  "pov-caption": { kicker: "POV:", headline: "you finally found the *one*" },
+  versus: { headline: "Why switch?", items: ["Setup in minutes", "No hidden fees", "Human support"], kicker: "Others", cta: "Orbit" },
+  rating: { stat: { value: 4.9, label: "from 2,000+ reviews" }, headline: "Best purchase this year", author: "Maya R." },
+  spotlight: { headline: "Meet *Orbit*", subline: "Drop a product shot." },
+  "word-stack": { headline: "Stop *scrolling* start moving" },
 };
 /** Starting lengths that give each template's starter copy time to read. */
 const START_DURATION: Partial<Record<Scene["template"], number>> = {
@@ -57,6 +65,7 @@ const TEMPLATE_NAMES: Record<string, string> = {
   "title-reveal": "Title reveal", "kinetic-words": "Kinetic words", "product-hero": "Product hero", "split-feature": "Split feature", "feature-list": "Feature list",
   "stat-counter": "Stat counter", "image-mosaic": "Image mosaic", fullbleed: "Full-bleed image", quote: "Quote", marquee: "Marquee", "shape-burst": "Shape burst", "logo-sting": "Logo sting", "cta-end": "End card",
   "device-mockup": "Device mockup", countdown: "Countdown", "price-card": "Price card", testimonials: "Testimonials", "before-after": "Before / after", "logo-reveal": "Logo reveal", audiogram: "Audiogram",
+  "text-mask": "Text mask", chat: "Chat thread", notification: "Notifications", "pov-caption": "POV caption", versus: "Versus", rating: "Star rating", spotlight: "Spotlight", "word-stack": "Word stack",
 };
 
 export function CommandPalette({ host }: { host: PaletteHost }) {
@@ -91,6 +100,7 @@ export function CommandPalette({ host }: { host: PaletteHost }) {
         const on = autoReviewOn();
         add("Agent", "auto-review", on ? "Turn auto visual review off" : "Turn auto visual review on", () => (setAutoReview(!on), host.toast(on ? "Claude won't review new storyboards automatically" : "Claude will review each new storyboard's frames")));
       }
+      add("Studio", "formats", "Creative formats…", () => setState({ sheet: "formats" }), { hint: "21 attention structures, written by Claude" });
       add("Studio", "footage", "Footage from the voice-over…", () => setState({ sheet: "footage" }), { hint: "stock footage for every line" });
       add("Studio", "sound", "Sound templates…", () => setState({ sheet: "sound" }), { hint: "cut an ad to a voice-over or a track" });
       add("Studio", "export", "Export video…", () => host.openTab("Export"));

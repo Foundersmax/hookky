@@ -34,7 +34,10 @@ export function EmptyCanvas() {
       <p className="empty-title">An empty canvas</p>
       <p className="empty-sub">Describe your ad to the creative agent, or start here.</p>
       <div className="empty-actions">
-        <button className="btn primary" onClick={() => addScene()}>
+        <button className="btn primary" onClick={() => setState({ sheet: "formats" })}>
+          <Icon name="sparkle" /> Creative formats
+        </button>
+        <button className="btn" onClick={() => addScene()}>
           <Icon name="plus" /> Add a title scene
         </button>
         <button className="btn" disabled={busy} onClick={() => file.current?.click()}>

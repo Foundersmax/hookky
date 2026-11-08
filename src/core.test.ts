@@ -29,7 +29,7 @@ test("sanitizeScene turns hostile or malformed input into a drawable scene", () 
 test("sanitizeScene coerces fields to the right shapes", () => {
   const s = sanitizeScene({
     template: "feature-list", duration: "4.5", headline: 2026, items: "Fast; Quiet;\nLight", stat: "12",
-    image: "javascript:alert(1)", images: ["asset:up_1", 7, "https://x.test/a.png"], accent: "red", background: "grid", transition: "spin", extra: "dropped",
+    image: "javascript:alert(1)", images: ["asset:up_1", 7, "https://x.test/a.png"], accent: "red", background: "grid", transition: "warp", extra: "dropped",
   });
   assert.equal(s.duration, 4.5);
   assert.equal(s.headline, "2026");

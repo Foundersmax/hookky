@@ -28,6 +28,9 @@ export const EFFECT_LABEL: Record<Effect, string> = {
   "light-leak": "Light leak", vignette: "Vignette", bokeh: "Bokeh", dust: "Dust", sparkle: "Sparkle", confetti: "Confetti", scanlines: "Scanlines", halftone: "Halftone",
   "beat-flash": "Flash on bars",
   letterbox: "Letterbox",
+  "zoom-punch": "Zoom punch",
+  "film-burn": "Film burn",
+  roll: "Camera roll",
 };
 
 const FILTER_OK = typeof CanvasRenderingContext2D !== "undefined" && "filter" in CanvasRenderingContext2D.prototype;
@@ -104,6 +107,8 @@ export interface Camera {
   scale: number;
   dx: number; // logical px
   dy: number;
+  /** roll, radians */
+  rot?: number;
 }
 
 const scratch = new Map<string, HTMLCanvasElement>();
@@ -140,7 +145,19 @@ export function cameraFor(f: FxFrame, W: number, H: number): Camera {
     dy = Math.cos(k * 1.3) * impact + (Math.sin(f.t * 1.9 + 2) + Math.sin(f.t * 4.1)) * hand;
     scale *= 1 + (Math.abs(impact) + hand * 2) / Math.min(W, H); // hide the edges
   }
-  return { scale, dx, dy };
+  let rot = 0;
+  if (fx.has("zoom-punch")) {
+    // A hard punch-in on the cut that settles, the way editors hit a beat.
+    const k = Math.exp(-f.t * 7);
+    scale *= 1 + 0.16 * amt * k;
+  }
+  if (fx.has("roll")) {
+    // The camera rolls in at the cut and levels out.
+    const k = Math.exp(-f.t * 4.5);
+    rot = (-7 * Math.PI) / 180 * amt * k;
+    scale *= 1 + Math.abs(Math.sin(rot)) * 0.6 + 0.05 * amt * k; // cover the corners while rotated
+  }
+  return { scale, dx, dy, ...(rot && { rot }) };
 }
 
 /**
@@ -190,8 +207,14 @@ export function applyFx(ctx: CanvasRenderingContext2D, src: HTMLCanvasElement, f
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   const cx = cw / 2, cy = ch / 2;
-  const place = (img: CanvasImageSource, ox = 0, oy = 0) =>
-    ctx.drawImage(img, cx - cx * cam.scale + (cam.dx * scale) + ox, cy - cy * cam.scale + (cam.dy * scale) + oy, cw * cam.scale, ch * cam.scale);
+  const place = (img: CanvasImageSource, ox = 0, oy = 0) => {
+    if (!cam.rot) return ctx.drawImage(img, cx - cx * cam.scale + (cam.dx * scale) + ox, cy - cy * cam.scale + (cam.dy * scale) + oy, cw * cam.scale, ch * cam.scale);
+    ctx.save();
+    ctx.translate(cx + cam.dx * scale + ox, cy + cam.dy * scale + oy);
+    ctx.rotate(cam.rot);
+    ctx.drawImage(img, -cx * cam.scale, -cy * cam.scale, cw * cam.scale, ch * cam.scale);
+    ctx.restore();
+  };
 
   const glitchOn = fx.has("glitch") && glitchActive(f, seed);
   const split = (fx.has("rgb-split") ? (3 + 12 * Math.exp(-f.t * 5)) * u * amt : 0) + (glitchOn ? 14 * u * amt : 0);
@@ -232,6 +255,38 @@ export function applyFx(ctx: CanvasRenderingContext2D, src: HTMLCanvasElement, f
   if (fx.has("sparkle")) sparkle(ctx, f, seed, cw, ch, u, amt);
   if (fx.has("confetti")) confetti(ctx, f, seed, cw, ch, u, amt);
   if (fx.has("vignette")) vignette(ctx, cw, ch, amt);
+  if (fx.has("zoom-punch")) {
+    // Motion smear on the punch: a few faint, larger copies of the frame.
+    const k = Math.exp(-f.t * 7) * amt;
+    if (k > 0.05) {
+      ctx.save();
+      for (let i = 1; i <= 3; i++) {
+        const z = 1 + 0.035 * i * k;
+        ctx.globalAlpha = 0.16 * k;
+        ctx.drawImage(ctx.canvas, (cw - cw * z) / 2, (ch - ch * z) / 2, cw * z, ch * z);
+      }
+      ctx.restore();
+    }
+  }
+  if (fx.has("film-burn")) {
+    // Light burning through the film at both ends of the shot: warm, overexposed, gone in a moment.
+    const inK = Math.exp(-f.t * 5), outK = Math.exp(-Math.max(0, f.dur - f.t) * 6);
+    const k = Math.max(inK, outK) * amt;
+    if (k > 0.02) {
+      const r = rng(seed + Math.floor((f.start + f.t) * 12));
+      const x = cw * (0.15 + r() * 0.7), y = ch * (r() < 0.5 ? 0 : 1);
+      const R = Math.max(cw, ch) * (0.55 + 0.4 * k);
+      const g = ctx.createRadialGradient(x, y, 0, x, y, R);
+      g.addColorStop(0, `rgba(255,248,225,${0.95 * k})`);
+      g.addColorStop(0.25, `rgba(255,170,60,${0.75 * k})`);
+      g.addColorStop(0.6, `rgba(200,40,10,${0.35 * k})`);
+      g.addColorStop(1, "rgba(120,0,0,0)");
+      ctx.globalCompositeOperation = "screen";
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, cw, ch);
+      ctx.globalCompositeOperation = "source-over";
+    }
+  }
   if (fx.has("letterbox")) {
     // Cinema bars (2.39:1 inside a wide frame, a gentler crop in tall ones), sliding in at the cut.
     const target = cw / ch > 1.2 ? (ch - cw / 2.39) / 2 : ch * 0.06;

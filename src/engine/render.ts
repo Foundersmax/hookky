@@ -3,6 +3,7 @@ import type { Project, Scene, Brand, Word, TransitionId } from "../types";
 import { clamp, ease, lerp, win, rgba, mix, contrast, hash } from "./util";
 import { layoutText, drawLayout, drawLabel, displayWeight, displayTracking, stripMarks, measure, type FontSpec, type Layout } from "./text";
 import { hasFx, applyFx } from "./fx";
+import { EXTRA_TEMPLATES } from "./templates2";
 
 /** Looks up a drawable by asset ref; `t` is the scene-local time (video clips use it). */
 export type ImageGetter = (ref?: string, t?: number, rate?: number) => HTMLImageElement | undefined;
@@ -95,7 +96,7 @@ const MOTION: Record<string, { E: (x: number) => number; sp: number }> = {
   dramatic: { E: ease.outQuart, sp: 1.8 },
 };
 
-const TRANSITION_DUR: Record<TransitionId, number> = { cut: 0, fade: 0.5, slide: 0.65, "push-up": 0.7, wipe: 0.6, zoom: 0.6, circle: 0.75, blur: 0.6 };
+const TRANSITION_DUR: Record<TransitionId, number> = { cut: 0, fade: 0.5, slide: 0.65, "push-up": 0.7, wipe: 0.6, zoom: 0.6, circle: 0.75, blur: 0.6, whip: 0.35, spin: 0.55, glitch: 0.3 };
 
 // ---------------------------------------------------------------- Renderer
 export class Renderer {
@@ -335,6 +336,53 @@ function composite(ctx: CanvasRenderingContext2D, A: HTMLCanvasElement, B: HTMLC
       draw(B);
       ctx.filter = "none";
       break;
+    case "whip": {
+      // A whip pan: both shots smear sideways through a streak of motion.
+      const e = ease.inOutCubic(p);
+      for (let i = 0; i < 5; i++) {
+        const o = (i - 2) * W * 0.035 * Math.sin(p * Math.PI);
+        ctx.globalAlpha = i === 2 ? 1 : 0.25;
+        draw(A, -e * W + o);
+        draw(B, (1 - e) * W + o);
+      }
+      break;
+    }
+    case "spin": {
+      // Spin-zoom: the old shot twists away, the new one twists in.
+      const e = ease.inOutCubic(p);
+      ctx.save();
+      ctx.translate(W / 2, H / 2);
+      ctx.rotate(e * 0.5);
+      ctx.globalAlpha = 1 - e;
+      const s1 = 1 + e * 0.6;
+      ctx.drawImage(A, (-W * s1) / 2, (-H * s1) / 2, W * s1, H * s1);
+      ctx.restore();
+      ctx.save();
+      ctx.translate(W / 2, H / 2);
+      ctx.rotate((e - 1) * 0.5);
+      ctx.globalAlpha = e;
+      const s2 = 0.6 + e * 0.4 + (1 - e) * 0.9;
+      ctx.drawImage(B, (-W * s2) / 2, (-H * s2) / 2, W * s2, H * s2);
+      ctx.restore();
+      break;
+    }
+    case "glitch": {
+      // Digital tear: bands of both shots, offset, flickering across.
+      draw(p < 0.5 ? A : B);
+      const bands = 9;
+      for (let i = 0; i < bands; i++) {
+        const r = hash(i * 7.3 + Math.floor(p * 12));
+        if (r < 0.45) continue;
+        const y = (i / bands) * H, h = H / bands;
+        const src = r > 0.72 ? B : A;
+        const off = (r - 0.6) * W * 0.25 * Math.sin(p * Math.PI);
+        ctx.drawImage(src, 0, y * (src.height / H), src.width, h * (src.height / H), off, y, W, h);
+      }
+      ctx.globalCompositeOperation = "screen";
+      ctx.fillStyle = `rgba(255,0,80,${0.18 * Math.sin(p * Math.PI)})`;
+      ctx.fillRect(0, 0, W, H);
+      break;
+    }
     case "fade":
     default:
       draw(A);
@@ -460,7 +508,7 @@ export function drawCover(ctx: CanvasRenderingContext2D, im: HTMLImageElement, x
   const sx = (im.naturalWidth - sw) * fx, sy = (im.naturalHeight - sh) * fy;
   ctx.drawImage(im, sx, sy, sw, sh, x, y, w, h);
 }
-function containRect(im: HTMLImageElement, x: number, y: number, w: number, h: number) {
+export function containRect(im: HTMLImageElement, x: number, y: number, w: number, h: number) {
   const ir = im.naturalWidth / im.naturalHeight;
   let dw = w, dh = w / ir;
   if (dh > h) {
@@ -469,13 +517,13 @@ function containRect(im: HTMLImageElement, x: number, y: number, w: number, h: n
   }
   return { x: x + (w - dw) / 2, y: y + (h - dh) / 2, w: dw, h: dh };
 }
-function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+export function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   ctx.beginPath();
   const rad = Math.min(r, w / 2, h / 2);
   if ((ctx as any).roundRect) (ctx as any).roundRect(x, y, w, h, rad);
   else ctx.rect(x, y, w, h);
 }
-function placeholder(g: G, x: number, y: number, w: number, h: number, label = "Drop a product image") {
+export function placeholder(g: G, x: number, y: number, w: number, h: number, label = "Drop a product image") {
   const { ctx, c, u } = g;
   const gr = ctx.createLinearGradient(x, y, x + w, y + h);
   gr.addColorStop(0, mix(c.bg, c.fg, 0.08));
@@ -487,25 +535,25 @@ function placeholder(g: G, x: number, y: number, w: number, h: number, label = "
 }
 
 // ---------------------------------------------------------------- shared bits
-const F = (g: G, size: number): FontSpec => ({ family: g.brand.fontDisplay, weight: displayWeight(g.brand.fontDisplay), size, tracking: displayTracking(g.brand.fontDisplay) });
-const B = (g: G, size: number, weight = 450): FontSpec => ({ family: g.brand.fontBody, weight, size, tracking: -0.005 });
-const K = (g: G, size: number): FontSpec => ({ family: g.brand.fontBody, weight: 600, size, tracking: 0.14 });
+export const F = (g: G, size: number): FontSpec => ({ family: g.brand.fontDisplay, weight: displayWeight(g.brand.fontDisplay), size, tracking: displayTracking(g.brand.fontDisplay) });
+export const B = (g: G, size: number, weight = 450): FontSpec => ({ family: g.brand.fontBody, weight, size, tracking: -0.005 });
+export const K = (g: G, size: number): FontSpec => ({ family: g.brand.fontBody, weight: 600, size, tracking: 0.14 });
 
 /** Record a laid-out text block as editable. */
-function hitLayout(g: G, field: string, L: Layout, x: number, y: number, align: "left" | "center" | "right") {
+export function hitLayout(g: G, field: string, L: Layout, x: number, y: number, align: "left" | "center" | "right") {
   if (!g.hit || !L.lines.length) return;
   const left = align === "left" ? x : align === "center" ? x - L.width / 2 : x - L.width;
   g.hit({ field, x: left, y, w: L.width, h: L.height, size: L.font.size, align, lines: L.lines.length });
 }
 /** Record a single line drawn around a vertical middle `yMid` as editable. */
-function hitText(g: G, field: string, text: string, f: FontSpec, x: number, yMid: number, align: "left" | "center" | "right") {
+export function hitText(g: G, field: string, text: string, f: FontSpec, x: number, yMid: number, align: "left" | "center" | "right") {
   if (!g.hit || !text) return;
   const w = measure(g.ctx, text, f);
   const left = align === "left" ? x : align === "center" ? x - w / 2 : x - w;
   g.hit({ field, x: left, y: yMid - f.size * 0.7, w, h: f.size * 1.4, size: f.size, align, lines: 1 });
 }
 
-function kicker(g: G, text: string | undefined, x: number, y: number, align: "left" | "center", delay = 0) {
+export function kicker(g: G, text: string | undefined, x: number, y: number, align: "left" | "center", delay = 0) {
   if (!text) return;
   const { ctx, u, c } = g;
   const p = g.E(win(g.t, delay, 0.7 * g.sp));
@@ -526,12 +574,12 @@ function kicker(g: G, text: string | undefined, x: number, y: number, align: "le
   g.hit?.({ field: "kicker", x: x0, y: y - size * 0.8, w: total, h: size * 1.6, size, align: "left", lines: 1 });
 }
 
-function headlineSize(g: G, scale = 1) {
+export function headlineSize(g: G, scale = 1) {
   return (g.portrait ? g.W * 0.115 : g.H * 0.118) * scale;
 }
 
 /** headline + subline stack; returns bottom y */
-function textStack(g: G, opts: { x: number; y: number; maxW: number; align: "left" | "center"; size?: number; maxLines?: number; delay?: number; vcenter?: boolean; color?: string; mode?: "mask" | "words" | "rise" }) {
+export function textStack(g: G, opts: { x: number; y: number; maxW: number; align: "left" | "center"; size?: number; maxLines?: number; delay?: number; vcenter?: boolean; color?: string; mode?: "mask" | "words" | "rise" }) {
   const { ctx, c, u, scene } = g;
   const align = opts.align;
   const H1 = scene.headline ? layoutText(ctx, scene.headline, F(g, opts.size ?? headlineSize(g)), opts.maxW, opts.maxLines ?? 3, /Serif|Fraunces|Playfair/.test(g.brand.fontDisplay) ? 1.0 : 0.98) : null;
@@ -556,9 +604,10 @@ function textStack(g: G, opts: { x: number; y: number; maxW: number; align: "lef
 }
 
 // ---------------------------------------------------------------- templates
-type Tpl = (g: G) => void;
+export type Tpl = (g: G) => void;
 
 const TEMPLATES: Record<string, Tpl> = {
+  ...EXTRA_TEMPLATES,
   "title-reveal"(g) {
     const { W, H, pad, ctx, c, u } = g;
     const align = g.scene.align ?? "center";

@@ -23,10 +23,18 @@ export const TEMPLATES = [
   "before-after",
   "logo-reveal",
   "audiogram",
+  "text-mask",
+  "chat",
+  "notification",
+  "pov-caption",
+  "versus",
+  "rating",
+  "spotlight",
+  "word-stack",
 ] as const;
 export type TemplateId = (typeof TEMPLATES)[number];
 
-export const TRANSITIONS = ["cut", "fade", "slide", "push-up", "wipe", "zoom", "circle", "blur"] as const;
+export const TRANSITIONS = ["cut", "fade", "slide", "push-up", "wipe", "zoom", "circle", "blur", "whip", "spin", "glitch"] as const;
 export type TransitionId = (typeof TRANSITIONS)[number];
 
 export const BACKGROUNDS = ["solid", "gradient", "grid", "dots", "grain", "blobs", "invert", "accent", "image"] as const;
@@ -39,7 +47,7 @@ export type Motion = (typeof MOTIONS)[number];
 export const GRADES = ["none", "mono", "noir", "warm-film", "cool", "teal-orange", "faded", "vivid", "duotone"] as const;
 export type Grade = (typeof GRADES)[number];
 /** Post effects: camera moves, energy, atmosphere. Rendered by the engine, so exports match the preview. */
-export const EFFECTS = ["push-in", "pulse", "shake", "focus-pull", "flash", "rgb-split", "glitch", "light-leak", "vignette", "bokeh", "dust", "sparkle", "confetti", "scanlines", "halftone", "beat-flash", "letterbox"] as const;
+export const EFFECTS = ["push-in", "pulse", "shake", "focus-pull", "flash", "rgb-split", "glitch", "light-leak", "vignette", "bokeh", "dust", "sparkle", "confetti", "scanlines", "halftone", "beat-flash", "letterbox", "zoom-punch", "film-burn", "roll"] as const;
 export type Effect = (typeof EFFECTS)[number];
 
 export interface Stat {
