@@ -29,6 +29,9 @@ services:
         sync: false
       - key: APP_URL
         value: https://app.rookker.com
+      # The landing page that signs people in (email links land there; it may call /api/auth/*)
+      - key: SITE_URL
+        value: https://rookker.com
       - key: AGENT_DAILY_LIMIT
         value: "100"
       # --- shared password: only used when DATABASE_URL (accounts) isn't set

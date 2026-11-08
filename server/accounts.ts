@@ -72,6 +72,45 @@ function appUrl(req: Request) {
   return (env("APP_URL") || `${req.protocol}://${req.get("host")}`).replace(/\/+$/, "");
 }
 
+/** The marketing site where people sign in and sign up (e.g. https://rookker.com); the app itself when unset. */
+function siteUrl(req: Request) {
+  return (env("SITE_URL") || appUrl(req)).replace(/\/+$/, "");
+}
+
+/** Origins allowed to call the sign-in endpoints with cookies: SITE_URL (plus its www twin) and SITE_ORIGINS. */
+export function siteOrigins(): Set<string> {
+  const out = new Set<string>();
+  const add = (u: string) => {
+    try {
+      const x = new URL(u);
+      const local = /^((.+\.)?localhost|127\.0\.0\.1)$/.test(x.hostname);
+      if (x.protocol !== "https:" && !local) return;
+      out.add(x.origin);
+      const twin = x.hostname.startsWith("www.") ? x.hostname.slice(4) : `www.${x.hostname}`;
+      if (x.hostname !== "localhost" && x.hostname !== "127.0.0.1") out.add(`${x.protocol}//${twin}${x.port ? `:${x.port}` : ""}`);
+    } catch {}
+  };
+  if (env("SITE_URL")) add(env("SITE_URL"));
+  for (const o of env("SITE_ORIGINS").split(/[,\s]+/).filter(Boolean)) add(o);
+  return out;
+}
+
+/** CORS for the landing page: only the sign-in endpoints, only the site's own origins, with cookies. */
+export function authCors(req: Request, res: Response, next: NextFunction) {
+  if (!req.path.startsWith("/api/auth/")) return next();
+  const origin = req.get("origin");
+  if (origin && siteOrigins().has(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.setHeader("Access-Control-Max-Age", "600");
+  }
+  res.setHeader("Vary", "Origin");
+  if (req.method === "OPTIONS") return void res.status(204).end();
+  next();
+}
+
 // ---------------------------------------------------------------- rate limiting (in memory)
 const hits = new Map<string, number[]>();
 /** True when `key` has been seen `max` times within `windowMs`; records this attempt either way. */
@@ -86,7 +125,8 @@ export function limited(key: string, max: number, windowMs = 15 * 60_000): boole
 
 // ---------------------------------------------------------------- sessions
 function setCookie(req: Request, res: Response, value: string, maxAgeSec: number) {
-  const secure = req.secure || process.env.NODE_ENV === "production";
+  // Behind Render's proxy (trust proxy is on) req.secure reflects the visitor's HTTPS connection.
+  const secure = req.secure;
   res.setHeader("Set-Cookie", `${COOKIE}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSec}${secure ? "; Secure" : ""}`);
 }
 function readCookie(req: Request): string {
@@ -208,6 +248,9 @@ export function sameOrigin(req: Request, res: Response, next: NextFunction) {
   try {
     if (new URL(origin).host === req.get("host")) return next();
   } catch {}
+  // The landing page may sign people in, and nothing else.
+  // (req.path is relative to where this is mounted, so read the full path.)
+  if (req.originalUrl.split("?")[0].startsWith("/api/auth/") && siteOrigins().has(origin)) return next();
   res.status(403).json({ error: "Cross-site request refused." });
 }
 
@@ -249,17 +292,17 @@ export function accountRoutes() {
 
   r.get("/api/auth/verify", async (req, res) => {
     const userId = await spendToken(req.query.token, "verify");
-    if (!userId) return void res.redirect(303, "/?auth=link-expired");
+    if (!userId) return void res.redirect(303, `${siteUrl(req)}/?auth=link-expired`);
     const { rows } = await db().query("select id, email, name, status from users where id = $1", [userId]);
     const u = rows[0];
-    if (!u || u.status !== "unverified") return void res.redirect(303, "/?auth=verified");
+    if (!u || u.status !== "unverified") return void res.redirect(303, `${siteUrl(req)}/?auth=verified`);
     const admin = adminEmails().has(u.email);
     await db().query(
       `update users set verified_at = now(), status = $2, role = case when $3 then 'admin' else role end, approved_at = case when $3 then now() else approved_at end where id = $1`,
       [userId, admin ? "active" : "pending", admin],
     );
     if (!admin) await notifyAdmins(req, u);
-    res.redirect(303, admin ? "/?auth=verified-admin" : "/?auth=verified");
+    res.redirect(303, `${siteUrl(req)}/?auth=${admin ? "verified-admin" : "verified"}`);
   });
 
   r.post("/api/auth/resend", async (req, res) => {
@@ -304,7 +347,7 @@ export function accountRoutes() {
         toName: u.name,
         subject: "Reset your Hookky password",
         lines: ["Someone (hopefully you) asked to reset the password for this Hookky account."],
-        action: { label: "Choose a new password", url: `${appUrl(req)}/?reset=${t}` },
+        action: { label: "Choose a new password", url: `${siteUrl(req)}/?reset=${t}` },
         footer: `This link works for ${RESET_MINUTES} minutes. If you didn't ask for it, ignore this email; your password stays the same.`,
       });
     }

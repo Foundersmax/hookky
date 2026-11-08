@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>Hookky · AI motion graphics for product launches</title>
-    <meta name="description" content="Turn a brief, your references and a voice-over into a minimal animated ad, then export it in every format. Directed by Claude." />
+    <title>Hookky · Launch ads that move</title>
+    <meta name="description" content="Hookky turns a brief, your references and a voice-over into a minimal animated ad, then exports it in every format. Directed by Claude." />
     <meta name="theme-color" content="#0B0B0C" />
-    <meta property="og:title" content="Hookky · AI motion graphics for product launches" />
+    <meta property="og:title" content="Hookky · Launch ads that move" />
     <meta property="og:description" content="Turn a brief and a voice-over into a launch ad, in every format." />
     <meta property="og:image" content="https://rookker.com/og.png" />
     <meta property="og:url" content="https://rookker.com/" />
@@ -23,113 +23,209 @@
   </head>
   <body>
     <a class="skip" href="#main">Skip to content</a>
+
     <header class="nav">
       <div class="wrap nav-row">
-        <a class="nav-logo" href="/" aria-label="Hookky home"><img src="/logo-dark.svg" alt="Hookky" height="30" /></a>
+        <a class="nav-logo" href="/" aria-label="Hookky home"><img src="/logo-dark.svg" alt="Hookky" height="26" /></a>
         <nav class="nav-links" aria-label="Sections">
           <a href="#how">How it works</a>
+          <a href="#product">Product</a>
           <a href="#formats">Formats</a>
-          <a href="#features">Features</a>
-          <a href="https://github.com/Foundersmax/hookky">GitHub</a>
         </nav>
-        <a class="btn btn-primary btn-sm" data-studio href="#">Open the studio</a>
+        <div class="nav-actions" data-signed-out>
+          <button class="btn btn-text btn-sm" type="button" data-auth="signin">Sign in</button>
+          <button class="btn btn-primary btn-sm" type="button" data-auth="signup">Get started</button>
+        </div>
+        <div class="nav-actions" data-signed-in hidden>
+          <a class="btn btn-primary btn-sm" data-studio href="#">Open studio</a>
+          <span class="nav-avatar" data-initial aria-hidden="true"></span>
+        </div>
       </div>
     </header>
 
     <main id="main">
+      <!-- Hero: one idea, two actions, then the real engine playing live. -->
       <section class="hero">
-        <div class="wrap hero-grid">
-          <div class="hero-copy">
-            <p class="eyebrow">AI motion graphics for product launches</p>
-            <h1>Turn a brief and a voice-over into a launch ad.</h1>
-            <p class="lede">Describe the product, drop in references and a 30–60 second voice-over. Hookky's creative director storyboards it, cuts on the pauses in your voice-over, and exports minimal, modern motion in every format.</p>
-            <div class="cta-row">
-              <a class="btn btn-primary" data-studio href="#">Open the studio</a>
-              <a class="btn btn-ghost" href="#how">See how it works</a>
-            </div>
-            <p class="fine">Directed by Claude · MP4 in 16:9, 9:16, 1:1 and 4:5</p>
+        <div class="wrap hero-inner">
+          <p class="pill"><span class="pill-dot" aria-hidden="true"></span> New: stock video, brand kits and 4K export</p>
+          <h1>Launch ads that move.</h1>
+          <p class="lede">Describe your product, drop in a voice-over, and Hookky's creative director turns it into a minimal motion ad for every screen.</p>
+          <div class="cta-row" data-signed-out>
+            <button class="btn btn-primary" type="button" data-auth="signup">Get started</button>
+            <button class="btn btn-ghost" type="button" data-auth="signin">Sign in</button>
           </div>
-          <figure class="hero-stage">
-            <div class="screen">
-              <canvas id="hero-canvas" aria-label="A Hookky promo animation playing live"></canvas>
-            </div>
+          <div class="cta-row" data-signed-in hidden>
+            <a class="btn btn-primary" data-studio href="#">Open the studio</a>
+          </div>
+          <p class="fine" data-signed-out>New accounts are approved by our team.</p>
+        </div>
+        <div class="wrap">
+          <figure class="stage">
+            <div class="screen"><canvas id="hero-canvas" aria-label="A Hookky promo animation playing live"></canvas></div>
             <figcaption>
               <span class="live-dot" aria-hidden="true"></span>
-              Rendered live in your browser by the Hookky engine
+              Rendered live by the Hookky engine
               <button id="hero-toggle" class="chip" type="button" aria-pressed="true">Pause</button>
             </figcaption>
           </figure>
         </div>
       </section>
 
-      <section id="how" class="band">
+      <!-- Proof strip -->
+      <section class="strip" aria-label="At a glance">
+        <div class="wrap strip-row">
+          <div><strong>19</strong><span>motion templates</span></div>
+          <div><strong>4</strong><span>formats in one export</span></div>
+          <div><strong>4K</strong><span>at 60 fps, plus GIF</span></div>
+          <div><strong>Claude</strong><span>as creative director</span></div>
+        </div>
+      </section>
+
+      <!-- How it works -->
+      <section id="how" class="section">
         <div class="wrap">
-          <p class="eyebrow">How it works</p>
-          <h2>Three steps from idea to export.</h2>
+          <header class="section-head">
+            <p class="eyebrow">How it works</p>
+            <h2>From brief to export in three steps.</h2>
+          </header>
           <ol class="steps">
             <li>
               <span class="step-n">01</span>
-              <h3>Describe it</h3>
-              <p>Tell the creative director what you're launching: the name, what it does, two or three benefits and a call to action. Paste a Pinterest, Behance or product link for references.</p>
+              <h3>Brief the director</h3>
+              <p>Name the product, its benefits and the call to action. Pick one of three creative directions it pitches back.</p>
             </li>
             <li>
               <span class="step-n">02</span>
-              <h3>Add your voice-over</h3>
-              <p>Upload a 30–60 second voice-over. Hookky finds the natural pauses, aligns the words, and builds scenes that cut where you breathe, with kinetic type that follows the speech.</p>
+              <h3>Add your voice</h3>
+              <p>Upload a 30–60 second voice-over. Scenes cut on its pauses and the type follows the words.</p>
             </li>
             <li>
               <span class="step-n">03</span>
               <h3>Refine and export</h3>
-              <p>Drag scenes, snap cuts to pauses, swap styles, and let the director's notes catch what's too long or too fast. Export frame-accurate MP4s in every format at once.</p>
+              <p>Edit on the canvas, add stock video, then export MP4, GIF, captions and posters in every format.</p>
             </li>
           </ol>
         </div>
       </section>
 
-      <section id="formats" class="band band-alt">
+      <!-- Product: a structured grid of what's inside -->
+      <section id="product" class="section section-alt">
         <div class="wrap">
-          <p class="eyebrow">One storyboard, every format</p>
-          <h2>Laid out for each screen automatically.</h2>
-          <p class="section-lede">These four players run the same storyboard. Every layout is computed from the frame, so YouTube, Reels, the feed and square posts all come out composed.</p>
+          <header class="section-head">
+            <p class="eyebrow">Product</p>
+            <h2>Everything a launch cut needs.</h2>
+          </header>
+          <div class="bento">
+            <article class="card card-wide">
+              <h3>A creative director in the chat</h3>
+              <p>Claude pitches three directions, builds the storyboard you pick, then looks at its own rendered frames and fixes what it sees.</p>
+              <div class="card-visual" aria-hidden="true">
+                <span class="dir"><i style="background:#ff4d1a"></i>Bold &amp; graphic</span>
+                <span class="dir on"><i style="background:#c8ff3d"></i>Electric dark</span>
+                <span class="dir"><i style="background:#7c6cff"></i>Cinematic glow</span>
+              </div>
+            </article>
+            <article class="card">
+              <h3>Voice-over sync</h3>
+              <p>Word-level transcription, pause detection and cuts that snap to the breath.</p>
+            </article>
+            <article class="card">
+              <h3>Stock video and uploads</h3>
+              <p>Search Pixabay and Coverr, or drop your own clips. Trim, slow down, export frame-exact.</p>
+            </article>
+            <article class="card">
+              <h3>Brand kits</h3>
+              <p>Save colours, fonts and logo once. Every new project starts on brand.</p>
+            </article>
+            <article class="card">
+              <h3>Edit on the canvas</h3>
+              <p>Click any text to rewrite it, drop images onto scenes, set focal points and zoom.</p>
+            </article>
+            <article class="card">
+              <h3>Built for teams</h3>
+              <p>Approved accounts, daily usage limits and an admin view of everyone.</p>
+            </article>
+            <article class="card card-wide">
+              <h3>Export everything at once</h3>
+              <p>1080p or 4K at 30 or 60 fps, looping GIFs, .srt captions and posters, in 16:9, 9:16, 1:1 and 4:5.</p>
+              <div class="card-visual formats-mini" aria-hidden="true">
+                <span style="aspect-ratio:16/9"></span><span style="aspect-ratio:9/16"></span><span style="aspect-ratio:1/1"></span><span style="aspect-ratio:4/5"></span>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- Formats -->
+      <section id="formats" class="section">
+        <div class="wrap">
+          <header class="section-head">
+            <p class="eyebrow">One storyboard, every format</p>
+            <h2>Composed for each screen automatically.</h2>
+          </header>
           <div class="formats">
-            <figure><div class="screen"><canvas data-aspect="16:9" aria-label="The promo in 16:9"></canvas></div><figcaption>16:9 · 1920×1080</figcaption></figure>
-            <figure><div class="screen"><canvas data-aspect="9:16" aria-label="The promo in 9:16"></canvas></div><figcaption>9:16 · 1080×1920</figcaption></figure>
-            <figure><div class="screen"><canvas data-aspect="1:1" aria-label="The promo in 1:1"></canvas></div><figcaption>1:1 · 1080×1080</figcaption></figure>
-            <figure><div class="screen"><canvas data-aspect="4:5" aria-label="The promo in 4:5"></canvas></div><figcaption>4:5 · 1080×1350</figcaption></figure>
+            <figure><div class="screen"><canvas data-aspect="16:9" aria-label="The promo in 16:9"></canvas></div><figcaption>16:9</figcaption></figure>
+            <figure><div class="screen"><canvas data-aspect="9:16" aria-label="The promo in 9:16"></canvas></div><figcaption>9:16</figcaption></figure>
+            <figure><div class="screen"><canvas data-aspect="1:1" aria-label="The promo in 1:1"></canvas></div><figcaption>1:1</figcaption></figure>
+            <figure><div class="screen"><canvas data-aspect="4:5" aria-label="The promo in 4:5"></canvas></div><figcaption>4:5</figcaption></figure>
           </div>
         </div>
       </section>
 
-      <section id="features" class="band">
-        <div class="wrap">
-          <p class="eyebrow">In the studio</p>
-          <h2>Everything a launch cut needs.</h2>
-          <div class="features">
-            <article><h3>A creative director in the chat</h3><p>Claude writes the storyboard, picks templates and transitions, looks at your references, and edits scenes when you ask.</p></article>
-            <article><h3>Voice-over sync</h3><p>Pause detection, word alignment and snap-to-pause cuts keep every scene on the beat of the voice.</p></article>
-            <article><h3>Director's notes</h3><p>An automatic review flags long headlines, text that's on screen too briefly, missing images and weak contrast, and the agent fixes them.</p></article>
-            <article><h3>Visual sources</h3><p>Search Pinterest, Freepik, Envato, Unsplash and Pexels, upscale with Magnific, or import images from any link.</p></article>
-            <article><h3>13 templates, 7 styles</h3><p>Title reveals, kinetic type, product heroes, stat counters, mosaics and end cards in Swiss, Noir, Editorial and more.</p></article>
-            <article><h3>Frame-accurate export</h3><p>H.264 MP4 rendered frame by frame with your voice-over and music, faster than real time, in four formats at once.</p></article>
-          </div>
-        </div>
-      </section>
-
+      <!-- Final call to action -->
       <section class="final">
         <div class="wrap final-inner">
           <h2>Your next launch, in motion.</h2>
-          <a class="btn btn-primary" data-studio href="#">Open the studio</a>
+          <p class="lede">Create an account. We approve new teams within a day.</p>
+          <div class="cta-row" data-signed-out>
+            <button class="btn btn-primary" type="button" data-auth="signup">Get started</button>
+          </div>
+          <div class="cta-row" data-signed-in hidden>
+            <a class="btn btn-primary" data-studio href="#">Open the studio</a>
+          </div>
         </div>
       </section>
     </main>
 
     <footer class="foot">
       <div class="wrap foot-row">
-        <img src="/logo-mark.svg" alt="" width="22" height="22" />
-        <span>© <span data-year></span> Hookky</span>
-        <a href="https://github.com/Foundersmax/hookky">Source on GitHub</a>
+        <span class="foot-brand"><img src="/logo-mark.svg" alt="" width="20" height="20" /> © <span data-year></span> Hookky</span>
+        <nav aria-label="Footer">
+          <a href="#how">How it works</a>
+          <a href="#product">Product</a>
+          <a data-studio href="#">Studio</a>
+        </nav>
       </div>
     </footer>
+
+    <!-- Sign in / create account / forgot / new password -->
+    <dialog id="auth" class="auth" aria-labelledby="auth-title">
+      <form class="auth-card" method="dialog" novalidate>
+        <button class="auth-close" type="button" aria-label="Close" data-close>×</button>
+        <img src="/logo-mark.svg" alt="" width="28" height="28" />
+        <h2 id="auth-title">Sign in</h2>
+        <p class="auth-sub" data-sub></p>
+        <div class="auth-tabs" role="tablist" data-tabs>
+          <button type="button" role="tab" data-mode="signin">Sign in</button>
+          <button type="button" role="tab" data-mode="signup">Create account</button>
+        </div>
+        <div class="note" data-note hidden role="status"></div>
+        <label class="field" data-only="signup"><span>Name</span><input name="name" type="text" autocomplete="name" maxlength="80" /></label>
+        <label class="field" data-only="signin signup forgot"><span>Email</span><input name="email" type="email" autocomplete="email" required /></label>
+        <label class="field" data-only="signin signup reset">
+          <span data-pw-label>Password</span>
+          <input name="password" type="password" required />
+          <small data-only="signup reset">At least 10 characters. A short phrase works well.</small>
+        </label>
+        <div class="note warn" data-error hidden role="alert"></div>
+        <button class="btn btn-primary btn-block" type="submit" data-submit>Sign in</button>
+        <div class="auth-links">
+          <button type="button" class="link" data-mode="forgot" data-only="signin">Forgot password?</button>
+          <button type="button" class="link" data-mode="signin" data-only="forgot reset">Back to sign in</button>
+        </div>
+      </form>
+    </dialog>
+
     <script type="module" src="./main.ts"></script>
   </body>
 </html>

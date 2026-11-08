@@ -9,7 +9,7 @@ import { runAgentTurn, claudeConfigured, resetConversation } from "./agent";
 import { listConnectors, searchVisuals, searchVideos, importFromUrl, magnificUpscale, reportStockUse, type Orientation } from "./connectors";
 import { proxyVideo } from "./videoProxy";
 import { accountsEnabled, migrate } from "./db";
-import { accountRoutes, requireUser, sameOrigin, takeAgentTurn } from "./accounts";
+import { accountRoutes, requireUser, sameOrigin, takeAgentTurn, authCors } from "./accounts";
 import { mailConfigured } from "./mailer";
 import { safeFetch, readLimited, BlockedUrlError } from "./safeFetch";
 import { transcribe, transcriptionProvider } from "./transcribe";
@@ -56,6 +56,7 @@ if (password && !accounts) {
 
 app.use(express.json({ limit: "40mb" }));
 if (accounts) {
+  app.use(authCors);
   app.use("/api", sameOrigin);
   app.use(requireUser);
   app.use(accountRoutes());

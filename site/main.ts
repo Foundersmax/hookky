@@ -2,20 +2,16 @@
 import { Renderer, totalDuration } from "../src/engine/render";
 import { ASPECT_SIZE, type Aspect, type Project } from "../src/types";
 import { showcase } from "./showcase";
+import { studioUrl } from "./studio";
+import { initAuth } from "./auth";
 
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const noImages = () => undefined;
 
-/** The studio lives on the app. subdomain of wherever this page is served. */
-function studioUrl() {
-  const { hostname, protocol } = location;
-  if (hostname === "localhost" || /^\d+\.\d+\.\d+\.\d+$/.test(hostname) || hostname.endsWith(".github.io")) return "https://github.com/Foundersmax/hookky#deploy-to-render";
-  return `${protocol}//app.${hostname.replace(/^www\./, "")}`;
-}
-for (const a of document.querySelectorAll<HTMLAnchorElement>("[data-studio]")) a.href = studioUrl();
+initAuth();
 // The end card of the showcase names the real studio address.
 const endCard = showcase.scenes.find((s) => s.template === "cta-end");
-if (endCard) endCard.url = studioUrl().startsWith("https://github.com") ? "app.rookker.com" : new URL(studioUrl()).host;
+if (endCard) endCard.url = new URL(studioUrl()).host;
 for (const el of document.querySelectorAll("[data-year]")) el.textContent = String(new Date().getFullYear());
 
 class Player {

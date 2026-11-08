@@ -63,6 +63,8 @@ Set `DATABASE_URL` and Hookky switches from the shared password to accounts:
 - **Sign-in** uses a 30-day HttpOnly cookie; password reset links last an hour and sign the account out everywhere. Sign-in, sign-up and email requests are rate limited, cross-site writes are refused, and responses don't reveal which emails have accounts.
 - Without `BREVO_API_KEY` the emails are printed to the server log, so local development needs no setup. `MAIL_FROM` must be a sender (or domain) verified in Brevo.
 
+**Sign in on the landing page.** Set `SITE_URL` (e.g. `https://rookker.com`) and the landing page signs people in and up in a dialog: it calls `/api/auth/*` on the studio with cookies (CORS is granted to that site and its `www.` twin only, and only for the auth endpoints), then opens the studio already signed in. Confirmation and reset links land on the landing page. Without `SITE_URL`, its buttons just open the studio, which has its own sign-in screen.
+
 On Render: create a **Postgres** database, then on the hookky service set `DATABASE_URL` to its **Internal Database URL**, plus `ADMIN_EMAILS`, `BREVO_API_KEY` and `MAIL_FROM`. Tables are created on start. Projects still live in each browser for now.
 
 ### Landing page on GitHub Pages

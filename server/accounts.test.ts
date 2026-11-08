@@ -18,6 +18,7 @@ before(async () => {
   process.env.MAIL_SINK = "memory";
   process.env.ADMIN_EMAILS = "owner@hookky.test";
   process.env.AGENT_DAILY_LIMIT = "2";
+  process.env.SITE_URL = "https://rookker.test";
   const { db, migrate } = await import("./db");
   await db().query("drop table if exists usage, auth_tokens, sessions, users cascade");
   await migrate();
@@ -25,6 +26,7 @@ before(async () => {
   outbox = (await import("./mailer")).outbox;
   const app = express();
   app.use(express.json());
+  app.use(acc.authCors);
   app.use("/api", acc.sameOrigin);
   app.use(acc.requireUser);
   app.use(acc.accountRoutes());
@@ -67,7 +69,7 @@ test("sign-up → confirm email → admin approval → sign in", { skip }, async
   assert.equal((await owner.call("POST", "/api/auth/signup", { email: "Owner@Hookky.test", password: "correct horse battery", name: "Owner" })).status, 200);
   let link = linkIn("owner@hookky.test", /Confirm email/)!;
   let r = await owner.call("GET", link.pathname + link.search);
-  assert.deepEqual([r.status, r.location], [303, "/?auth=verified-admin"]);
+  assert.deepEqual([r.status, r.location], [303, "https://rookker.test/?auth=verified-admin"]);
   r = await owner.call("POST", "/api/auth/login", { email: "owner@hookky.test", password: "correct horse battery" });
   assert.equal(r.status, 200);
   assert.match(r.setCookie!, /HttpOnly; SameSite=Lax/);
@@ -79,8 +81,8 @@ test("sign-up → confirm email → admin approval → sign in", { skip }, async
   await ana.call("POST", "/api/auth/signup", { email: "ana@hookky.test", password: "ana's long password", name: "Ana" });
   assert.equal((await ana.call("POST", "/api/auth/login", { email: "ana@hookky.test", password: "ana's long password" })).json.code, "unverified");
   link = linkIn("ana@hookky.test", /Confirm email/)!;
-  assert.equal((await ana.call("GET", link.pathname + link.search)).location, "/?auth=verified");
-  assert.equal((await ana.call("GET", link.pathname + link.search)).location, "/?auth=link-expired", "links work once");
+  assert.equal((await ana.call("GET", link.pathname + link.search)).location, "https://rookker.test/?auth=verified");
+  assert.equal((await ana.call("GET", link.pathname + link.search)).location, "https://rookker.test/?auth=link-expired", "links work once");
   assert.ok(outbox.some((m) => m.to === "owner@hookky.test" && /New Hookky sign-up: ana@hookky.test/.test(m.subject)), "admins hear about it");
   r = await ana.call("POST", "/api/auth/login", { email: "ana@hookky.test", password: "ana's long password" });
   assert.deepEqual([r.status, r.json.code], [403, "pending"]);
@@ -156,4 +158,22 @@ test("an unset or invalid AGENT_DAILY_LIMIT means 100, not 0", { skip }, async (
     assert.equal(defaultLimit(), want, JSON.stringify(v));
   }
   process.env.AGENT_DAILY_LIMIT = prev;
+});
+
+test("the landing page (SITE_URL and its www twin) may sign people in, and nothing more", { skip }, async () => {
+  const pre = await fetch(`${base}/api/auth/login`, { method: "OPTIONS", headers: { Origin: "https://rookker.test", "Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "content-type" } });
+  assert.equal(pre.status, 204);
+  assert.equal(pre.headers.get("access-control-allow-origin"), "https://rookker.test");
+  assert.equal(pre.headers.get("access-control-allow-credentials"), "true");
+  const evil = await fetch(`${base}/api/auth/login`, { method: "OPTIONS", headers: { Origin: "https://evil.example", "Access-Control-Request-Method": "POST" } });
+  assert.equal(evil.headers.get("access-control-allow-origin"), null, "other sites get no CORS grant");
+  const c = client();
+  const r = await c.call("POST", "/api/auth/login", { email: "nobody@hookky.test", password: "wrong password!" }, { Origin: "https://www.rookker.test" });
+  assert.equal(r.status, 401, "www twin passes the origin check (then fails on the password)");
+  const other = await c.call("POST", "/api/agent-turn", {}, { Origin: "https://rookker.test" });
+  assert.equal(other.status, 403, "the site can't call anything else cross-origin");
+  // Reset links land on the site.
+  await c.call("POST", "/api/auth/signup", { email: "cy@hookky.test", password: "cy long password" });
+  await c.call("POST", "/api/auth/forgot", { email: "cy@hookky.test" });
+  assert.equal(linkIn("cy@hookky.test", /new password/)!.origin, "https://rookker.test");
 });
