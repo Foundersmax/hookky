@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useStudio, openProject, createProject, duplicateProject, renameProject, deleteProject, defaultProject } from "../store";
+import { useStudio, setState, openProject, createProject, duplicateProject, renameProject, deleteProject, defaultProject } from "../store";
 import { STARTERS } from "../starters";
 import { posterFor } from "./thumbs";
 import { loadProject, loadProjectOrder, saveProjectOrder, type ProjectMeta } from "../persist";
@@ -236,6 +236,9 @@ export function Home() {
         <section className="home-start" aria-labelledby="start-title">
           <div className="home-head">
             <h2 id="start-title">Start something new</h2>
+            <button className="btn" onClick={() => void createProject("blank").then(() => setState({ sheet: "sound" }))}>
+              <Icon name="wave" /> Start from a sound
+            </button>
           </div>
           <div className="starters">
             {starterPosters.map((s) => {

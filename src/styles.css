@@ -759,3 +759,41 @@ select.sel { height: 30px; border-radius: 8px; background: transparent; font-siz
 /* Range sliders: quiet and on theme instead of the browser's blue */
 input[type="range"] { accent-color: var(--text); }
 .music-actions .btn { height: 28px; padding: 0 10px; font-size: 12.5px; }
+
+/* ---------- sound templates */
+.sound-sheet { width: min(1180px, 100%); max-height: 92vh; display: flex; flex-direction: column; padding: 18px 20px 20px; }
+.sound-sub { margin: 2px 0 0; color: var(--text-2); font-size: 13px; }
+.sound-body { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; min-height: 0; overflow: hidden; }
+.sound-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; overflow-y: auto; padding: 2px; align-content: start; }
+.sound-card { display: flex; flex-direction: column; text-align: left; border: 1px solid var(--line); border-radius: 14px; background: var(--panel-2); padding: 0; overflow: hidden; cursor: pointer; color: var(--text); transition: border-color .15s, transform .15s; }
+.sound-card:hover { transform: translateY(-1px); border-color: var(--line-2); }
+.sound-card.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.sound-frame { display: grid; place-items: center; height: 148px; overflow: hidden; }
+.sound-frame canvas { border-radius: 4px; display: block; }
+.sound-meta { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px 12px; }
+.sound-meta b { font-size: 13.5px; letter-spacing: -0.01em; }
+.sound-meta small { color: var(--text-2); font-size: 12px; line-height: 1.4; }
+.sound-need { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--text-3); }
+.sound-side { display: flex; flex-direction: column; gap: 12px; overflow-y: auto; padding: 2px 4px 2px 2px; }
+.sound-side > * { flex: none; }
+.sound-stage { position: relative; display: grid; place-items: center; border-radius: 14px; border: 1px solid var(--line); height: 320px; overflow: hidden; }
+.sound-badge { position: absolute; left: 10px; bottom: 10px; font-size: 11px; padding: 3px 8px; border-radius: 99px; background: rgba(0,0,0,.55); color: #fff; }
+.sound-slots { display: flex; flex-direction: column; gap: 8px; }
+.sound-slot { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px dashed var(--line-2); border-radius: 12px; color: var(--text-2); }
+.sound-slot.has { border-style: solid; border-color: var(--line); color: var(--text); background: var(--panel-2); }
+.sound-slot-text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.sound-slot-text b { font-size: 13px; }
+.sound-slot-text small { font-size: 11.5px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sound-copy summary { cursor: pointer; font-size: 12.5px; color: var(--text-2); margin-bottom: 8px; }
+.sound-copy { display: flex; flex-direction: column; gap: 8px; }
+.sound-copy[open] { padding-bottom: 4px; }
+.sound-build { justify-content: center; padding: 10px 14px; font-size: 14px; }
+.sound-build .wave { height: 14px; }
+.sound-build .wave i { background: currentColor; }
+.sound-error { margin: 0; color: #e5484d; font-size: 12.5px; }
+@media (max-width: 860px) {
+  .sound-body { grid-template-columns: 1fr; overflow-y: auto; }
+  .sound-grid { overflow: visible; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+  .sound-frame { height: 120px; }
+  .sound-stage { height: 260px; }
+}

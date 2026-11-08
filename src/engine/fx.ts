@@ -4,6 +4,7 @@
 // time), so the preview, every export, thumbnails and contact sheets show the same frame.
 import type { Brand, Effect, Grade, Project, Scene } from "../types";
 import { hexToRgb, mix } from "./util";
+import { beatsInCut } from "../audio/beats";
 
 export const hasFx = (s: Scene) => (!!s.grade && s.grade !== "none") || !!s.effects?.length;
 
@@ -25,6 +26,7 @@ export const GRADE_LABEL: Record<Grade, string> = {
 export const EFFECT_LABEL: Record<Effect, string> = {
   "push-in": "Push-in", pulse: "Pulse on beats", shake: "Shake", "focus-pull": "Focus pull", flash: "Flash", "rgb-split": "RGB split", glitch: "Glitch",
   "light-leak": "Light leak", vignette: "Vignette", bokeh: "Bokeh", dust: "Dust", sparkle: "Sparkle", confetti: "Confetti", scanlines: "Scanlines", halftone: "Halftone",
+  "beat-flash": "Flash on bars",
 };
 
 const FILTER_OK = typeof CanvasRenderingContext2D !== "undefined" && "filter" in CanvasRenderingContext2D.prototype;
@@ -58,8 +60,23 @@ const rgba = (hex: string, a: number) => {
   return `rgba(${r},${g},${b},${Math.max(0, Math.min(1, a))})`;
 };
 
-/** Where the beats fall inside a scene: the voice-over's word onsets, else a 120 bpm grid. */
+/** The music's beats (or bar starts) over the whole cut, cached per music track and cut length. */
+const cutBeatCache = new WeakMap<object, { key: string; beats: number[]; bars: number[] }>();
+function musicBeats(p: Project): { beats: number[]; bars: number[] } | undefined {
+  const m = p.music;
+  if (!m?.beats?.length) return undefined;
+  const total = p.scenes.reduce((a, s) => a + s.duration, 0);
+  const key = `${total}|${m.start ?? 0}|${m.duration ?? 0}`;
+  let c = cutBeatCache.get(m);
+  if (!c || c.key !== key) cutBeatCache.set(m, (c = { key, beats: beatsInCut(m, total), bars: beatsInCut(m, total, m.downbeats) }));
+  return c;
+}
+const within = (list: number[], start: number, dur: number) => list.filter((b) => b >= start && b < start + dur).map((b) => b - start);
+
+/** Where the beats fall inside a scene: the music's beats, else the voice-over's word onsets, else a 120 bpm grid. */
 export function beatsIn(p: Project, start: number, dur: number): number[] {
+  const mb = musicBeats(p);
+  if (mb) return within(mb.beats, start, dur);
   const words = p.audio?.words;
   if (words?.length) {
     const out = words.filter((w) => w.s >= start && w.s < start + dur).map((w) => w.s - start);
@@ -106,11 +123,12 @@ export function cameraFor(f: FxFrame, W: number, H: number): Camera {
   const u = Math.min(W, H) / 1080;
   let scale = 1, dx = 0, dy = 0;
   if (fx.has("push-in")) scale *= 1 + 0.07 * amt * Math.min(1, f.t / Math.max(0.5, f.dur));
-  if (fx.has("pulse")) {
+  if (fx.has("pulse") || fx.has("beat-flash")) {
     const beats = beatsIn(f.project, f.start, f.dur);
     let since = Infinity;
-    for (const b of beats) if (b <= f.t) since = f.t - b;
-    if (since < 1) scale *= 1 + 0.04 * amt * Math.exp(-since * 9);
+    for (const b of beats) if (b <= f.t + 1e-6) since = f.t - b;
+    const k = fx.has("pulse") ? 0.04 : 0.015;
+    if (since < 1) scale *= 1 + k * amt * Math.exp(-since * 9);
   }
   if (fx.has("shake")) {
     // An impact at the cut, then a slight handheld drift.
@@ -213,6 +231,20 @@ export function applyFx(ctx: CanvasRenderingContext2D, src: HTMLCanvasElement, f
   if (fx.has("sparkle")) sparkle(ctx, f, seed, cw, ch, u, amt);
   if (fx.has("confetti")) confetti(ctx, f, seed, cw, ch, u, amt);
   if (fx.has("vignette")) vignette(ctx, cw, ch, amt);
+  if (fx.has("beat-flash")) {
+    // A burst of light on each bar of the music (every 4th beat without music).
+    const mb = musicBeats(f.project);
+    const hits = mb?.bars.length ? within(mb.bars, f.start, f.dur) : beatsIn(f.project, f.start, f.dur).filter((_, i) => i % 4 === 0);
+    let since = Infinity;
+    for (const b of hits) if (b <= f.t + 1e-6) since = f.t - b;
+    const a = 0.6 * amt * Math.exp(-since * 8);
+    if (a > 0.01) {
+      ctx.globalCompositeOperation = "screen";
+      ctx.fillStyle = rgba(mix(f.brand.accent, "#ffffff", 0.55), a);
+      ctx.fillRect(0, 0, cw, ch);
+      ctx.globalCompositeOperation = "source-over";
+    }
+  }
   if (fx.has("flash")) {
     const a = 0.9 * amt * Math.exp(-f.t * 9);
     if (a > 0.01) {

@@ -1,7 +1,8 @@
 import { useRef } from "react";
 import type { MusicTrack } from "../types";
-import { useStudio, updateProject, setState } from "../store";
+import { useStudio, updateProject, setState, getState } from "../store";
 import { cleanMusic, DEFAULT_DUCK } from "../audio/mix";
+import { analyzeMusicFile } from "../audio/beats";
 import { clock } from "../clock";
 import { Icon } from "./Icon";
 
@@ -48,10 +49,33 @@ export function MusicControls() {
       URL.revokeObjectURL(url);
       return setState({ notice: `${f.name} can't be played in this browser. Try MP3, M4A or WAV.` });
     }
-    // Keep the mix settings when replacing a track; start fresh otherwise.
-    updateProject((p) => ({ ...p, music: cleanMusic({ ...(p.music ?? {}), name: f.name, duration, start: 0 }, url) }));
-    setState({ notice: `Music added (${mmss(duration)}). It loops to fill the cut.` });
+    // Keep the mix settings when replacing a track; start fresh otherwise (and drop the old beat map).
+    updateProject((p) => {
+      const { bpm, beats, downbeats, energy, drop, ...mix } = p.music ?? ({} as Partial<MusicTrack>);
+      void [bpm, beats, downbeats, energy, drop];
+      return { ...p, music: cleanMusic({ ...mix, name: f.name, duration, start: 0 }, url) };
+    });
+    setState({ notice: `Music added (${mmss(duration)}). Finding the beat…` });
+    // Map the beats in the background: pulse and flash effects then hit on the music.
+    analyzeMusicFile(f)
+      .then(({ map }) => {
+        updateProject((p) => (p.music?.url === url && map ? { ...p, music: cleanMusic({ ...p.music, ...map }, url) } : p));
+        setState({ notice: map ? `${Math.round(map.bpm)} BPM${map.drop !== undefined ? `, drop at ${mmss(map.drop)}` : ""}. Pulse and flash effects now hit on the beat.` : "Music added. It has no steady beat to cut to." });
+      })
+      .catch(() => {});
   }
+
+  /** Choose the start point so the music's drop hits where scene 2 begins. */
+  const dropOnSecondScene = () => {
+    const p = getState().project;
+    if (!p.music || p.music.drop === undefined) return;
+    const at = p.scenes[0]?.duration ?? 0;
+    const start = Math.max(0, +(p.music.drop - at).toFixed(3));
+    set({ start });
+    setState({ notice: start > 0 ? `The drop now lands at ${at.toFixed(1)}s.` : "The drop comes before scene 2 ends; the music starts from the top." });
+    clock.seek(Math.max(0, at - 1.5));
+    clock.play();
+  };
 
   const listen = () => {
     clock.seek(0);
@@ -66,7 +90,7 @@ export function MusicControls() {
           <div className="music-head">
             <Icon name="mic" size={14} />
             <span className="music-name" title={music.name}>{music.name}</span>
-            {music.duration ? <span className="tiny">{mmss(music.duration)}</span> : null}
+            {music.duration ? <span className="tiny">{music.bpm ? `${Math.round(music.bpm)} BPM · ` : ""}{mmss(music.duration)}</span> : null}
           </div>
           <Slider label="Music volume" value={music.volume} min={0} max={1} step={0.01} show={pct(music.volume)} onChange={(volume) => set({ volume })} />
           {audio && <Slider label="Voice-over volume" value={audio.volume ?? 1} min={0} max={1.5} step={0.01} show={pct(audio.volume ?? 1)} onChange={voice} />}
@@ -83,6 +107,11 @@ export function MusicControls() {
             show={mmss(music.start ?? 0)}
             onChange={(start) => (set({ start }), clock.seek(clock.time))}
           />
+          {music.drop !== undefined && (
+            <button className="btn ghost" title="Start the music so its drop lands on the cut between scenes 1 and 2" onClick={() => dropOnSecondScene()}>
+              Land the drop on scene 2
+            </button>
+          )}
           <div className="music-actions">
             <button className="btn" onClick={listen} title="Play the cut from the start to hear the mix">
               <Icon name="play" size={13} /> Listen

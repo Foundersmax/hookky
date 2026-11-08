@@ -18,6 +18,22 @@ export function cleanMusic(m: Partial<MusicTrack> & { name?: unknown; url?: unkn
     fadeIn: num(m.fadeIn, 0, 10, 0.5),
     fadeOut: num(m.fadeOut, 0, 10, 1.5),
     duck: num(m.duck, 0, 1, DEFAULT_DUCK),
+    ...cleanBeats(m),
+  };
+}
+
+/** Keep a stored beat map only if it looks sane (sorted finite numbers, a believable tempo). */
+function cleanBeats(m: Partial<MusicTrack>): Partial<MusicTrack> {
+  const times = (v: unknown) => (Array.isArray(v) && v.length <= 4000 && v.every((x, i) => typeof x === "number" && Number.isFinite(x) && x >= 0 && (i === 0 || x >= v[i - 1])) ? (v as number[]) : undefined);
+  const beats = times(m.beats);
+  if (!beats?.length || typeof m.bpm !== "number" || !(m.bpm >= 40 && m.bpm <= 240)) return {};
+  const energy = Array.isArray(m.energy) && m.energy.length === beats.length && m.energy.every((x) => typeof x === "number" && Number.isFinite(x)) ? m.energy.map((x) => clamp(x, 0, 1)) : undefined;
+  return {
+    bpm: m.bpm,
+    beats,
+    ...(times(m.downbeats) && { downbeats: times(m.downbeats) }),
+    ...(energy && { energy }),
+    ...(typeof m.drop === "number" && Number.isFinite(m.drop) && { drop: m.drop }),
   };
 }
 

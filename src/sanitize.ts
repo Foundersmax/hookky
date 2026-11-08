@@ -66,7 +66,8 @@ export function sanitizeScene(input: unknown, keepId?: string): Scene {
   const scene: Scene = {
     id: keepId ?? (typeof s.id === "string" && s.id ? s.id.slice(0, 40) : uid()),
     template: oneOf(s.template, TEMPLATES) ?? "title-reveal",
-    duration: +(num(s.duration, 0.8, 15) ?? 3).toFixed(2),
+    // An audiogram follows a whole voice-over clip; everything else is one beat of an ad.
+    duration: +(num(s.duration, 0.8, s.template === "audiogram" ? 120 : 15) ?? 3).toFixed(2),
     kicker: str(s.kicker, 60),
     headline: str(s.headline, 160),
     subline: str(s.subline, 200),

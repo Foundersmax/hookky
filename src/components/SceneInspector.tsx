@@ -33,6 +33,7 @@ const USES: Record<string, (keyof Scene)[]> = {
   testimonials: ["headline", "items"],
   "before-after": ["images", "items", "headline"],
   "logo-reveal": ["image", "headline", "subline"],
+  audiogram: ["image", "kicker", "headline", "subline"],
 };
 const ITEMS_LABEL: Record<string, string> = {
   testimonials: "Quotes, one per line: quote — name, role",

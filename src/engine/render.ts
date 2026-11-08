@@ -32,6 +32,8 @@ export interface G {
   abs: number; // absolute scene start
   img: ImageGetter;
   words?: Word[];
+  /** How loud the soundtrack is at an absolute time, 0–1 (the voice-over, else the music's beats). */
+  level: (absT: number) => number;
   E: (x: number) => number;
   sp: number; // motion speed multiplier (durations)
   /** set while drawing the scene on screen: records where editable text landed */
@@ -231,6 +233,7 @@ export class Renderer {
       abs: e.start,
       img: (ref) => img(ref, clipTimeAt(scene, lt), scene.clipSpeed ?? 1),
       words: p.audio?.words,
+      level: levelFor(p),
       E: MOTION[motion]?.E ?? ease.outExpo,
       sp: MOTION[motion]?.sp ?? 0.9,
       ...(record && { hit: (r: HitRegion) => this.hits.push(r) }),
@@ -1316,6 +1319,98 @@ const TEMPLATES: Record<string, Tpl> = {
     tag(labels[1], fx + fw - 20 * u, "right", clamp(sweep * 1.6 - 0.3), "items.1");
   },
 
+  audiogram(g) {
+    const { W, H, ctx, u, c, scene, brand, pad } = g;
+    const now = g.abs + g.t;
+    const lv = g.level(now);
+    const inP = g.E(win(g.t, 0, 0.9 * g.sp));
+    const land = !g.portrait && W > H * 1.2;
+    // Avatar: the scene's image in a circle, else the brand's initial, with rings that breathe with the voice.
+    const R = Math.min(W, H) * (land ? 0.2 : 0.17);
+    const ax = land ? pad + R * 1.25 : W / 2, ay = land ? H * 0.5 : H * (g.portrait ? 0.3 : 0.31);
+    for (let k = 3; k >= 1; k--) {
+      const rr2 = R * (1 + k * 0.12 + lv * 0.16 * k) * inP;
+      ctx.beginPath();
+      ctx.arc(ax, ay, rr2, 0, Math.PI * 2);
+      ctx.fillStyle = rgba(c.accent, (0.07 + lv * 0.08) * (4 - k) * 0.5 * inP);
+      ctx.fill();
+    }
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(ax, ay, R * inP, 0, Math.PI * 2);
+    ctx.clip();
+    const im = g.img(scene.image || brand.logo);
+    if (im) drawCover(ctx, im, ax - R, ay - R, R * 2, R * 2, scene.zoom ?? 1, scene.focus?.x ?? 0.5, scene.focus?.y ?? 0.5);
+    else {
+      ctx.fillStyle = c.accent;
+      ctx.fillRect(ax - R, ay - R, R * 2, R * 2);
+      const initial = (stripMarks(brand.name || scene.headline || "•").trim()[0] ?? "•").toUpperCase();
+      drawLabel(ctx, initial, F(g, R * 1.05), ax, ay + R * 0.04, "center", contrast(c.fg, c.accent) > contrast(c.bg, c.accent) ? c.fg : c.bg);
+    }
+    ctx.restore();
+
+    // Text column.
+    const x0 = land ? ax + R * 1.7 : pad;
+    const colW = land ? W - x0 - pad : W - pad * 2;
+    const align: "left" | "center" = land ? "left" : "center";
+    const tx = align === "center" ? W / 2 : x0;
+    let y = land ? H * 0.2 : ay + R * 1.55;
+    if (scene.kicker) {
+      kicker(g, scene.kicker, tx, y, align, 0.2);
+      y += 56 * u;
+    }
+    if (scene.headline) {
+      const L = layoutText(ctx, scene.headline, F(g, (land ? 64 : 70) * u), colW, 2, 1.02);
+      hitLayout(g, "headline", L, tx, y, align);
+      y = drawLayout(ctx, L, { x: tx, y, align, color: c.fg, emColor: c.accent, t: g.t, delay: 0.25, dur: 0.8 * g.sp, stagger: 0.08, mode: "mask", easing: g.E });
+    }
+
+    // Waveform: the voice around "now" scrolls past; what's been said is bright, what's coming is faint.
+    const bars = land ? 64 : 44;
+    const wy = land ? H * 0.56 : y + (g.portrait ? 150 : 110) * u;
+    const ww = colW, bw = ww / bars, maxH = (land ? 150 : 130) * u;
+    const step = 0.06;
+    for (let i = 0; i < bars; i++) {
+      const at = now + (i - bars * 0.5) * step;
+      const v = Math.max(0.04, g.level(at));
+      const appear = clamp(inP * 1.4 - Math.abs(i - bars / 2) / bars);
+      const h = maxH * v * appear;
+      const past = at <= now;
+      ctx.fillStyle = past ? (Math.abs(at - now) < step ? c.accent : rgba(c.accent, 0.85)) : rgba(c.fg, 0.22);
+      rr(ctx, x0 + i * bw + bw * 0.18, wy - h / 2, bw * 0.64, Math.max(h, 3 * u), bw * 0.32);
+      ctx.fill();
+    }
+
+    // Live caption: the phrase being spoken, word by word; else the subline.
+    const cy = wy + maxH * 0.5 + (land ? 90 : 110) * u;
+    const words = g.words;
+    const size = (land ? 46 : 54) * u;
+    const fnt = F(g, size);
+    if (words?.length) {
+      const phrases = chunkPhrases(words, land ? 6 : 4);
+      const ph = phrases.find((p2) => now >= p2[0].s - 0.1 && now <= p2[p2.length - 1].e + 0.3) ?? [...phrases].reverse().find((p2) => p2[0].s <= now);
+      if (ph && now <= ph[ph.length - 1].e + 0.6) {
+        const space = measure(ctx, " ", fnt);
+        const widths = ph.map((w) => measure(ctx, w.w, fnt));
+        const total = widths.reduce((a, b) => a + b, 0) + space * (ph.length - 1);
+        const k = total > colW ? colW / total : 1;
+        const f2 = { ...fnt, size: size * k };
+        let cx = align === "center" ? W / 2 - (total * k) / 2 : x0;
+        ph.forEach((w, i) => {
+          const said = now >= w.s;
+          const active = now >= w.s && now <= w.e + 0.08;
+          const p2 = ease.outCubic(win(now, w.s - 0.05, 0.25));
+          drawLabel(ctx, w.w, f2, cx, cy - (1 - p2) * 10 * u, "left", active ? c.accent : said ? c.fg : rgba(c.fg, 0.28));
+          cx += (widths[i] + space) * k;
+        });
+      }
+    } else if (scene.subline) {
+      const L = layoutText(ctx, stripMarks(scene.subline), B(g, 34 * u, 500), colW, 2, 1.3);
+      hitLayout(g, "subline", L, tx, cy - 20 * u, align);
+      drawLayout(ctx, L, { x: tx, y: cy - 20 * u, align, color: rgba(c.fg, 0.8), emColor: c.accent, t: g.t, delay: 0.5, dur: 0.8, mode: "rise", stagger: 0.05, easing: ease.outCubic });
+    }
+  },
+
   "logo-reveal"(g) {
     const { W, H, ctx, u, c, scene, brand } = g;
     const logo = g.img(scene.image || brand.logo);
@@ -1349,6 +1444,50 @@ const TEMPLATES: Record<string, Tpl> = {
     }
   },
 };
+
+// ---------------------------------------------------------------- soundtrack level
+const levelCache = new WeakMap<object, (t: number) => number>();
+/** Loudness over time: the voice-over's waveform peaks, else a bump on each music beat. */
+export function levelFor(p: Project): (t: number) => number {
+  const a = p.audio;
+  if (a?.peaks?.length && a.duration > 0) {
+    let f = levelCache.get(a);
+    if (!f) {
+      const pk = a.peaks, n = pk.length, d = a.duration, vol = Math.min(1.2, a.volume ?? 1);
+      f = (t) => {
+        if (t < 0 || t > d) return 0;
+        const x = (t / d) * (n - 1), i = Math.floor(x), k = x - i;
+        return clamp(((pk[i] ?? 0) * (1 - k) + (pk[i + 1] ?? 0) * k) * vol);
+      };
+      levelCache.set(a, f);
+    }
+    return f;
+  }
+  const m = p.music;
+  if (m?.beats?.length) {
+    let f = levelCache.get(m);
+    if (!f) {
+      const start = m.start ?? 0, dur = m.duration ?? 0, beats = m.beats, en = m.energy;
+      f = (t) => {
+        let at = start + t;
+        if (dur > 0) at %= dur;
+        // last beat at or before `at` (binary search)
+        let lo = 0, hi = beats.length - 1, i = -1;
+        while (lo <= hi) {
+          const mid = (lo + hi) >> 1;
+          if (beats[mid] <= at) (i = mid), (lo = mid + 1);
+          else hi = mid - 1;
+        }
+        if (i < 0) return 0.15;
+        const e = en?.[i] ?? 0.7;
+        return clamp(0.12 + e * 0.88 * Math.exp(-(at - beats[i]) * 6));
+      };
+      levelCache.set(m, f);
+    }
+    return f;
+  }
+  return () => 0;
+}
 
 // ---------------------------------------------------------------- words → phrases, captions
 const clean = (w: string) => w.toLowerCase().replace(/[^\p{L}\p{N}']/gu, "");

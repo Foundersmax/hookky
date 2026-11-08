@@ -40,8 +40,11 @@ export function EmptyCanvas() {
         <button className="btn" disabled={busy} onClick={() => file.current?.click()}>
           <Icon name="image" /> {busy ? "Adding…" : "Upload banners"}
         </button>
+        <button className="btn" onClick={() => setState({ sheet: "sound" })}>
+          <Icon name="wave" /> Sound templates
+        </button>
       </div>
-      <p className="empty-hint">Banners crossfade behind your animated text. Pick several at once.</p>
+      <p className="empty-hint">Banners crossfade behind your animated text. Sound templates cut a whole ad to your voice-over or music.</p>
       <input
         ref={file}
         type="file"

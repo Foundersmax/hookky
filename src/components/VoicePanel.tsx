@@ -113,6 +113,9 @@ export function VoicePanel({ toast }: { toast: (s: string) => void }) {
         </>
       )}
 
+      <button className="btn" onClick={() => setState({ sheet: "sound" })}>
+        <Icon name="wave" /> Sound templates: cut an ad to this audio
+      </button>
       <div className="divider" />
       <MusicControls />
     </>

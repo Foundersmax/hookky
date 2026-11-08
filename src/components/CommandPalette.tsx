@@ -47,6 +47,7 @@ const STARTER_CONTENT: Partial<Record<Scene["template"], Partial<Scene>>> = {
   testimonials: { headline: "Loved by *teams*", items: ["It changed how we launch. — Ana, Lumen", "Our fastest ads yet. — Kofi, Orbit"] },
   "before-after": { headline: "See the *difference*", items: ["Before", "After"] },
   "logo-reveal": { subline: "Made to move" },
+  audiogram: { kicker: "Episode 12", headline: "The *quiet* launch", subline: "Upload a voice-over to see it move." },
 };
 /** Starting lengths that give each template's starter copy time to read. */
 const START_DURATION: Partial<Record<Scene["template"], number>> = {
@@ -55,7 +56,7 @@ const START_DURATION: Partial<Record<Scene["template"], number>> = {
 const TEMPLATE_NAMES: Record<string, string> = {
   "title-reveal": "Title reveal", "kinetic-words": "Kinetic words", "product-hero": "Product hero", "split-feature": "Split feature", "feature-list": "Feature list",
   "stat-counter": "Stat counter", "image-mosaic": "Image mosaic", fullbleed: "Full-bleed image", quote: "Quote", marquee: "Marquee", "shape-burst": "Shape burst", "logo-sting": "Logo sting", "cta-end": "End card",
-  "device-mockup": "Device mockup", countdown: "Countdown", "price-card": "Price card", testimonials: "Testimonials", "before-after": "Before / after", "logo-reveal": "Logo reveal",
+  "device-mockup": "Device mockup", countdown: "Countdown", "price-card": "Price card", testimonials: "Testimonials", "before-after": "Before / after", "logo-reveal": "Logo reveal", audiogram: "Audiogram",
 };
 
 export function CommandPalette({ host }: { host: PaletteHost }) {
@@ -90,6 +91,7 @@ export function CommandPalette({ host }: { host: PaletteHost }) {
         const on = autoReviewOn();
         add("Agent", "auto-review", on ? "Turn auto visual review off" : "Turn auto visual review on", () => (setAutoReview(!on), host.toast(on ? "Claude won't review new storyboards automatically" : "Claude will review each new storyboard's frames")));
       }
+      add("Studio", "sound", "Sound templates…", () => setState({ sheet: "sound" }), { hint: "cut an ad to a voice-over or a track" });
       add("Studio", "export", "Export video…", () => host.openTab("Export"));
       add("Studio", "export-gif", "Export a GIF…", () => host.openTab("Export"), { hint: "a scene or the whole cut" });
       add("Studio", "export-captions", "Download captions (.srt / .vtt)…", () => host.openTab("Export"));

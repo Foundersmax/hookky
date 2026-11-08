@@ -22,6 +22,7 @@ export const TEMPLATES = [
   "testimonials",
   "before-after",
   "logo-reveal",
+  "audiogram",
 ] as const;
 export type TemplateId = (typeof TEMPLATES)[number];
 
@@ -38,7 +39,7 @@ export type Motion = (typeof MOTIONS)[number];
 export const GRADES = ["none", "mono", "noir", "warm-film", "cool", "teal-orange", "faded", "vivid", "duotone"] as const;
 export type Grade = (typeof GRADES)[number];
 /** Post effects: camera moves, energy, atmosphere. Rendered by the engine, so exports match the preview. */
-export const EFFECTS = ["push-in", "pulse", "shake", "focus-pull", "flash", "rgb-split", "glitch", "light-leak", "vignette", "bokeh", "dust", "sparkle", "confetti", "scanlines", "halftone"] as const;
+export const EFFECTS = ["push-in", "pulse", "shake", "focus-pull", "flash", "rgb-split", "glitch", "light-leak", "vignette", "bokeh", "dust", "sparkle", "confetti", "scanlines", "halftone", "beat-flash"] as const;
 export type Effect = (typeof EFFECTS)[number];
 
 export interface Stat {
@@ -135,6 +136,14 @@ export interface MusicTrack {
   fadeOut?: number;
   /** How far the music dips while the voice-over speaks, 0 (not at all) to 1 (silent). Default 0.6. */
   duck?: number;
+  /** Beat map of the file (seconds into the file), filled in when the track is analysed. */
+  bpm?: number;
+  beats?: number[];
+  downbeats?: number[];
+  /** loudness of each beat, 0–1 */
+  energy?: number[];
+  /** where the music lifts the most (seconds into the file) */
+  drop?: number;
 }
 
 export interface AudioTrack {

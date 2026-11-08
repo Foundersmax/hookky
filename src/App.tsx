@@ -15,6 +15,7 @@ import { ShortcutsSheet } from "./components/ShortcutsSheet";
 import { Home } from "./components/Home";
 import { Versions } from "./components/Versions";
 import { CommandPalette } from "./components/CommandPalette";
+import { SoundTemplates } from "./components/SoundTemplates";
 import { clock } from "./clock";
 import { images } from "./runtime";
 import { STYLE_PRESETS, FONT_CHOICES } from "./presets";
@@ -64,6 +65,7 @@ export function App() {
   });
 
   const view = useStudio((s) => s.view);
+  const sheet = useStudio((s) => s.sheet);
   const goHome = () => {
     clock.pause();
     flushSave();
@@ -346,6 +348,11 @@ export function App() {
       )}
       {toastMsg && <div className="toast">{toastMsg}</div>}
       {showKeys && <ShortcutsSheet onClose={() => setShowKeys(false)} />}
+      {sheet === "sound" && (
+        <ErrorBoundary area="sound templates">
+          <SoundTemplates />
+        </ErrorBoundary>
+      )}
       {showPalette && (
         <CommandPalette
           host={{
