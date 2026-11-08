@@ -158,7 +158,7 @@ export class Renderer {
       this.drawScene(ctx, project, cur, lt, img, true);
     }
 
-    if (project.captions && project.audio?.words?.length) drawCaptions(ctx, this.W, this.H, project, tt);
+    if (project.captions && project.audio?.words?.length) drawCaptions(ctx, this.W, this.H, project, tt, cur.scene);
     if (project.grain) {
       ctx.save();
       ctx.globalAlpha = 0.07;
@@ -1507,7 +1507,7 @@ export function chunkPhrases(words: Word[], max = 3): Word[][] {
   return out;
 }
 
-function drawCaptions(ctx: CanvasRenderingContext2D, W: number, H: number, p: Project, t: number) {
+function drawCaptions(ctx: CanvasRenderingContext2D, W: number, H: number, p: Project, t: number, scene?: Scene) {
   const words = p.audio!.words!;
   const phrases = chunkPhrases(words, 5);
   const ph = phrases.find((ph) => t >= ph[0].s - 0.1 && t <= ph[ph.length - 1].e + 0.25);
@@ -1518,7 +1518,9 @@ function drawCaptions(ctx: CanvasRenderingContext2D, W: number, H: number, p: Pr
   const text = ph.map((w) => w.w).join(" ");
   const tw = measure(ctx, text, f);
   const padX = 28 * u, h = size * 1.9;
-  const x = W / 2 - tw / 2, y = H - Math.min(W, H) * 0.1 - h;
+  // Under cinema bars, subtitles sit in the bottom bar like a film's.
+  const bar = scene?.effects?.includes("letterbox") ? (W / H > 1.2 ? (H - W / 2.39) / 2 : H * 0.06) : 0;
+  const x = W / 2 - tw / 2, y = bar >= h + 8 * u ? H - bar / 2 - h / 2 : H - Math.min(W, H) * 0.1 - h;
   ctx.save();
   ctx.fillStyle = "rgba(10,10,10,0.72)";
   rr(ctx, x - padX, y, tw + padX * 2, h, h / 2);

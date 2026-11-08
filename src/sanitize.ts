@@ -93,6 +93,7 @@ export function sanitizeScene(input: unknown, keepId?: string): Scene {
     backdrop: Array.isArray(s.backdrop) ? list(s.backdrop, 8, ref) : undefined,
     font: ((f) => (f && /^[\w .'-]+$/.test(f) ? f : undefined))(str(s.font, 60)),
     notes: str(s.notes, 400),
+    shot: ((v: any) => (v && typeof v === "object" && typeof v.query === "string" ? { type: String(v.type ?? "medium").slice(0, 20), query: v.query.slice(0, 80) } : undefined))(s.shot),
   };
   for (const k of Object.keys(scene) as (keyof Scene)[]) if (scene[k] === undefined) delete scene[k];
   return scene;

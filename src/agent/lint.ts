@@ -109,7 +109,8 @@ export function lintStoryboard({ scenes, brand, assetIds, audio }: LintInput): N
     }
     if (s.duration > 7 && s.template !== "kinetic-words") add(i, "tip", "too-slow", `Scene ${n} holds for ${s.duration.toFixed(1)}s. Consider splitting it.`);
 
-    if (i >= 2 && scenes[i - 1].template === s.template && scenes[i - 2].template === s.template)
+    // Footage cut back to back is an edit, not repetition; the rule is for designed scenes.
+    if (i >= 2 && scenes[i - 1].template === s.template && scenes[i - 2].template === s.template && !(s.shot && scenes[i - 1].shot && scenes[i - 2].shot))
       add(i, "tip", "repeat", `Scenes ${n - 2}–${n} all use ${s.template}. Vary the template to keep the rhythm.`);
   });
 

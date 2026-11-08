@@ -5,6 +5,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createHash, timingSafeEqual } from "node:crypto";
+import { claudeShotList } from "./shots";
 import { runAgentTurn, claudeConfigured, resetConversation, claudeCheck, probeClaude } from "./agent";
 import { listConnectors, searchVisuals, searchVideos, importFromUrl, magnificUpscale, reportStockUse, type Orientation } from "./connectors";
 import { proxyVideo } from "./videoProxy";
@@ -93,6 +94,22 @@ app.post("/api/agent", async (req, res) => {
   if (!res.writableEnded) {
     res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
     res.end();
+  }
+});
+
+// The footage director's shot list (counts as an agent turn: it's one Claude call).
+app.post("/api/shots", async (req, res) => {
+  try {
+    if (req.user) {
+      const turn = await takeAgentTurn(req.user);
+      if (!turn.ok) return void res.status(429).json({ error: `You've used today's ${turn.limit} agent turns.` });
+    }
+    const b = req.body ?? {};
+    const shots = (Array.isArray(b.shots) ? b.shots : []).map((s: any) => ({ line: String(s?.line ?? ""), type: String(s?.type ?? "medium"), queries: Array.isArray(s?.queries) ? s.queries.map(String) : [] }));
+    if (!shots.length) return void res.status(400).json({ error: "No shots to plan." });
+    res.json({ shots: await claudeShotList({ shots, brief: String(b.brief ?? ""), aspect: String(b.aspect ?? "16:9"), look: String(b.look ?? "cinematic"), text: String(b.text ?? "subtitles") }) });
+  } catch (e: any) {
+    res.status(503).json({ error: e?.message ?? String(e) });
   }
 });
 

@@ -27,6 +27,7 @@ export const EFFECT_LABEL: Record<Effect, string> = {
   "push-in": "Push-in", pulse: "Pulse on beats", shake: "Shake", "focus-pull": "Focus pull", flash: "Flash", "rgb-split": "RGB split", glitch: "Glitch",
   "light-leak": "Light leak", vignette: "Vignette", bokeh: "Bokeh", dust: "Dust", sparkle: "Sparkle", confetti: "Confetti", scanlines: "Scanlines", halftone: "Halftone",
   "beat-flash": "Flash on bars",
+  letterbox: "Letterbox",
 };
 
 const FILTER_OK = typeof CanvasRenderingContext2D !== "undefined" && "filter" in CanvasRenderingContext2D.prototype;
@@ -231,6 +232,14 @@ export function applyFx(ctx: CanvasRenderingContext2D, src: HTMLCanvasElement, f
   if (fx.has("sparkle")) sparkle(ctx, f, seed, cw, ch, u, amt);
   if (fx.has("confetti")) confetti(ctx, f, seed, cw, ch, u, amt);
   if (fx.has("vignette")) vignette(ctx, cw, ch, amt);
+  if (fx.has("letterbox")) {
+    // Cinema bars (2.39:1 inside a wide frame, a gentler crop in tall ones), sliding in at the cut.
+    const target = cw / ch > 1.2 ? (ch - cw / 2.39) / 2 : ch * 0.06;
+    const bar = Math.max(0, target) * Math.min(1, 0.6 + f.t * 3);
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, cw, bar);
+    ctx.fillRect(0, ch - bar, cw, bar);
+  }
   if (fx.has("beat-flash")) {
     // A burst of light on each bar of the music (every 4th beat without music).
     const mb = musicBeats(f.project);

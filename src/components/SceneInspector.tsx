@@ -12,6 +12,7 @@ import { ClipControls } from "./ClipControls";
 import { EffectsControls } from "./EffectsControls";
 import { BackdropControls } from "./BackdropControls";
 import { FontPicker } from "./FontPicker";
+import { ShotControls } from "./ShotControls";
 
 const USES: Record<string, (keyof Scene)[]> = {
   "title-reveal": ["kicker", "headline", "subline", "align"],
@@ -168,6 +169,7 @@ export function SceneInspector() {
           {scene.image && assets.find((a) => a.id === scene.image) && (
             <Framing project={project} scene={scene} asset={assets.find((a) => a.id === scene.image)!} onChange={edit} />
           )}
+          {scene.shot && <ShotControls key={`shot-${scene.id}`} scene={scene} onChange={edit} />}
           {clip && <ClipControls scene={scene} clip={clip} onChange={edit} />}
           {uses.includes("images") && (
             <div className="field">

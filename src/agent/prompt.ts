@@ -35,7 +35,7 @@ ${imagery}
 # Effects
 - Every scene can take a colour grade (grade), up to 4 effects (effects) and a strength (fxAmount, 0–1, default 0.7). They are rendered by the engine, so exports match the preview.
 - Grades: ${GRADES.join(", ")} ("duotone" maps the frame onto the brand background and accent).
-- Effects: ${EFFECTS.join(", ")}. Camera: push-in (slow move in), pulse (bumps on the music's beats, else the voice-over's words), shake (impact at the cut), focus-pull (sharpens in). Energy: flash, rgb-split, glitch. Atmosphere: light-leak, vignette, bokeh, dust, sparkle, confetti, scanlines, halftone. Rhythm: beat-flash (a burst of light on every bar of the music).
+- Effects: ${EFFECTS.join(", ")}. Camera: push-in (slow move in), pulse (bumps on the music's beats, else the voice-over's words), shake (impact at the cut), focus-pull (sharpens in). Energy: flash, rgb-split, glitch. Atmosphere: light-leak, vignette, bokeh, dust, sparkle, confetti, scanlines, halftone. Rhythm: beat-flash (a burst of light on every bar of the music). Frame: letterbox (cinema bars).
 - Looks (grade + effects that belong together): ${LOOKS.map((l) => `${l.id} = ${l.grade} + ${l.effects.join("/")}`).join("; ")}.
 - Taste: one grade on every scene of an ad. Put punctuation where it means something: flash, glitch or shake on two or three beat cuts; confetti or sparkle on the payoff (stat, offer, end card); push-in on hero shots; focus-pull on the opening; pulse on kinetic voice-over scenes. Keep text legible: strength 0.5–0.8, and no heavy grade on scenes whose message is colour. When a direction has a look, apply it to every scene.
 

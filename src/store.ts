@@ -37,7 +37,7 @@ export interface StudioState {
   /** what the app shows */
   view: "home" | "studio" | "admin";
   /** an open sheet over the studio */
-  sheet?: "sound";
+  sheet?: "sound" | "footage";
   health?: { agent: "claude" | "hosted" | "local"; transcription: string; connectors: { id: string; label: string; configured: boolean; kind: string; note: string }[]; accounts?: boolean };
   /** Accounts (server with a database): who is signed in. "off" when the server has no accounts. */
   auth: { status: "checking" | "signed_out" | "signed_in" | "off"; user?: AuthUser; usage?: { today: number; limit: number | null } };
@@ -410,11 +410,20 @@ export function setBrand(b: Partial<Brand> & { style?: string }) {
 
 export { snapPoints, snapCutsToPauses, fitToVoiceover } from "./storyboard";
 
+/** Add to the library (a file already there by its source is skipped; see `libraryId`). */
 export function addAssets(list: Asset[]) {
   setState((s) => {
     const seen = new Set(s.assets.map((a) => a.src));
     return { assets: [...s.assets, ...list.filter((a) => !seen.has(a.src))] };
   });
+}
+
+/** Add an asset if new, and return the id the library knows it by (an existing copy's id when the file is already there). */
+export function libraryId(a: Asset): string {
+  const have = state.assets.find((x) => x.src === a.src);
+  if (have) return have.id;
+  addAssets([a]);
+  return a.id;
 }
 
 export function setAudio(audio: AudioTrack | undefined) {

@@ -39,7 +39,7 @@ export type Motion = (typeof MOTIONS)[number];
 export const GRADES = ["none", "mono", "noir", "warm-film", "cool", "teal-orange", "faded", "vivid", "duotone"] as const;
 export type Grade = (typeof GRADES)[number];
 /** Post effects: camera moves, energy, atmosphere. Rendered by the engine, so exports match the preview. */
-export const EFFECTS = ["push-in", "pulse", "shake", "focus-pull", "flash", "rgb-split", "glitch", "light-leak", "vignette", "bokeh", "dust", "sparkle", "confetti", "scanlines", "halftone", "beat-flash"] as const;
+export const EFFECTS = ["push-in", "pulse", "shake", "focus-pull", "flash", "rgb-split", "glitch", "light-leak", "vignette", "bokeh", "dust", "sparkle", "confetti", "scanlines", "halftone", "beat-flash", "letterbox"] as const;
 export type Effect = (typeof EFFECTS)[number];
 
 export interface Stat {
@@ -89,6 +89,8 @@ export interface Scene {
   font?: string;
   /** Banners shown full-bleed behind the scene's text, crossfading in turn (asset refs, up to 8). */
   backdrop?: string[];
+  /** How this shot was cast by the footage director: its kind and what was searched. */
+  shot?: { type: string; query: string };
   notes?: string;
 }
 

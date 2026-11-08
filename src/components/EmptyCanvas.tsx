@@ -40,6 +40,9 @@ export function EmptyCanvas() {
         <button className="btn" disabled={busy} onClick={() => file.current?.click()}>
           <Icon name="image" /> {busy ? "Adding…" : "Upload banners"}
         </button>
+        <button className="btn" onClick={() => setState({ sheet: "footage" })}>
+          <Icon name="clip" /> Footage from a voice-over
+        </button>
         <button className="btn" onClick={() => setState({ sheet: "sound" })}>
           <Icon name="wave" /> Sound templates
         </button>

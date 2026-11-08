@@ -236,9 +236,14 @@ export function Home() {
         <section className="home-start" aria-labelledby="start-title">
           <div className="home-head">
             <h2 id="start-title">Start something new</h2>
-            <button className="btn" onClick={() => void createProject("blank").then(() => setState({ sheet: "sound" }))}>
-              <Icon name="wave" /> Start from a sound
-            </button>
+            <span className="row" style={{ flex: "none" }}>
+              <button className="btn" onClick={() => void createProject("blank").then(() => setState({ sheet: "footage" }))}>
+                <Icon name="clip" /> Footage from a voice-over
+              </button>
+              <button className="btn" onClick={() => void createProject("blank").then(() => setState({ sheet: "sound" }))}>
+                <Icon name="wave" /> Start from a sound
+              </button>
+            </span>
           </div>
           <div className="starters">
             {starterPosters.map((s) => {

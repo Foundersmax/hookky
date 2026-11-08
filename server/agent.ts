@@ -31,6 +31,8 @@ if (keyCleaning.fixed) process.env.ANTHROPIC_API_KEY = keyCleaning.key;
 
 let client: Anthropic | null = null;
 const getClient = () => (client ??= new Anthropic());
+/** The shared client and model, for one-shot calls outside the agent loop. */
+export const claude = () => ({ client: getClient(), model: MODEL });
 
 export type ClaudeCheck = "ok" | "unchecked" | "missing" | "invalid-key" | "no-permission" | "model-unavailable" | "no-credit" | "unreachable";
 

@@ -16,6 +16,7 @@ import { Home } from "./components/Home";
 import { Versions } from "./components/Versions";
 import { CommandPalette } from "./components/CommandPalette";
 import { SoundTemplates } from "./components/SoundTemplates";
+import { FootageSheet } from "./components/FootageSheet";
 import { clock } from "./clock";
 import { images } from "./runtime";
 import { STYLE_PRESETS, FONT_CHOICES } from "./presets";
@@ -348,6 +349,11 @@ export function App() {
       )}
       {toastMsg && <div className="toast">{toastMsg}</div>}
       {showKeys && <ShortcutsSheet onClose={() => setShowKeys(false)} />}
+      {sheet === "footage" && (
+        <ErrorBoundary area="footage">
+          <FootageSheet />
+        </ErrorBoundary>
+      )}
       {sheet === "sound" && (
         <ErrorBoundary area="sound templates">
           <SoundTemplates />

@@ -113,6 +113,9 @@ export function VoicePanel({ toast }: { toast: (s: string) => void }) {
         </>
       )}
 
+      <button className="btn" onClick={() => setState({ sheet: "footage" })}>
+        <Icon name="clip" /> {audio ? "Create footage for every line" : "Footage from a voice-over"}
+      </button>
       <button className="btn" onClick={() => setState({ sheet: "sound" })}>
         <Icon name="wave" /> Sound templates: cut an ad to this audio
       </button>

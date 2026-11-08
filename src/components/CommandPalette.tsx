@@ -91,6 +91,7 @@ export function CommandPalette({ host }: { host: PaletteHost }) {
         const on = autoReviewOn();
         add("Agent", "auto-review", on ? "Turn auto visual review off" : "Turn auto visual review on", () => (setAutoReview(!on), host.toast(on ? "Claude won't review new storyboards automatically" : "Claude will review each new storyboard's frames")));
       }
+      add("Studio", "footage", "Footage from the voice-over…", () => setState({ sheet: "footage" }), { hint: "stock footage for every line" });
       add("Studio", "sound", "Sound templates…", () => setState({ sheet: "sound" }), { hint: "cut an ad to a voice-over or a track" });
       add("Studio", "export", "Export video…", () => host.openTab("Export"));
       add("Studio", "export-gif", "Export a GIF…", () => host.openTab("Export"), { hint: "a scene or the whole cut" });
