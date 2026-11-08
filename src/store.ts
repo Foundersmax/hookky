@@ -315,6 +315,37 @@ export function applyStoryboard(sb: StoryboardInput) {
   setState({ selected: 0, time: 0 });
 }
 
+/** Insert a scene after the selected one (or first, in an empty project) and select it. */
+export function addScene(partial: Partial<Scene> = {}): number {
+  const at = state.project.scenes.length ? Math.min(state.selected + 1, state.project.scenes.length) : 0;
+  const s = normalizeScene({ template: "title-reveal", duration: 3.5, kicker: "Introducing", headline: "Your *headline*", transition: at ? "fade" : "cut", ...partial });
+  updateProject((p) => ({ ...p, scenes: [...p.scenes.slice(0, at), s, ...p.scenes.slice(at)] }));
+  setState({ selected: at });
+  return at;
+}
+
+/** Add banners to a scene's backdrop (they crossfade behind its text). */
+export function addBackdrop(index: number, refs: string[]) {
+  updateProject((p) => ({
+    ...p,
+    scenes: p.scenes.map((s, i) => {
+      if (i !== index) return s;
+      const backdrop = [...new Set([...(s.backdrop ?? []), ...refs])].slice(0, 8);
+      // Give every banner at least ~1.6 s on screen.
+      return editedScene({ ...s, backdrop, duration: +Math.max(s.duration, Math.min(15, backdrop.length * 1.6)).toFixed(1) });
+    }),
+  }));
+}
+
+/** One banner per scene, in order, over the scenes that show text (wraps when there are fewer banners). */
+export function spreadBackdrops(refs: string[]) {
+  if (!refs.length) return 0;
+  const TEXTY = new Set(["title-reveal", "kinetic-words", "quote", "marquee", "feature-list", "stat-counter", "cta-end", "countdown", "testimonials", "price-card", "logo-reveal", "shape-burst"]);
+  let k = 0;
+  updateProject((p) => ({ ...p, scenes: p.scenes.map((s) => (TEXTY.has(s.template) ? editedScene({ ...s, backdrop: [refs[k++ % refs.length]] }) : s)) }));
+  return k;
+}
+
 export function applyPatch(ops: PatchOp[]) {
   updateProject((p) => ({ ...p, scenes: patchScenes(p.scenes, ops) }));
 }

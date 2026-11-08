@@ -6,6 +6,7 @@ import { clock, useClock } from "../clock";
 import { images } from "../runtime";
 import { Icon } from "./Icon";
 import { fileToUploadAsset } from "./ChatPanel";
+import { EmptyCanvas } from "./EmptyCanvas";
 
 export const fmt = (t: number) => {
   const m = Math.floor(t / 60);
@@ -111,6 +112,7 @@ export function Stage() {
   useEffect(() => images.videos.listen(draw), []);
   useEffect(() => {
     clock.duration = totalDuration(project);
+    if (clock.time > clock.duration) clock.seek(0);
     draw();
   }, [project]);
   useEffect(() => clock.subscribe(draw), []);
@@ -212,6 +214,7 @@ export function Stage() {
           onDrop={onCanvasDrop}
           aria-label="Preview. Click text to edit it; drop an image to use it in this scene."
         />
+        {!project.scenes.length && full === "off" && <EmptyCanvas />}
         {hover && !edit && !c.playing && full === "off" && <div className="hit-outline" style={outlineStyle(hover)} aria-hidden />}
         {dropping && <div className="drop-hint" style={{ width: box.w, height: box.h }}>Drop to use this image in the scene</div>}
         {edit && (
@@ -273,9 +276,11 @@ export function Stage() {
         <button className={`btn icon ghost`} title="Loop" style={{ color: c.loop ? "var(--text)" : "var(--text-3)" }} onClick={() => ((clock.loop = !clock.loop), clock.seek(clock.time))}>
           <Icon name="loop" />
         </button>
-        <span className="scene-info" title={`${cur?.scene.template ?? ""} · ${W}×${H}`}>
-          Scene {cur ? cur.index + 1 : 0}/{tl.length}
-        </span>
+        {!!tl.length && (
+          <span className="scene-info" title={`${cur?.scene.template ?? ""} · ${W}×${H}`}>
+            Scene {cur ? cur.index + 1 : 0}/{tl.length}
+          </span>
+        )}
         <span className="spacer" />
         <label className="toggle hide-sm">
           <input type="checkbox" checked={project.captions} onChange={(e) => updateProject((p) => ({ ...p, captions: e.target.checked }))} />

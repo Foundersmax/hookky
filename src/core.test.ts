@@ -390,3 +390,16 @@ test("offline directions carry looks, and every look survives the cleaner", () =
   assert.deepEqual(sanitizeDirections(ds).map((d) => d.look), ds.map((d) => d.look));
   assert.equal(sanitizeDirections([{ name: "x", hook: "y", look: "made-up" }])[0].look, undefined);
 });
+
+// ---------------------------------------------------------------- banners behind text
+test("backdrops: up to 8 valid refs survive cleaning; Director's notes flag missing and rushed banners", () => {
+  const s = sanitizeScene({ template: "kinetic-words", duration: 3, backdrop: ["asset:up_1", 5, "javascript:alert(1)", "asset:up_2", ...Array(10).fill("asset:up_3")] });
+  assert.deepEqual(s.backdrop?.slice(0, 2), ["asset:up_1", "asset:up_2"]);
+  assert.equal(s.backdrop?.length, 8);
+  assert.equal(sanitizeScene({ template: "kinetic-words", duration: 3, backdrop: "asset:up_1" }).backdrop, undefined, "only lists");
+  const notes = lintStoryboard({ scenes: [scene({ duration: 3, backdrop: ["asset:up_1", "asset:gone", "asset:up_1"] })], brand, assetIds: new Set(["asset:up_1"]) });
+  assert.ok(notes.some((n) => n.code === "backdrop-missing"));
+  assert.ok(notes.some((n) => n.code === "backdrop-fast"), "three banners in 3 s is too fast");
+  const ok = lintStoryboard({ scenes: [scene({ duration: 4, backdrop: ["asset:up_1", "asset:up_1"] })], brand, assetIds: new Set(["asset:up_1"]) });
+  assert.ok(!ok.some((n) => n.code.startsWith("backdrop")));
+});

@@ -66,7 +66,7 @@ export const STARTERS: Starter[] = [
   {
     id: "blank",
     name: "Blank",
-    blurb: "Start from one title scene and brief the agent",
-    build: () => make("Untitled ad", "clean", "16:9", "Brand", [{ template: "title-reveal", duration: 3.5, headline: "Your *idea* here", transition: "cut" }]),
+    blurb: "An empty canvas: brief the agent or add your first scene",
+    build: () => make("Untitled project", "noir", "16:9", "", [], { grain: false }),
   },
 ];

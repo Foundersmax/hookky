@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useStudio, addAssets, setAudio, getState, pushChat, setState } from "../store";
+import { useStudio, addAssets, setAudio, getState, pushChat, setState, updateChat } from "../store";
 import { sendToAgent, resetAgent, reviewFrames, askForDirections, stopAgent } from "../agent/client";
 import { DirectionCards } from "./DirectionCards";
 import type { Asset, ChatAttachment } from "../types";
@@ -78,6 +78,20 @@ function hasTransparency(c: HTMLCanvasElement) {
   } catch {
     return true; // can't inspect: keep PNG to be safe
   }
+}
+
+/** The agent is working: a soft wave with what it's doing right now. */
+function Thinking({ label, compact }: { label: string; compact?: boolean }) {
+  return (
+    <div className={`thinking-wave ${compact ? "compact" : ""}`} role="status" aria-live="polite">
+      <span className="wave" aria-hidden="true">
+        {Array.from({ length: 5 }, (_, i) => (
+          <i key={i} style={{ animationDelay: `${i * 0.11}s` }} />
+        ))}
+      </span>
+      <span className="wave-label">{label}…</span>
+    </div>
+  );
 }
 
 export function ChatPanel() {
@@ -200,10 +214,18 @@ export function ChatPanel() {
             )}
             {(m.text || !m.pending) && !(m.review && m.attachments?.[0]?.preview) && <div className="bubble">{m.text}</div>}
             <DirectionCards m={m} />
-            {m.pending && !m.text && (
-              <div className="bubble">
-                <span className="typing"><i /><i /><i /></span>
-              </div>
+            {m.pending && <Thinking label={m.activity?.length ? m.activity[m.activity.length - 1] : m.text ? "Working" : "Thinking"} compact={!!m.text} />}
+            {m.error && m.retry && !busy && (
+              <button
+                className="btn retry-btn"
+                onClick={() => {
+                  updateChat(m.id, (x) => ({ ...x, retry: undefined }));
+                  if (m.retry!.review) reviewFrames();
+                  else sendToAgent(m.retry!.text, m.retry!.attachments ?? [], { display: m.retry!.display });
+                }}
+              >
+                <Icon name="reset" size={13} /> Retry
+              </button>
             )}
           </div>
         ))}

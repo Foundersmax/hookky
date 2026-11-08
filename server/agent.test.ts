@@ -150,3 +150,10 @@ test("the server keeps a bounded number of conversations", () => {
   kept.push({ role: "user", content: "x" } as any);
   assert.equal(conversation("conv-69").length, 1, "recent ones are kept");
 });
+
+test("only temporary Claude errors are retried", () => {
+  const { transient } = __test;
+  for (const status of [429, 500, 502, 503, 529]) assert.equal(transient({ status }), true, String(status));
+  for (const status of [400, 401, 403, 404, 413]) assert.equal(transient({ status }), false, String(status));
+  assert.equal(transient(new Error("boom")), false);
+});

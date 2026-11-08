@@ -341,11 +341,47 @@ function composite(ctx: CanvasRenderingContext2D, A: HTMLCanvasElement, B: HTMLC
 }
 
 // ---------------------------------------------------------------- backgrounds
+/**
+ * Banners behind the text: each gets an equal share of the scene, crossfades into the next and
+ * drifts in a slow Ken Burns move. A scrim in the brand's own background colour keeps the text
+ * (drawn in the brand's text colour) as readable as on the plain background.
+ */
+function drawBackdrop(g: G, refs: string[]) {
+  const { ctx, W, H, c, t, dur } = g;
+  const n = refs.length;
+  const seg = dur / n;
+  const fade = Math.min(0.6, seg * 0.35);
+  const i = Math.min(n - 1, Math.floor(t / seg));
+  const layer = (k: number, alpha: number) => {
+    const im = g.img(refs[k]);
+    if (!im || alpha <= 0) return;
+    const local = clamp((t - k * seg) / (seg + fade), 0, 1);
+    const zoom = k % 2 ? 1.1 - 0.08 * local : 1.02 + 0.08 * local;
+    const fx = k % 3 === 0 ? 0.5 : k % 3 === 1 ? 0.35 + 0.3 * local : 0.65 - 0.3 * local;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    drawCover(ctx, im, 0, 0, W, H, zoom, fx, 0.5);
+    ctx.restore();
+  };
+  layer(i, 1);
+  // The next banner fades in over the end of this one's share.
+  if (i + 1 < n) layer(i + 1, ease.inOutCubic(clamp((t - ((i + 1) * seg - fade)) / fade, 0, 1)));
+  ctx.fillStyle = rgba(c.bg, 0.42);
+  ctx.fillRect(0, 0, W, H);
+  const gr = ctx.createLinearGradient(0, 0, 0, H);
+  gr.addColorStop(0, rgba(c.bg, 0.25));
+  gr.addColorStop(0.5, rgba(c.bg, 0.05));
+  gr.addColorStop(1, rgba(c.bg, 0.55));
+  ctx.fillStyle = gr;
+  ctx.fillRect(0, 0, W, H);
+}
+
 function drawBackground(g: G) {
   const { ctx, W, H, c, t, u } = g;
   const kind = g.scene.background ?? "solid";
   ctx.fillStyle = c.bg;
   ctx.fillRect(0, 0, W, H);
+  if (g.scene.backdrop?.length) return drawBackdrop(g, g.scene.backdrop);
   if (kind === "gradient") {
     const a = t * 0.08;
     const gr = ctx.createLinearGradient(W * (0.5 - Math.cos(a) * 0.6), 0, W * (0.5 + Math.cos(a) * 0.6), H);

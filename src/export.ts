@@ -25,7 +25,7 @@ export function videoTargets(p: Project, t: number): Map<string, number> {
   const m = new Map<string, number>();
   // Previous scene first, so the incoming scene wins if both use the same clip.
   for (const { entry, lt } of visibleAt(p, t).reverse())
-    for (const ref of [entry.scene.image, ...(entry.scene.images ?? [])]) {
+    for (const ref of [entry.scene.image, ...(entry.scene.images ?? []), ...(entry.scene.backdrop ?? [])]) {
       const a = images.asset(ref);
       const src = a && images.videoSrc(a);
       if (src) m.set(src, clipTimeAt(entry.scene, lt));
@@ -41,7 +41,7 @@ export async function renderExact(r: Renderer, p: Project, t: number, seeker: Vi
 }
 
 export function projectImageRefs(p: Project) {
-  return [p.brand.logo, ...p.scenes.flatMap((s) => [s.image, ...(s.images ?? [])])];
+  return [p.brand.logo, ...p.scenes.flatMap((s) => [s.image, ...(s.images ?? []), ...(s.backdrop ?? [])])];
 }
 
 type ExportOpts = {

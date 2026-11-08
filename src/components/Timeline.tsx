@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useStudio, setState, getState, updateProject, snapPoints, snapCutsToPauses, assignImage } from "../store";
+import { useStudio, setState, getState, updateProject, snapPoints, snapCutsToPauses, assignImage, addScene } from "../store";
 import { timeline, totalDuration } from "../engine/render";
 import { clock, useClock } from "../clock";
 import { stripMarks } from "../engine/text";
@@ -377,6 +377,11 @@ export function Timeline() {
             ))}
           </div>
           <div className="tl-track" ref={track} onPointerDown={seekFromEvent}>
+            {!layout.length && (
+              <button className="tl-empty" onPointerDown={(e) => e.stopPropagation()} onClick={() => addScene()}>
+                + Add your first scene
+              </button>
+            )}
             {zoom > 1 && tickTimes.map((t) => <i key={t} className="tl-grid" style={{ left: t * pxs }} />)}
             {points.map((m, i) => (
               <i key={`pl${i}`} className={`tl-pause-line ${snapAt !== null && Math.abs(snapAt - m) < 0.005 ? "hit" : ""}`} style={{ left: m * pxs }} />

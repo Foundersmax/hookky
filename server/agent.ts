@@ -52,6 +52,7 @@ const sceneSchema = {
     accent: { type: "string", description: "hex override" },
     clipStart: { type: "number", description: "video clips only: seconds into the clip where the scene starts" },
     clipSpeed: { type: "number", description: "video clips only: 0.25–2, e.g. 0.5 for slow motion" },
+    backdrop: { type: "array", items: { type: "string" }, maxItems: 8, description: "banner asset ids shown full-bleed behind the text, crossfading in turn" },
     grade: { type: "string", enum: [...GRADES], description: "colour grade; keep one grade across the ad" },
     effects: { type: "array", items: { type: "string", enum: [...EFFECTS] }, maxItems: 4 },
     fxAmount: { type: "number", description: "effect strength 0–1 (0.5–0.8 is tasteful)" },
@@ -317,7 +318,16 @@ export async function runAgentTurn(input: TurnInput, res: Response) {
   }
 }
 
-async function streamOnce(history: Msg[], send: (e: AgentEvent) => void, signal?: AbortSignal): Promise<Anthropic.Beta.BetaMessage | null> {
+/** Errors worth another try: overloaded, rate limited, a server error, or a dropped connection. */
+export function transient(e: unknown): boolean {
+  if (e instanceof Anthropic.APIConnectionError) return true;
+  const status = (e as { status?: number })?.status;
+  return status === 429 || status === 529 || (typeof status === "number" && status >= 500);
+}
+const RETRY_WAIT = [1500, 4000];
+
+async function streamOnce(history: Msg[], send: (e: AgentEvent) => void, signal?: AbortSignal, attempt = 0): Promise<Anthropic.Beta.BetaMessage | null> {
+  let streamed = false; // once words reach the user, a retry would repeat them
   const allTools: Anthropic.Beta.BetaToolUnion[] = webSearchEnabled
     ? [...tools, { type: "web_search_20260209", name: "web_search", max_uses: 3 } as Anthropic.Beta.BetaToolUnion]
     : tools;
@@ -334,8 +344,8 @@ async function streamOnce(history: Msg[], send: (e: AgentEvent) => void, signal?
       // Server-side refusal fallback, routed by category.
       ...({ fallbacks: "default" } as object),
     }, { signal });
-    stream.on("text", (delta) => send({ type: "text", delta }));
-    stream.on("thinking", (delta) => send({ type: "thinking", delta }));
+    stream.on("text", (delta) => ((streamed = true), send({ type: "text", delta })));
+    stream.on("thinking", (delta) => ((streamed = true), send({ type: "thinking", delta })));
     stream.on("streamEvent", (ev) => {
       if (ev.type === "content_block_start") {
         const b = ev.content_block;
@@ -348,7 +358,13 @@ async function streamOnce(history: Msg[], send: (e: AgentEvent) => void, signal?
     if (signal?.aborted) return null;
     if (e instanceof Anthropic.BadRequestError && webSearchEnabled && /web_search/i.test(e.message)) {
       webSearchEnabled = false; // org has web search disabled — continue without it
-      return streamOnce(history, send, signal);
+      return streamOnce(history, send, signal, attempt);
+    }
+    if (transient(e) && !streamed && attempt < RETRY_WAIT.length) {
+      send({ type: "activity", label: (e as { status?: number })?.status === 429 ? "Claude is busy, retrying" : "Reconnecting to Claude" });
+      await new Promise((r) => setTimeout(r, RETRY_WAIT[attempt]));
+      if (signal?.aborted) return null;
+      return streamOnce(history, send, signal, attempt + 1);
     }
     if (e instanceof Anthropic.BadRequestError && /prompt is too long|context (window|length)|too many (input )?tokens/i.test(e.message)) throw new ContextOverflow();
     const authProblem = e instanceof Anthropic.AuthenticationError || /authentication method|api[_ ]?key/i.test(String((e as Error)?.message));
@@ -487,4 +503,4 @@ export function resetConversation(id: string) {
 }
 
 /** Internals exposed for unit tests only. */
-export const __test = { Shadow, runTool, turnContent, tidyHistory, conversation };
+export const __test = { Shadow, runTool, turnContent, tidyHistory, conversation, transient };

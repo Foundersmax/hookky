@@ -10,7 +10,7 @@ import { directorPrompt } from "./prompt";
 import { sanitizeBrand, sanitizeDirections } from "../sanitize";
 import { lintStoryboard, notesForAgent } from "./lint";
 
-const SCENE_FIELDS = `Each scene: {template (${TEMPLATES.join("|")}), duration (s), kicker?, headline? (*word* = accent), subline?, items?: string[], stat?: {value, prefix?, suffix?, decimals?, label?}, image?: asset id, images?: asset ids, cta?, url?, author?, background? (${BACKGROUNDS.join("|")}), align? (left|center), transition? (${TRANSITIONS.join("|")}), motion? (${MOTIONS.join("|")}), accent? (hex), clipStart?, clipSpeed?, grade?, effects?: [], fxAmount? (see Effects)}`;
+const SCENE_FIELDS = `Each scene: {template (${TEMPLATES.join("|")}), duration (s), kicker?, headline? (*word* = accent), subline?, items?: string[], stat?: {value, prefix?, suffix?, decimals?, label?}, image?: asset id, images?: asset ids, cta?, url?, author?, background? (${BACKGROUNDS.join("|")}), align? (left|center), transition? (${TRANSITIONS.join("|")}), motion? (${MOTIONS.join("|")}), accent? (hex), clipStart?, clipSpeed?, backdrop?: banner asset ids, grade?, effects?: [], fxAmount? (see Effects)}`;
 
 /** Director's notes on the live project, for tool results. */
 function review() {

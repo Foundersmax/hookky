@@ -1,4 +1,4 @@
-import { useStudio, updateProject, setState, normalizeScene, editedScene } from "../store";
+import { useStudio, updateProject, setState, normalizeScene, editedScene, addScene } from "../store";
 import { TEMPLATES, TRANSITIONS, BACKGROUNDS, MOTIONS, type Scene } from "../types";
 import { timeline } from "../engine/render";
 import { stripMarks } from "../engine/text";
@@ -10,6 +10,7 @@ import { DirectorNotes } from "./DirectorNotes";
 import { Framing } from "./Framing";
 import { ClipControls } from "./ClipControls";
 import { EffectsControls } from "./EffectsControls";
+import { BackdropControls } from "./BackdropControls";
 
 const USES: Record<string, (keyof Scene)[]> = {
   "title-reveal": ["kicker", "headline", "subline", "align"],
@@ -74,13 +75,14 @@ export function SceneInspector() {
             <span className="tiny">{s.duration.toFixed(1)}s</span>
           </div>
         ))}
+        {!project.scenes.length && <p className="empty-note">No scenes yet. Add one, or ask the agent for a first draft.</p>}
       </div>
       <div className="row" style={{ gap: 4 }}>
-        <button className="btn icon" title="Move up" onClick={() => move(-1)}><Icon name="up" /></button>
-        <button className="btn icon" title="Move down" onClick={() => move(1)}><Icon name="down" /></button>
-        <button className="btn icon" title="Duplicate" onClick={() => updateProject((p) => ({ ...p, scenes: [...p.scenes.slice(0, sel + 1), { ...scene, id: uid() }, ...p.scenes.slice(sel + 1)] }))}><Icon name="copy" /></button>
-        <button className="btn icon" title="Add scene" onClick={() => updateProject((p) => ({ ...p, scenes: [...p.scenes.slice(0, sel + 1), normalizeScene({ template: "title-reveal", duration: 3, headline: "New *scene*" }), ...p.scenes.slice(sel + 1)] }))}><Icon name="plus" /></button>
-        <button className="btn icon" title="Delete" disabled={project.scenes.length < 2} onClick={() => (updateProject((p) => ({ ...p, scenes: p.scenes.filter((_, i) => i !== sel) })), setState({ selected: Math.max(0, sel - 1) }))}><Icon name="trash" /></button>
+        <button className="btn icon" title="Move up" disabled={!scene} onClick={() => move(-1)}><Icon name="up" /></button>
+        <button className="btn icon" title="Move down" disabled={!scene} onClick={() => move(1)}><Icon name="down" /></button>
+        <button className="btn icon" title="Duplicate" disabled={!scene} onClick={() => updateProject((p) => ({ ...p, scenes: [...p.scenes.slice(0, sel + 1), { ...scene, id: uid() }, ...p.scenes.slice(sel + 1)] }))}><Icon name="copy" /></button>
+        <button className="btn icon" title="Add scene" onClick={() => addScene()}><Icon name="plus" /></button>
+        <button className="btn icon" title="Delete" disabled={!scene} onClick={() => (updateProject((p) => ({ ...p, scenes: p.scenes.filter((_, i) => i !== sel) })), setState({ selected: Math.max(0, sel - 1) }))}><Icon name="trash" /></button>
       </div>
       {scene && (
         <>
@@ -97,27 +99,27 @@ export function SceneInspector() {
               <input type="number" step={0.1} min={0.8} value={scene.duration} onChange={(e) => edit({ duration: +e.target.value })} />
             </div>
           </div>
-          <div className="row">
+          <div className="layout-grid">
             <div className="field">
-              <label>Transition in</label>
+              <label>Transition</label>
               <select value={scene.transition ?? "fade"} onChange={(e) => edit({ transition: e.target.value as Scene["transition"] })}>
                 {TRANSITIONS.map((t) => <option key={t}>{t}</option>)}
               </select>
             </div>
-            <div className="field">
-              <label>Background</label>
-              <select value={scene.background ?? "solid"} onChange={(e) => edit({ background: e.target.value as Scene["background"] })}>
-                {BACKGROUNDS.map((t) => <option key={t}>{t}</option>)}
-              </select>
-            </div>
-          </div>
-          <div className="row">
             <div className="field">
               <label>Motion</label>
               <select value={scene.motion ?? "snappy"} onChange={(e) => edit({ motion: e.target.value as Scene["motion"] })}>
                 {MOTIONS.map((m) => <option key={m}>{m}</option>)}
               </select>
             </div>
+            {!scene.backdrop?.length && (
+              <div className="field">
+                <label>Background</label>
+                <select value={scene.background ?? "solid"} onChange={(e) => edit({ background: e.target.value as Scene["background"] })}>
+                  {BACKGROUNDS.map((t) => <option key={t}>{t}</option>)}
+                </select>
+              </div>
+            )}
             {uses.includes("align") && (
               <div className="field">
                 <label>Align</label>
@@ -127,7 +129,7 @@ export function SceneInspector() {
               </div>
             )}
           </div>
-          <EffectsControls key={scene.id} scene={scene} onChange={edit} />
+          <p className="section-title">Text</p>
           {uses.includes("kicker") && <Text label="Kicker" v={scene.kicker} on={(kicker) => edit({ kicker })} />}
           {uses.includes("headline") && <Text label={scene.template === "quote" ? "Quote" : "Headline · *accent*"} v={scene.headline} on={(headline) => edit({ headline })} area />}
           {uses.includes("subline") && <Text label="Subline" v={scene.subline} on={(subline) => edit({ subline })} />}
@@ -179,6 +181,9 @@ export function SceneInspector() {
               </div>
             </div>
           )}
+          <p className="section-title">Background &amp; effects</p>
+          <BackdropControls scene={scene} index={sel} onChange={edit} />
+          <EffectsControls key={scene.id} scene={scene} onChange={edit} />
           <div className="field">
             <label>Accent override</label>
             <div className="row">

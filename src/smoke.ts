@@ -97,7 +97,8 @@ async function run() {
   // effects: every grade and every effect, in every format, at several moments and through transitions
   for (const aspect of ASPECTS) {
     r.resize(...ASPECT_SIZE[aspect], 0.25);
-    const looks: Partial<Scene>[] = [...GRADES.map((grade) => ({ grade })), ...EFFECTS.map((e) => ({ effects: [e] })), ...LOOKS.map((l) => ({ grade: l.grade, effects: l.effects, fxAmount: l.amount }))];
+    const looks: Partial<Scene>[] = [{ backdrop: ["img"] }, { backdrop: ["img", "img", "img"], background: "image" }, { backdrop: ["img", "missing"], grade: "duotone", effects: ["push-in"] },
+      ...GRADES.map((grade) => ({ grade })), ...EFFECTS.map((e) => ({ effects: [e] })), ...LOOKS.map((l) => ({ grade: l.grade, effects: l.effects, fxAmount: l.amount }))];
     looks.forEach((fx, i) => {
       const template = TEMPLATES[i % TEMPLATES.length];
       const a: Scene = { id: `fx${i}`, template, duration: 3, transition: "cut", ...content(template), ...fx };

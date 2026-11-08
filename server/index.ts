@@ -72,6 +72,9 @@ app.post("/api/agent", async (req, res) => {
   res.setHeader("Cache-Control", "no-cache, no-transform");
   res.setHeader("Connection", "keep-alive");
   res.flushHeaders();
+  // Keep-alive: proxies drop quiet connections, and Claude can think for a while before it speaks.
+  const beat = setInterval(() => !res.writableEnded && res.write(": ping\n\n"), 15000);
+  res.on("close", () => clearInterval(beat));
   try {
     if (req.user) {
       const turn = await takeAgentTurn(req.user);
@@ -83,10 +86,13 @@ app.post("/api/agent", async (req, res) => {
     }
     await runAgentTurn(req.body, res);
   } catch (e: any) {
-    res.write(`data: ${JSON.stringify({ type: "error", message: e?.message ?? String(e) })}\n\n`);
+    if (!res.writableEnded) res.write(`data: ${JSON.stringify({ type: "error", message: e?.message ?? String(e) })}\n\n`);
   }
-  res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
-  res.end();
+  clearInterval(beat);
+  if (!res.writableEnded) {
+    res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
+    res.end();
+  }
 });
 
 app.post("/api/agent/reset", (req, res) => {

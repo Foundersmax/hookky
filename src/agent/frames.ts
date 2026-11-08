@@ -46,6 +46,7 @@ function imageRefs(p: Project) {
   for (const s of p.scenes) {
     if (s.image) refs.add(s.image);
     for (const r of s.images ?? []) refs.add(r);
+    for (const r of s.backdrop ?? []) refs.add(r);
   }
   return [...refs];
 }

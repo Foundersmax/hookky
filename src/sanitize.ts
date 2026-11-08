@@ -89,6 +89,7 @@ export function sanitizeScene(input: unknown, keepId?: string): Scene {
     grade: ((g) => (g && g !== "none" ? g : undefined))(oneOf(s.grade, GRADES)),
     effects: ((list) => (list.length ? list : undefined))([...new Set((Array.isArray(s.effects) ? s.effects : []).filter((e: unknown) => (EFFECTS as readonly unknown[]).includes(e)))].slice(0, 4) as Scene["effects"] & {}),
     fxAmount: ((v) => (v === undefined ? undefined : +v.toFixed(2)))(num(s.fxAmount, 0, 1)),
+    backdrop: Array.isArray(s.backdrop) ? list(s.backdrop, 8, ref) : undefined,
     notes: str(s.notes, 400),
   };
   for (const k of Object.keys(scene) as (keyof Scene)[]) if (scene[k] === undefined) delete scene[k];

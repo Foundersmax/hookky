@@ -1,5 +1,5 @@
 import type { AgentEvent, ChatAttachment, Direction } from "../types";
-import { getState, setState, pushChat, updateChat, applyStoryboard, applyPatch, setBrand, addAssets, updateProject, buildCount, applyKit } from "../store";
+import { getState, setState, pushChat, updateChat, applyStoryboard, applyPatch, setBrand, addAssets, updateProject, buildCount, applyKit, spreadBackdrops, addScene, addBackdrop } from "../store";
 import { uid } from "../engine/util";
 import { totalDuration } from "../engine/render";
 import { sentences } from "../audio/analyze";
@@ -136,6 +136,8 @@ export function stopAgent() {
 
 /** Longest message sent to the agent; anything longer is cut with a note. */
 const MAX_MESSAGE = 20000;
+/** Silence after which a reply counts as stalled (the server sends a keep-alive every 15 s). */
+const STALL_MS = 120_000;
 
 export async function sendToAgent(text: string, attachments: ChatAttachment[] = [], opts: SendOptions = {}) {
   const s = getState();
@@ -143,6 +145,15 @@ export async function sendToAgent(text: string, attachments: ChatAttachment[] = 
   if (text.length > MAX_MESSAGE) text = `${text.slice(0, MAX_MESSAGE)}\n\n[Message cut at ${MAX_MESSAGE.toLocaleString()} characters]`;
   const ctl = new AbortController();
   inFlight = ctl;
+  // Watchdog: a reply that goes silent (no words, no activity, no keep-alive) is stopped with a Retry.
+  let stalled = false;
+  let dog: ReturnType<typeof setTimeout> | undefined;
+  const pet = (ms = STALL_MS) => {
+    clearTimeout(dog);
+    dog = setTimeout(() => ((stalled = true), ctl.abort()), ms);
+  };
+  const retry = opts.review ? { text, review: true } : { text, display: opts.display, attachments };
+  const failed = (message: string) => updateChat(replyId, (m) => ({ ...m, text: m.text ? `${m.text}\n\n${message}` : message, error: true, pending: false, retry }));
   pushChat({ id: uid("m"), role: "user", text: opts.display ?? text, attachments, ...(opts.review && { review: true }) });
   const replyId = uid("m");
   pushChat({ id: replyId, role: "assistant", text: "", pending: true, activity: [] });
@@ -170,6 +181,22 @@ export async function sendToAgent(text: string, attachments: ChatAttachment[] = 
     if (kit) r.style = undefined; // keep the kit's look rather than a preset named in passing
     if (r.storyboard && kit) r.storyboard = { ...r.storyboard, style: undefined };
     if (kit) r.reply = `Using your “${kit.name}” kit. ${r.reply}`;
+    // "Use these as backgrounds": uploaded images go behind the text scenes.
+    const banners = /\b(banners?|backdrops?|backgrounds?)\b/i.test(text) ? attachments.filter((a) => a.kind === "image" && a.assetId).map((a) => a.assetId!) : [];
+    if (banners.length && r.storyboard) {
+      let k = 0;
+      const TEXTY = new Set(["title-reveal", "kinetic-words", "quote", "feature-list", "stat-counter", "cta-end"]);
+      r.storyboard = { ...r.storyboard, scenes: r.storyboard.scenes.map((s) => (TEXTY.has(s.template) ? { ...s, backdrop: [banners[k++ % banners.length]] } : s)) };
+      r.reply += ` Your ${banners.length} banner${banners.length > 1 ? "s are" : " is"} behind the text scenes.`;
+    } else if (banners.length) {
+      if (getState().project.scenes.length) {
+        const n = spreadBackdrops(banners);
+        r.reply = `Put your banners behind ${n} text scene${n === 1 ? "" : "s"}, one each.`;
+      } else {
+        addBackdrop(addScene({ template: "kinetic-words", headline: "Your *message* here", transition: "cut" }), banners);
+        r.reply = `Started a scene with your ${banners.length} banner${banners.length > 1 ? "s" : ""} crossfading behind the text. Click the text on the canvas to change it.`;
+      }
+    }
     if (r.style || r.name) setBrand({ ...(r.style && { style: r.style }), ...(r.name && { name: r.name }) });
     if (r.settings && Object.keys(r.settings).length) updateProject((p) => ({ ...p, ...r.settings }));
     if (r.storyboard) applyStoryboard(r.storyboard);
@@ -181,9 +208,10 @@ export async function sendToAgent(text: string, attachments: ChatAttachment[] = 
       const activity: string[] = [];
       try {
         const frames = await Promise.all((opts.sheets ?? []).map((sh) => fetch(sh.url).then((r) => r.blob())));
+        pet(180_000); // the host gives no keep-alives while Claude thinks
         const r = await hostedTurn(text, attachments, studioState(), {
-          onText: (t) => updateChat(replyId, (m) => ({ ...m, text: t })),
-          onActivity: (label) => (activity.push(label), updateChat(replyId, (m) => ({ ...m, activity: [...activity] }))),
+          onText: (t) => (pet(180_000), updateChat(replyId, (m) => ({ ...m, text: t }))),
+          onActivity: (label) => (pet(180_000), activity.push(label), updateChat(replyId, (m) => ({ ...m, activity: [...activity] }))),
           onDirections: (d) => showDirections(sanitizeDirections(d)),
         }, ctl.signal, frames);
         updateChat(replyId, (m) => ({ ...m, text: r.text.trim() || "Done — have a look at the preview.", pending: false }));
@@ -192,7 +220,8 @@ export async function sendToAgent(text: string, attachments: ChatAttachment[] = 
         if (["not_granted", "sampling_disabled", "not_declared", "capability_disabled", "capability_removed", "tools_unavailable"].includes(code)) {
           setState((st) => ({ health: st.health && { ...st.health, agent: "local" } }));
           runLocal("Claude isn't enabled for this page, so the local director made this draft. Allow Claude when the page asks to get the full creative agent.");
-        } else if (code === "cancelled") updateChat(replyId, (m) => ({ ...m, text: e.text || "Stopped.", pending: false }));
+        } else if (code === "cancelled" && stalled) failed("Claude stopped responding. Retry to send it again.");
+        else if (code === "cancelled") updateChat(replyId, (m) => ({ ...m, text: e.text || "Stopped.", pending: false }));
         else {
           const copy: Record<string, string> = {
             rate_limited: "You've hit a usage limit for now. Try again in a little while.",
@@ -201,7 +230,7 @@ export async function sendToAgent(text: string, attachments: ChatAttachment[] = 
             prompt_too_large: "That was too much to send at once. Try a shorter brief or fewer images.",
             image_rejected: "One of the images couldn't be used. Try a JPEG or PNG under 20 MB.",
           };
-          updateChat(replyId, (m) => ({ ...m, text: (e.text ? e.text + "\n\n" : "") + (copy[code] ?? "Claude couldn't finish that. Send it again to retry."), error: !e.text, pending: false }));
+          failed(copy[code] ?? "Claude couldn't finish that.");
         }
       }
       return;
@@ -221,6 +250,7 @@ export async function sendToAgent(text: string, attachments: ChatAttachment[] = 
           return { assetId: a.assetId!, ...img };
         }),
     );
+    pet();
     const res = await fetch("/api/agent", {
       method: "POST",
       signal: ctl.signal,
@@ -235,6 +265,7 @@ export async function sendToAgent(text: string, attachments: ChatAttachment[] = 
     for (;;) {
       const { value, done } = await reader.read();
       if (done) break;
+      pet(); // any bytes, keep-alives included, mean the reply is alive
       buf += dec.decode(value, { stream: true });
       let idx: number;
       while ((idx = buf.indexOf("\n\n")) >= 0) {
@@ -248,16 +279,19 @@ export async function sendToAgent(text: string, attachments: ChatAttachment[] = 
       }
     }
     const msg = getState().chat.find((m) => m.id === replyId);
-    if (fatal && !msg?.text) {
+    if (fatal && msg?.text) failed(fatal);
+    else if (fatal) {
       if (/credentials/i.test(fatal)) {
         setState((st) => ({ health: st.health && { ...st.health, agent: "local" } }));
         runLocal(fatal);
-      } else updateChat(replyId, (m) => ({ ...m, text: fatal, error: true, pending: false }));
+      } else failed(fatal);
     } else updateChat(replyId, (m) => ({ ...m, pending: false, text: m.text || "Done — have a look at the preview." }));
   } catch (e: any) {
-    if (ctl.signal.aborted) updateChat(replyId, (m) => ({ ...m, text: m.text ? `${m.text}\n\n(Stopped.)` : "Stopped.", pending: false }));
+    if (ctl.signal.aborted && stalled) failed("The agent stopped responding. Retry to send it again.");
+    else if (ctl.signal.aborted) updateChat(replyId, (m) => ({ ...m, text: m.text ? `${m.text}\n\n(Stopped.)` : "Stopped.", pending: false }));
     else runLocal(`Couldn't reach Claude (${e.message}). Used the local director instead.`);
   } finally {
+    clearTimeout(dog);
     if (inFlight === ctl) inFlight = null;
     setState({ busy: false });
     // A fresh storyboard from Claude gets one look at its own rendered frames (the hosted and

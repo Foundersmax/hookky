@@ -37,10 +37,11 @@ export function DirectorNotes() {
         .join("\n")}`,
     );
 
+  if (!scenes.length) return null;
   if (!notes.length)
     return (
-      <div className="notes notes-clear">
-        <span className="notes-dot ok" aria-hidden /> Director's notes: the cut passes review.
+      <div className="notes-clear" title="Director's notes: copy, pacing, contrast and voice-over sync all check out">
+        <span className="notes-dot ok" aria-hidden /> Passes review
       </div>
     );
 

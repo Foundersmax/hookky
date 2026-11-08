@@ -26,7 +26,7 @@ class Clock {
   }
 
   play() {
-    if (this.playing) return;
+    if (this.playing || this.duration <= 0) return;
     if (this.time >= this.duration - 0.02) this.seek(0);
     this.playing = true;
     this.last = performance.now();

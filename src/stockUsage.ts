@@ -17,7 +17,7 @@ const inFlight = new Set<string>();
 
 /** Stock items placed in the project's scenes that still need a usage report. */
 export function pendingReports(p: Project, assets: Asset[]): { source: string; id: string }[] {
-  const used = new Set(p.scenes.flatMap((s) => [s.image, ...(s.images ?? [])]).filter(Boolean) as string[]);
+  const used = new Set(p.scenes.flatMap((s) => [s.image, ...(s.images ?? []), ...(s.backdrop ?? [])]).filter(Boolean) as string[]);
   return assets
     .filter((a) => used.has(a.id) && REPORTING.has(a.source) && a.sourceId)
     .map((a) => ({ source: a.source, id: a.sourceId! }))

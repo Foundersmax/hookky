@@ -69,6 +69,11 @@ export function lintStoryboard({ scenes, brand, assetIds, audio }: LintInput): N
     if (em > 2) add(i, "tip", "emphasis", `Scene ${n}: ${em} accent highlights. One or two keeps the emphasis meaningful.`);
 
     if (IMAGE_TEMPLATES.has(s.template) && !hasAsset(s.image)) add(i, "warn", "image-missing", `Scene ${n} (${s.template}) has no image, so it shows a placeholder.`);
+    if (s.backdrop?.length) {
+      const gone = s.backdrop.filter((r) => !hasAsset(r)).length;
+      if (gone) add(i, "warn", "backdrop-missing", `Scene ${n}: ${gone} background banner${gone > 1 ? "s are" : " is"} missing from the library.`);
+      if (s.duration / s.backdrop.length < 1.2) add(i, "tip", "backdrop-fast", `Scene ${n}: ${s.backdrop.length} banners in ${s.duration.toFixed(1)}s change too fast to read. Lengthen the scene or spread the banners across scenes.`);
+    }
     if (s.template === "image-mosaic") {
       const k = (s.images ?? []).filter(hasAsset).length || (hasAsset(s.image) ? 1 : 0);
       if (k < 3) add(i, "warn", "mosaic-thin", `Scene ${n}: the mosaic has ${k} image${k === 1 ? "" : "s"}. Give it 3 to 6.`);

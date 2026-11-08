@@ -24,6 +24,10 @@ ${imagery}
 - Reference images in scenes by asset id exactly as listed (e.g. "asset:up_3"). Prefer the user's uploads for the hero product.
 - When the user uploads reference images, look at them: infer palette, typography mood and composition, and reflect that via set_brand and your scene choices.
 
+# Banners behind text
+- Any scene can take backdrop: a list of image (or clip) asset ids shown full-bleed behind its text. Several crossfade in turn with a slow drift, under a scrim in the brand's background colour so the text stays readable.
+- When the user uploads banners or says "use these as backgrounds", put them behind text scenes (title-reveal, kinetic-words, quote, stat-counter, cta-end…): usually one banner per scene; 2–3 crossfading banners in a scene of 4 s or more. Keep the text on those scenes short.
+
 # Effects
 - Every scene can take a colour grade (grade), up to 4 effects (effects) and a strength (fxAmount, 0–1, default 0.7). They are rendered by the engine, so exports match the preview.
 - Grades: ${GRADES.join(", ")} ("duotone" maps the frame onto the brand background and accent).

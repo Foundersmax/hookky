@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { useStudio, addAssets, updateProject, setBrand, setState, getState } from "../store";
+import { useStudio, addAssets, updateProject, setBrand, setState, getState, addBackdrop } from "../store";
 import type { Asset } from "../types";
 import { Icon } from "./Icon";
 import { fileToUploadAsset, fileToVideoAsset, isVideoFile } from "./ChatPanel";
@@ -207,6 +207,7 @@ export function LibraryPanel({ toast }: { toast: (s: string) => void }) {
             <span className="src">{a.source}</span>
             <div className="acts">
               <button onClick={() => useInScene(a)}>Use in scene {sel + 1}</button>
+              {getState().project.scenes.length > 0 && <button onClick={() => (addBackdrop(sel, [a.id]), toast(`Added behind scene ${sel + 1}'s text`))}>Banner behind scene {sel + 1}</button>}
               {a.kind !== "video" && <button onClick={() => (setBrand({ logo: a.id }), toast("Logo set"))}>Set as logo</button>}
               <button onClick={() => brandFrom(a)}>Brand colours from this</button>
               {configured("magnific") && a.kind !== "video" && <button onClick={() => enhance(a)}>Enhance (Magnific)</button>}

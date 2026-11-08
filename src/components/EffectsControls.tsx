@@ -33,7 +33,7 @@ export function EffectsControls({ scene, onChange }: { scene: Scene; onChange: (
   return (
     <div className="field fx-controls">
       <div className="row" style={{ justifyContent: "space-between" }}>
-        <label>Effects</label>
+        <span className="label">Effects</span>
         <button type="button" className="link-btn" onClick={applyToAll} title="Give every scene this scene's look">
           Apply to all scenes
         </button>

@@ -181,7 +181,8 @@ export function ExportPanel({ toast }: { toast: (s: string) => void }) {
           {project.music ? " · with music" : ""}
           {project.captions ? " · captions burned in" : ""}
         </div>
-        <button className="btn primary" disabled={!formats.length || busy} onClick={exportVideos}>
+        {!project.scenes.length && <span className="tiny">Add a scene first. There's nothing to export yet.</span>}
+        <button className="btn primary" disabled={!formats.length || busy || !project.scenes.length} onClick={exportVideos}>
           <Icon name="download" /> Export {formats.length > 1 ? `${formats.length} videos` : "video"}
         </button>
         {typeof VideoEncoder === "undefined" && <span className="tiny">This browser renders in real time: keep the tab visible until it finishes.</span>}
@@ -228,7 +229,7 @@ export function ExportPanel({ toast }: { toast: (s: string) => void }) {
       <div className="card">
         <h4>Posters & project</h4>
         <Seg label="Frame" value={prefs.posterAt} onChange={(posterAt) => setPrefs({ posterAt })} options={[{ v: "cover", label: "Best frame", hint: "The first headline, fully animated in" }, { v: "playhead", label: "Playhead" }]} />
-        <button className="btn" disabled={busy || !formats.length} onClick={exportPosters}>
+        <button className="btn" disabled={busy || !formats.length || !project.scenes.length} onClick={exportPosters}>
           Poster{formats.length > 1 ? `s for ${formats.length} formats` : ` (${formats[0] ?? project.aspect})`} · {quality} PNG
         </button>
         <button className="btn" onClick={() => save(() => download(new Blob([JSON.stringify({ ...getState().project, audio: undefined, music: undefined }, null, 2)], { type: "application/json" }), `${slug}.hookky.json`))}>

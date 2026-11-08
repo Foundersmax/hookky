@@ -37,7 +37,7 @@ export function useThumbs(project: Project) {
   // image loads change how scenes look: drop cached thumbs that reference images
   useEffect(() => {
     if (!imgTick) return;
-    for (const s of project.scenes) if (s.image || s.images?.length || s.background === "image" || s.template === "logo-sting" || s.template === "cta-end") cache.delete(keyFor(project, s));
+    for (const s of project.scenes) if (s.image || s.images?.length || s.backdrop?.length || s.background === "image" || s.template === "logo-sting" || s.template === "cta-end") cache.delete(keyFor(project, s));
   }, [imgTick]);
 
   useEffect(() => {

@@ -84,6 +84,8 @@ export interface Scene {
   effects?: Effect[];
   /** Strength of the grade and effects, 0–1 (default 0.7). */
   fxAmount?: number;
+  /** Banners shown full-bleed behind the scene's text, crossfading in turn (asset refs, up to 8). */
+  backdrop?: string[];
   notes?: string;
 }
 
@@ -204,6 +206,8 @@ export interface ChatMessage {
   brief?: string;
   /** A visual-review turn: the attachment is the contact sheet Claude was shown. */
   review?: boolean;
+  /** On a failed reply: what to send again when the user presses Retry. */
+  retry?: { text: string; display?: string; attachments?: ChatAttachment[]; review?: boolean };
 }
 
 /** Server → client stream events */
