@@ -1,0 +1,10 @@
+name: docs probe
+on:
+  push:
+    branches: [docs-probe]
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          curl -sL https://docs.freepik.com/llms.txt | grep -iE "video|image-to-video|text-to-image|mystic|kling|seedance|minimax|wan|veo|flux|imagen|text-to-video" | head -150
