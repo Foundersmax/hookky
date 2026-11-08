@@ -71,10 +71,15 @@ jobs:
         if: env.HOOK != ''
         run: |
           for i in $(seq 1 90); do
-            # /api/health stays open when the studio is password-protected and reports the bundle it serves.
-            live=$(curl -fsS -m 15 "${APP}api/health" 2>/dev/null | jq -r '.build // empty' || true)
-            if [ "$live" = "$BUILD" ]; then echo "Live: $APP serves $BUILD"; exit 0; fi
-            echo "  waiting (live: ${live:-unreachable}, want: $BUILD)"; sleep 10
+            # /api/health stays open behind sign-in and reports the commit (Render sets RENDER_GIT_COMMIT)
+            # and the bundle it serves. The commit catches server-only changes too.
+            health=$(curl -fsS -m 15 "${APP}api/health" 2>/dev/null || true)
+            commit=$(echo "$health" | jq -r '.commit // empty' 2>/dev/null || true)
+            live=$(echo "$health" | jq -r '.build // empty' 2>/dev/null || true)
+            if [ -n "$commit" ]; then
+              if [ "$commit" = "$GITHUB_SHA" ]; then echo "Live: $APP runs commit ${GITHUB_SHA:0:7} ($live)"; exit 0; fi
+            elif [ "$live" = "$BUILD" ]; then echo "Live: $APP serves $BUILD"; exit 0; fi
+            echo "  waiting (live: ${commit:0:7} ${live:-unreachable}, want: ${GITHUB_SHA:0:7} $BUILD)"; sleep 10
           done
           echo "::error::$APP still serves ${live:-nothing} after 15 minutes. Check the deploy in Render's Events tab."
           exit 1
