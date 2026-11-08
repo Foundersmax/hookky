@@ -5,7 +5,8 @@ import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createHash, timingSafeEqual } from "node:crypto";
-import { claudeShotList } from "./shots";
+import { claudeShotList, claudePickClip } from "./shots";
+import { licenseFreepikVideo, licensesToday, freepikVideoStatus, probeFreepikVideo } from "./freepikVideo";
 import { runAgentTurn, claudeConfigured, resetConversation, claudeCheck, probeClaude } from "./agent";
 import { listConnectors, searchVisuals, searchVideos, importFromUrl, magnificUpscale, reportStockUse, type Orientation } from "./connectors";
 import { proxyVideo } from "./videoProxy";
@@ -66,7 +67,7 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 60 
 
 app.get("/api/health", (_req, res) => {
   void recheckClaude();
-  res.json({ agent: claudeConfigured() ? "claude" : "local", claude: claudeCheck(), transcription: transcriptionProvider(), connectors: listConnectors(), accounts, ...(build && { build }), ...(process.env.RENDER_GIT_COMMIT && { commit: process.env.RENDER_GIT_COMMIT }) });
+  res.json({ agent: claudeConfigured() ? "claude" : "local", claude: claudeCheck(), ...(freepikVideoStatus() && { freepikVideo: { ...freepikVideoStatus(), licensedToday: licensesToday() } }), transcription: transcriptionProvider(), connectors: listConnectors(), accounts, ...(build && { build }), ...(process.env.RENDER_GIT_COMMIT && { commit: process.env.RENDER_GIT_COMMIT }) });
 });
 
 app.post("/api/agent", async (req, res) => {
@@ -113,6 +114,17 @@ app.post("/api/shots", async (req, res) => {
   }
 });
 
+// Claude picks the best of a shot's candidate clips by looking at them (not counted as a turn: one small call).
+app.post("/api/shots/pick", async (req, res) => {
+  try {
+    const b = req.body ?? {};
+    const candidates = (Array.isArray(b.candidates) ? b.candidates : []).slice(0, 6).map((c: any) => ({ thumb: String(c?.thumb ?? ""), title: String(c?.title ?? "") }));
+    res.json(await claudePickClip({ line: String(b.line ?? ""), shot: String(b.shot ?? ""), brief: String(b.brief ?? ""), candidates }));
+  } catch (e: any) {
+    res.status(503).json({ error: e?.message ?? String(e) });
+  }
+});
+
 app.post("/api/agent/reset", (req, res) => {
   resetConversation(String(req.body?.conversationId ?? ""));
   res.json({ ok: true });
@@ -125,7 +137,8 @@ app.get("/api/search", async (req, res) => {
     const count = Math.min(30, Math.max(1, Number(req.query.count ?? 18) || 18));
     if (req.query.type === "video") {
       const o = String(req.query.orientation ?? "");
-      return void res.json(await searchVideos(q, sources, count, ["landscape", "portrait", "square"].includes(o) ? (o as Orientation) : undefined));
+      const minDur = Number(req.query.min) || undefined;
+      return void res.json(await searchVideos(q, sources, count, ["landscape", "portrait", "square"].includes(o) ? (o as Orientation) : undefined, minDur && minDur > 0 && minDur < 60 ? minDur : undefined));
     }
     res.json(await searchVisuals(q, sources, count));
   } catch (e: any) {
@@ -188,6 +201,17 @@ app.get("/api/img", async (req, res) => {
 });
 
 // Usage reports some stock sources require (Coverr): the browser says which clip went into a scene.
+// License a stock clip the user has committed to (Freepik caps downloads at 100 a day, so only on demand).
+app.post("/api/stock/license", async (req, res) => {
+  try {
+    const { source, id, maxEdge } = req.body ?? {};
+    if (source !== "freepik") return void res.status(400).json({ error: "Only Freepik clips need licensing." });
+    res.json({ ...(await licenseFreepikVideo(String(id ?? ""), Math.min(3840, Math.max(720, Number(maxEdge) || 1920)))), today: licensesToday() });
+  } catch (e: any) {
+    res.status(e?.status === 429 ? 429 : 502).json({ error: e?.message ?? String(e) });
+  }
+});
+
 app.post("/api/stock/used", async (req, res) => {
   try {
     const ok = await reportStockUse(String(req.body?.source ?? ""), String(req.body?.id ?? ""));
@@ -227,5 +251,6 @@ const port = Number(process.env.PORT || 8787);
 app.listen(port, () => {
   if (process.env.NODE_ENV === "production" && !password && !accounts) console.warn("Neither DATABASE_URL (accounts) nor HOOKKY_PASSWORD is set: anyone with the URL can use this deploy and its API keys.");
   console.log(`Hookky API on http://localhost:${port}  ·  agent: ${claudeConfigured() ? "Claude" : "local director"}  ·  transcription: ${transcriptionProvider()}`);
+  if (process.env.NODE_ENV !== "test") void probeFreepikVideo();
   if (claudeConfigured() && process.env.NODE_ENV !== "test") void probeClaude().then((c) => c === "ok" && console.log("Claude key check: ok"));
 });

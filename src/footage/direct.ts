@@ -6,7 +6,8 @@ import { sanitizeScene } from "../sanitize";
 import { alignScript } from "../audio/analyze";
 import { ingestVoiceover } from "../components/VoicePanel";
 import { assemble, planShots, type EditOptions, type ProdLook, type Shot, type TextMode } from "./plan";
-import { castAll, refinePlan, timingFor } from "./cast";
+import { castAll, refinePlan, timingFor, visionPicker } from "./cast";
+import { preferLicensed } from "./license";
 import { clock } from "../clock";
 
 export interface DirectInput {
@@ -77,13 +78,16 @@ export async function directFootage(input: DirectInput): Promise<string> {
       if (p.id !== projectId || p.scenes.length !== ids.length || p.scenes.some((s, k) => s.id !== ids[k])) return ctl.abort();
       picks[i] = c.pick;
       input.onCast?.(i, c.pick);
-      const clipId = c.pick ? libraryId(c.pick) : undefined;
+      const clipId = c.pick ? libraryId(preferLicensed(c.pick, getState().assets)) : undefined;
       shots = shots.map((s, k) => (k === i ? { ...s, clip: clipId, ...timingFor(c.pick, s, input.look) } : s));
       const scenes = assemble(shots, edit).map((s, k) => sanitizeScene(s, ids[k]));
       // Quiet update: the plan step above is the undo point.
       setState({ project: { ...p, scenes: p.scenes.map((old, k) => (k === i ? scenes[k] : old)) } as Project });
     },
     ctl.signal,
+    [],
+    // With Claude available it also looks at the top candidates for each shot.
+    plan.by === "claude" ? visionPicker(input.brief) : undefined,
   );
   if (running === ctl) running = null;
   if (ctl.signal.aborted) return "Stopped casting: the project changed.";

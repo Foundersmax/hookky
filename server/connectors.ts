@@ -2,6 +2,7 @@
 // Keys come from environment variables; sources without keys report "unconfigured".
 import type { Asset } from "../src/types";
 import { safeFetch, readLimited } from "./safeFetch";
+import { searchFreepikVideos, freepikKey } from "./freepikVideo";
 
 const UA = "Hookky/0.1 (+https://localhost)";
 const env = (k: string) => process.env[k]?.trim() || "";
@@ -21,7 +22,7 @@ export function listConnectors(): ConnectorInfo[] {
     { id: "pexels", label: "Pexels", configured: !!env("PEXELS_API_KEY"), kind: "search", note: "Set PEXELS_API_KEY (free photos and stock video)" },
     { id: "pixabay", label: "Pixabay", configured: !!env("PIXABAY_API_KEY"), kind: "search", note: "Set PIXABAY_API_KEY (free photos and stock video)" },
     { id: "coverr", label: "Coverr", configured: !!env("COVERR_API_KEY"), kind: "search", note: "Set COVERR_API_KEY (free stock video, coverr.co/developers)" },
-    { id: "freepik", label: "Freepik", configured: !!env("FREEPIK_API_KEY"), kind: "search", note: "Set FREEPIK_API_KEY (stock vectors, photos, PSD)" },
+    { id: "freepik", label: "Freepik / Magnific", configured: !!freepikKey(), kind: "search", note: "Set FREEPIK_API_KEY (real stock footage, photos, vectors)" },
     { id: "envato", label: "Envato", configured: !!env("ENVATO_TOKEN"), kind: "search", note: "Set ENVATO_TOKEN (Envato Market API)" },
     { id: "pinterest", label: "Pinterest", configured: !!env("PINTEREST_ACCESS_TOKEN"), kind: "search", note: "Set PINTEREST_ACCESS_TOKEN to search your pins. Pin URLs import without a key." },
     { id: "web", label: "Any URL", configured: true, kind: "import", note: "Paste any page (Pinterest pin, Behance, Dribbble, product page) to pull its images." },
@@ -192,14 +193,36 @@ export function mapCoverrVideos(d: any, q: string): Asset[] {
 
 const orientationOf = (a: Asset): Orientation => (!a.w || !a.h ? "landscape" : a.h > a.w * 1.1 ? "portrait" : a.w > a.h * 1.1 ? "landscape" : "square");
 
-const VIDEO_SEARCHERS: Record<string, (q: string, n: number, o?: Orientation) => Promise<Asset[]>> = {
+const VIDEO_SEARCHERS: Record<string, (q: string, n: number, o?: Orientation, minDur?: number) => Promise<Asset[]>> = {
+  freepik: (q, n, o, minDur) => searchFreepikVideos(q, n, o, minDur),
   pexels: async (q, n, o) => mapPexelsVideos(await getJSON(`https://api.pexels.com/videos/search?query=${encodeURIComponent(q)}&per_page=${n}${o ? `&orientation=${o}` : ""}`, { Authorization: env("PEXELS_API_KEY") }), q),
   coverr: async (q, n) => mapCoverrVideos(await getJSON(`https://api.coverr.co/videos?query=${encodeURIComponent(q.slice(0, 100))}&page_size=${Math.min(25, Math.max(3, n))}&urls=true`, { Authorization: `Bearer ${env("COVERR_API_KEY")}` }), q),
   pixabay: async (q, n) => mapPixabayVideos(await getJSON(`https://pixabay.com/api/videos/?key=${encodeURIComponent(env("PIXABAY_API_KEY"))}&q=${encodeURIComponent(q.slice(0, 100))}&per_page=${Math.max(3, n)}&safesearch=true`), q),
 };
 
-/** Search stock video. Clips matching the project's orientation come first. */
-export async function searchVideos(query: string, sources: string[] | undefined, count = 12, orientation?: Orientation) {
+/** Sources asked only when the preferred one comes back thin. */
+const FALLBACK_ONLY = new Set(["pixabay", "pexels", "coverr"]);
+
+/**
+ * Search stock video. With Freepik connected it's the main source (real footage, AI clips excluded);
+ * Pixabay, Pexels and Coverr fill in only when Freepik has too little. Clips matching the
+ * project's orientation come first.
+ */
+export async function searchVideos(query: string, sources: string[] | undefined, count = 12, orientation?: Orientation, minDuration?: number): Promise<{ assets: Asset[]; notes: string[] }> {
+  if (!sources?.length && freepikKey()) {
+    const notes: string[] = [];
+    let main: Asset[] = [];
+    try {
+      main = await VIDEO_SEARCHERS.freepik(query, count, orientation, minDuration);
+    } catch (e: any) {
+      notes.push(`freepik: ${e.message}`);
+    }
+    if (main.length >= Math.min(6, count)) return { assets: main.slice(0, count), notes };
+    const others = [...FALLBACK_ONLY].filter((s) => listConnectors().find((c) => c.id === s)?.configured);
+    if (!others.length) return { assets: main, notes };
+    const rest: { assets: Asset[]; notes: string[] } = await searchVideos(query, others, count - main.length, orientation);
+    return { assets: [...main, ...rest.assets].slice(0, count), notes: [...notes, ...rest.notes] };
+  }
   const configured = new Set(listConnectors().filter((c) => c.configured && VIDEO_SEARCHERS[c.id]).map((c) => c.id));
   const wanted = (sources?.length ? sources : [...configured]).filter((s) => VIDEO_SEARCHERS[s]);
   const notes: string[] = [];
@@ -209,7 +232,7 @@ export async function searchVideos(query: string, sources: string[] | undefined,
     wanted.map(async (s) => {
       if (!configured.has(s)) return [];
       try {
-        return await VIDEO_SEARCHERS[s](query, per, orientation);
+        return await VIDEO_SEARCHERS[s](query, per, orientation, minDuration);
       } catch (e: any) {
         notes.push(`${s}: ${e.message}`);
         return [];
@@ -236,7 +259,7 @@ export async function reportStockUse(source: string, id: string) {
 }
 
 /** Hosts the video proxy will stream from (the stock sources' CDNs). Redirects are still SSRF-checked. */
-export const VIDEO_HOSTS = [/(^|\.)pexels\.com$/, /(^|\.)pixabay\.com$/, /(^|\.)vimeo\.com$/, /(^|\.)vimeocdn\.com$/, /(^|\.)coverr\.co$/];
+export const VIDEO_HOSTS = [/(^|\.)pexels\.com$/, /(^|\.)pixabay\.com$/, /(^|\.)vimeo\.com$/, /(^|\.)vimeocdn\.com$/, /(^|\.)coverr\.co$/, /(^|\.)cdnpk\.net$/, /(^|\.)freepik\.com$/, /(^|\.)magnific\.com$/, /(^|\.)videvo\.net$/];
 
 /** Clip URLs our own searches returned (their CDNs aren't always documented). Kept for this server's lifetime. */
 const issued = new Set<string>();

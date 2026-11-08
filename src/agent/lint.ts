@@ -43,7 +43,9 @@ export function lintStoryboard({ scenes, brand, assetIds, audio }: LintInput): N
     const off: number[] = [];
     scenes.slice(0, -1).forEach((s, i) => {
       t += s.duration;
-      if (t < audio.duration - 0.3 && !mids.some((m) => Math.abs(m - t) <= 0.35)) off.push(i + 1);
+      // Footage cut on a spoken word is deliberate (the picture changes as the word lands).
+      const onWord = !!(s.shot && scenes[i + 1]?.shot);
+      if (!onWord && t < audio.duration - 0.3 && !mids.some((m) => Math.abs(m - t) <= 0.35)) off.push(i + 1);
     });
     if (off.length) add(null, "tip", "cuts-off-pause", `${off.length} cut${off.length > 1 ? "s land" : " lands"} mid-speech (after scene ${off.slice(0, 4).join(", ")}${off.length > 4 ? "…" : ""}). Snap cuts to pauses.`);
   }

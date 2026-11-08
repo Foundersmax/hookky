@@ -5,16 +5,18 @@ import { castShot, orientationFor, timeClip, type ProdLook, type Shot, type Text
 
 const cache = new Map<string, Promise<Asset[]>>();
 
-async function search(q: string, kind: "video" | "image", aspect: Aspect): Promise<Asset[]> {
+async function search(q: string, kind: "video" | "image", aspect: Aspect, min = 0): Promise<Asset[]> {
   const o = orientationFor(aspect);
-  const key = `${kind}|${o}|${q}`;
+  // Ask for clips long enough to hold the shot (rounded, so nearby shots share a search).
+  const m = min > 0 ? Math.min(20, Math.ceil(min)) : 0;
+  const key = `${kind}|${o}|${m}|${q}`;
   if (!cache.has(key)) {
-    const url = `/api/search?q=${encodeURIComponent(q)}&count=${kind === "video" ? 14 : 10}${kind === "video" ? `&type=video&orientation=${o}` : ""}`;
+    const url = `/api/search?q=${encodeURIComponent(q)}&count=${kind === "video" ? 14 : 10}${kind === "video" ? `&type=video&orientation=${o}${m ? `&min=${m}` : ""}` : ""}`;
     cache.set(
       key,
       fetch(url)
         .then((r) => (r.ok ? r.json() : { assets: [] }))
-        .then((r) => (Array.isArray(r.assets) ? (r.assets as Asset[]) : []))
+        .then((r) => (Array.isArray(r.assets) ? (r.assets as Asset[]) : []).map((a) => (a.id.startsWith("asset:") ? a : { ...a, id: `asset:${a.id}` })))
         .catch(() => {
           cache.delete(key);
           return [];
@@ -50,12 +52,40 @@ export interface Cast {
   alts: Asset[];
 }
 
+/** Claude, looking at the thumbnails, picks the clip that shows the line best (1-based; 0 = none fit). */
+export type Picker = (shot: Shot, candidates: Asset[]) => Promise<number | undefined>;
+
+export function visionPicker(brief: string, max = 24): Picker {
+  let left = max;
+  let off = false;
+  return async (shot, cands) => {
+    if (off || left <= 0 || cands.length < 2) return undefined;
+    left--;
+    try {
+      const r = await fetch("/api/shots/pick", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ line: shot.line, shot: `${shot.type} shot · ${shot.queries[0] ?? ""}`, brief, candidates: cands.map((a) => ({ thumb: a.thumb ?? "", title: a.title })) }),
+      });
+      if (!r.ok) {
+        off = r.status === 503; // Claude unavailable: stop asking for this run
+        return undefined;
+      }
+      const j = await r.json();
+      return typeof j.index === "number" ? j.index : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+}
+
 /** Find footage for one shot: each query in turn until there are enough good clips; photos if no video. */
-export async function castOne(shot: Shot, aspect: Aspect, look: ProdLook, used: Set<string>): Promise<Cast> {
+export async function castOne(shot: Shot, aspect: Aspect, look: ProdLook, used: Set<string>, pick?: Picker): Promise<Cast> {
   const speed = LOOKS_PROD[look].speed;
+  const need = (shot.e - shot.s) * speed;
   const seen = new Map<string, Asset>();
   for (const q of shot.queries) {
-    for (const a of await search(q, "video", aspect)) if (a.src && !seen.has(a.src)) seen.set(a.src, { ...a, title: a.title || q });
+    for (const a of await search(q, "video", aspect, need)) if (a.src && !seen.has(a.src)) seen.set(a.src, { ...a, title: a.title || q });
     const good = [...seen.values()].filter((a) => !used.has(a.src) && orientationFor(aspect) === orientationOf(a)).length;
     if (good >= 4) break;
   }
@@ -73,22 +103,29 @@ export async function castOne(shot: Shot, aspect: Aspect, look: ProdLook, used: 
     speed,
     used,
   );
-  const pick = r.clip ? byId.get(r.clip.id) : undefined;
-  if (pick) used.add(pick.src);
-  return { shot, pick, alts: r.alts.map((c) => byId.get(c.id)!).filter(Boolean) };
+  let ranked = [r.clip, ...r.alts].map((c) => (c ? byId.get(c.id) : undefined)).filter((a): a is Asset => !!a && !used.has(a.src));
+  // A second opinion from Claude's eyes on the top few, when it's available.
+  if (pick && ranked.length >= 2) {
+    const top = ranked.slice(0, 6);
+    const k = await pick(shot, top);
+    if (k && k >= 1 && k <= top.length) ranked = [top[k - 1], ...ranked.filter((a) => a !== top[k - 1])];
+  }
+  const chosen = ranked[0] ?? (r.clip ? byId.get(r.clip.id) : undefined);
+  if (chosen) used.add(chosen.src);
+  return { shot, pick: chosen, alts: ranked.filter((a) => a !== chosen).slice(0, 6) };
 }
 
 const orientationOf = (a: Asset) => (!a.w || !a.h ? "landscape" : a.h > a.w * 1.1 ? "portrait" : a.w > a.h * 1.1 ? "landscape" : "square");
 
 /** Cast every shot, three searches at a time, reporting each as it lands. */
-export async function castAll(shots: Shot[], aspect: Aspect, look: ProdLook, onCast: (i: number, c: Cast) => void, signal?: AbortSignal, preUsed: string[] = []): Promise<Cast[]> {
+export async function castAll(shots: Shot[], aspect: Aspect, look: ProdLook, onCast: (i: number, c: Cast) => void, signal?: AbortSignal, preUsed: string[] = [], pick?: Picker): Promise<Cast[]> {
   const used = new Set(preUsed);
   const out: Cast[] = new Array(shots.length);
   let next = 0;
   const worker = async () => {
     while (next < shots.length && !signal?.aborted) {
       const i = next++;
-      out[i] = await castOne(shots[i], aspect, look, used);
+      out[i] = await castOne(shots[i], aspect, look, used, pick);
       if (!signal?.aborted) onCast(i, out[i]);
     }
   };

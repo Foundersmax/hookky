@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import type { Asset, Scene } from "../types";
 import { useStudio, libraryId, setState } from "../store";
 import { castOne, timingFor } from "../footage/cast";
+import { preferLicensed } from "../footage/license";
 import { LOOKS_PROD, type ProdLook } from "../footage/plan";
 import { fileToVideoAsset, fileToUploadAsset, isVideoFile } from "./ChatPanel";
 import { Icon } from "./Icon";
@@ -21,7 +22,7 @@ export function ShotControls({ scene, onChange }: { scene: Scene; onChange: (pat
   const current = isEnd ? scene.backdrop?.[0] : scene.image;
 
   const use = (a: Asset) => {
-    const id = libraryId(a);
+    const id = libraryId(preferLicensed(a, assets));
     const len = scene.duration;
     const timing = timingFor(a, { s: 0, e: len, line: "", type: "medium", queries: [], overlay: "" }, lookOf(scene));
     const base = { clipStart: timing.clipStart, clipSpeed: timing.clipSpeed, shot: { type: scene.shot?.type ?? "medium", query: q || scene.shot?.query || "" } };

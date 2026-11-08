@@ -1,3 +1,4 @@
+import { LicenseCard } from "./LicenseCard";
 import { useMemo, useRef, useState } from "react";
 import { useStudio, getState, importProject, createProject } from "../store";
 import type { Aspect } from "../types";
@@ -153,6 +154,7 @@ export function ExportPanel({ toast }: { toast: (s: string) => void }) {
 
   return (
     <>
+      <LicenseCard compact />
       {progress && (
         <div className="card export-progress" aria-live="polite">
           <div className="muted">{progress.label} · {Math.round(progress.p * 100)}%</div>

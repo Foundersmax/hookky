@@ -5,6 +5,7 @@ import { LOOKS_PROD, SHOT_TYPES, type ProdLook, type Shot, type TextMode } from 
 import { directFootage, stopDirecting } from "../footage/direct";
 import { initialCopy } from "../soundApply";
 import { Icon } from "./Icon";
+import { LicenseCard } from "./LicenseCard";
 
 const ASPECTS: Aspect[] = ["16:9", "9:16", "1:1", "4:5"];
 const TEXT: { id: TextMode; label: string; note: string }[] = [
@@ -218,6 +219,7 @@ export function FootageSheet() {
                     );
                   })}
                 </ol>
+                {done && <LicenseCard />}
                 {done && (
                   <button className="btn primary" onClick={() => (close(), setState({ selected: 0 }))}>
                     <Icon name="play" size={13} /> Watch the edit

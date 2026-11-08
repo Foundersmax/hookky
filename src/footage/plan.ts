@@ -41,7 +41,7 @@ export type TextMode = "subtitles" | "keywords" | "clean";
 
 // ---------------------------------------------------------------- words → pictures
 const STOP = new Set(
-  "a an and are as at be been but by can could did do does for from had has have he her here him his how i if in into is it its it's just like make made me more most my no not now of on one or our out over own so some than that the their them then there these they this those to too up us very was we were what when where which while who why will with would you your yours ones thing things way really i'm you're we're it's that's don't can't won't get got let let's every all any each".split(" "),
+  "a an and are as at be been but by can could did do does for from had has have he her here him his how i if in into is it its it's just like make made me more most my no not now of on one or our out over own so some than that the their them then there these they this those to too up us very was we were what when where which while who why will with would you your yours ones thing things way really i'm you're we're it's that's don't can't won't get got let let's every all any each again goes go going gone come comes came keep keeps kept take takes took give gives gave put puts say says said see sees saw know knows want wants need needs feel feels look looks always ever still even also only much many lot lots everything something anything nothing someone everyone yesterday tonight yet already ready meet introducing".split(" "),
 );
 const stem = (w: string) => w.toLowerCase().replace(/[^a-z0-9]/g, "").replace(/(ies)$/, "y").replace(/(ing|ed|es|s)$/, "");
 
@@ -100,6 +100,23 @@ export function subjectOf(brief: string): { word?: string; queries: string[] } {
   return { word: noun, queries: noun ? [noun, `${noun} close up`] : [] };
 }
 
+/** Who the ad is for, as someone a stock library can show ("for runners" → "runner"), so the same kind of person carries the edit. */
+const PERSONAS: [RegExp, string][] = [
+  [/\brunn(er|ers|ing)\b/, "runner"], [/\b(athlete|athletes)\b/, "athlete"], [/\b(busy|working) (people|professionals|adults)|\bprofessionals?\b|\bworkers?\b/, "young professional"],
+  [/\b(moms?|mothers?|mums?)\b/, "mother"], [/\b(dads?|fathers?)\b/, "father"], [/\bparents?\b/, "parent"], [/\bfamil(y|ies)\b/, "family"], [/\bstudents?\b/, "student"],
+  [/\bgamers?\b/, "gamer"], [/\btravel+ers?\b/, "traveler"], [/\bteams?\b/, "office team"], [/\b(women|woman|her)\b/, "woman"], [/\b(men|man|him)\b/, "man"],
+  [/\b(founders?|entrepreneurs?|startups?)\b/, "entrepreneur"], [/\b(seniors?|elderly|retirees?)\b/, "senior"], [/\b(kids?|children)\b/, "child"], [/\b(creators?|designers?)\b/, "creative professional"],
+];
+export function personaOf(brief: string): string | undefined {
+  const b = brief.toLowerCase();
+  return PERSONAS.find(([re]) => re.test(b))?.[1];
+}
+/** Put the persona into a picture that has a person in it ("person sleeping in bed" → "runner sleeping in bed"). */
+export function cast(q: string, persona?: string): string {
+  if (!persona) return q;
+  return q.replace(/\b(a |an )?(person|woman|man|people)\b/, persona);
+}
+
 /** The words of a line worth picturing, strongest first. Things the line wants gone ("stress less", "no more waiting") aren't pictured. */
 export function keywords(line: string, exclude: string[] = []): string[] {
   const toks = line.split(/\s+/).map((w) => w.toLowerCase().replace(/[^a-z0-9'-]/g, ""));
@@ -125,33 +142,79 @@ const lexicon = (w: string) => LEXICON[w] ?? LEXICON[stem(w)];
 const COVERAGE: ShotType[] = ["medium", "close-up", "wide", "detail", "people", "medium", "close-up", "abstract"];
 const MODIFIER: Partial<Record<ShotType, string>> = { establishing: "aerial", wide: "wide", "close-up": "close up", detail: "macro", people: "people" };
 
-/** Plan the shots for a voice-over locally (no AI): coverage grammar plus a picture dictionary. */
+/** A picturable word and when it's said. */
+interface Beat {
+  w: string;
+  t: number;
+}
+
+/**
+ * Split a long line where its second idea is spoken, so the picture changes on the word
+ * ("your phone buzzes, | your coffee goes cold" cuts to coffee as "coffee" is said).
+ */
+export function wordCuts(slot: { s: number; e: number }, words: Word[] | undefined, exclude: string[] = [], min = 1.4): { s: number; e: number; key?: string }[] {
+  const ws = (words ?? []).filter((w) => w.s >= slot.s - 0.02 && w.s < slot.e);
+  const kws = new Set(keywords(ws.map((w) => w.w).join(" "), exclude).filter((k) => lexicon(k)));
+  const beats: Beat[] = [];
+  const seen = new Set<string>();
+  for (const w of ws) {
+    const k = w.w.toLowerCase().replace(/[^a-z0-9'-]/g, "");
+    if (kws.has(k) && !seen.has(stem(k))) seen.add(stem(k)), beats.push({ w: k, t: w.s });
+  }
+  if (slot.e - slot.s < min * 2 + 0.4 || beats.length < 2) return [{ s: slot.s, e: slot.e, key: best(beats)?.w }];
+  // Cut on the most filmable ideas first (coffee before morning), keeping every part long enough to read.
+  const cuts: Beat[] = [];
+  for (const b of [...beats.slice(1)].sort((x, y) => concrete(y.w) - concrete(x.w))) {
+    const at = +(b.t - 0.12).toFixed(2); // a beat before the word lands
+    const pts = [slot.s, ...cuts.map((c) => +(c.t - 0.12).toFixed(2)), at, slot.e].sort((x, y) => x - y);
+    if (cuts.length < 2 && pts.every((p, k) => k === 0 || p - pts[k - 1] >= min)) cuts.push(b);
+  }
+  cuts.sort((x, y) => x.t - y.t);
+  const edges = [slot.s, ...cuts.map((c) => +(c.t - 0.12).toFixed(2)), slot.e];
+  return edges.slice(0, -1).map((from, k) => {
+    const to = edges[k + 1];
+    // Each part shows the strongest idea spoken in it.
+    return { s: from, e: to, key: best(beats.filter((b) => b.t >= from - 0.02 && b.t < to))?.w };
+  });
+}
+
+/** Ideas a camera can't point at directly rank below things it can. */
+const ABSTRACT = new Set("time fast speed quick slow calm peace morning night day energy power strong health new launch start begin idea think change future grow growth easy simple smart safe hard problem success win dream fun joy happy love world tired stress".split(" ").map(stem));
+const concrete = (w: string) => (ABSTRACT.has(stem(w)) ? 0 : 1) + Math.min(w.length, 8) / 20;
+const best = (bs: Beat[]) => [...bs].sort((a, b) => concrete(b.w) - concrete(a.w))[0];
+
+/** Plan the shots for a voice-over locally (no AI): coverage grammar, a picture dictionary, cuts on the words. */
 export function planShots(v: VoiceIn, brief: string, opts: { min?: number; max?: number; text: TextMode; brand?: string } = { text: "subtitles" }): Shot[] {
   const slots = voiceSlots(v, opts.min ?? 2.2, opts.max ?? 4.2);
   const subject = subjectOf(brief);
+  const persona = personaOf(brief);
+  const exclude = opts.brand ? opts.brand.split(/\s+/) : [];
   const used = new Set<string>();
-  return slots.map((slot, i) => {
-    const line = slot.text ?? "";
-    const kw = keywords(line, opts.brand ? opts.brand.split(/\s+/) : []);
+  // Every line, split on its spoken ideas.
+  const parts = slots.flatMap((slot, li) => wordCuts(slot, v.words, exclude).map((p, k) => ({ ...p, li, first: k === 0, line: v.words?.length ? wordsIn(v.words, p.s, p.e) : slot.text ?? "" })));
+  return parts.map((part, i) => {
+    const line = part.line;
+    const kw = keywords(line, exclude);
+    if (part.key) kw.sort((a, b) => Number(b === part.key) - Number(a === part.key));
     const mentionsSubject = !!subject.word && kw.some((k) => stem(k) === stem(subject.word!) || (lexicon(k) ?? []).some((q) => subject.queries.includes(q)));
-    const last = i === slots.length - 1 && slots.length > 2;
+    const last = i === parts.length - 1 && parts.length > 2;
     const type: ShotType = i === 0 ? "establishing" : last ? "wide" : mentionsSubject ? "product" : COVERAGE[(i - 1) % COVERAGE.length];
     const pool: string[] = [];
     // The product shot and the closing shot (behind the end card) show the product category.
-    if (type === "product" || last) pool.push(...subject.queries);
+    if (type === "product" || last) pool.push(...subject.queries.map((q) => cast(q, persona)));
     for (const k of kw.slice(0, 3)) {
       const lx = lexicon(k);
-      if (lx) pool.push(...lx);
+      if (lx) pool.push(...lx.map((q) => cast(q, persona)));
       else pool.push(MODIFIER[type] ? `${k} ${MODIFIER[type]}` : k);
     }
     // The opener sets the world: what the line says, seen wide.
     if (i === 0) pool.push("city sunrise aerial");
-    pool.push(...subject.queries, type === "abstract" ? "abstract light bokeh" : "people lifestyle");
+    pool.push(...subject.queries.map((q) => cast(q, persona)), type === "abstract" ? "abstract light bokeh" : persona ? `${persona} lifestyle` : "people lifestyle");
     // Fresh queries first, so neighbouring shots don't look alike.
     const queries = [...new Set(pool.map((q) => q.trim().toLowerCase()).filter(Boolean))].sort((a, b) => Number(used.has(a)) - Number(used.has(b))).slice(0, 4);
     used.add(queries[0]);
-    const overlay = opts.text === "keywords" && (i === 0 || i % 3 === 2) ? emphasize(clipWords(line, 5)) : "";
-    return { s: slot.s, e: slot.e, line, type, queries, overlay };
+    const overlay = opts.text === "keywords" && part.first && (i === 0 || part.li % 3 === 2) ? emphasize(clipWords(slots[part.li].text ?? line, 5)) : "";
+    return { s: part.s, e: part.e, line, type, queries, overlay };
   });
 }
 
@@ -168,7 +231,9 @@ export interface Candidate {
 const orient = (w?: number, h?: number) => (!w || !h ? "landscape" : h > w * 1.1 ? "portrait" : w > h * 1.1 ? "landscape" : "square");
 export const orientationFor = (a: Aspect) => (a === "9:16" || a === "4:5" ? "portrait" : a === "1:1" ? "square" : "landscape");
 
-/** How well a clip suits a shot: format, long enough to hold the shot, on topic, sharp. */
+const FAKE = /\b(animat\w*|cartoon|illustrat\w*|3d|render\w*|cgi|loop(ed|able)?|motion graphics?|template|green ?screen|chroma|hologra\w*|icons?|infographic|ai[- ]generated|generative|particles?|seamless)\b/i;
+
+/** How well a clip suits a shot: format, long enough to hold the shot, on topic, real, sharp. */
 export function scoreClip(c: Candidate, shot: Pick<Shot, "s" | "e" | "queries">, aspect: Aspect, speed: number): number {
   let sc = 0;
   const want = orientationFor(aspect), got = orient(c.w, c.h);
@@ -177,10 +242,17 @@ export function scoreClip(c: Candidate, shot: Pick<Shot, "s" | "e" | "queries">,
   else if (want === "portrait" && got === "landscape") sc += 0.5; // crops to a sliver: last resort
   const need = (shot.e - shot.s) * speed + 0.3;
   if (c.duration) sc += c.duration >= need ? 3 : c.duration >= need * 0.6 ? 1 : -2;
-  const words = new Set(shot.queries.join(" ").toLowerCase().split(/\W+/).filter((w) => w.length > 2));
-  const title = c.title.toLowerCase();
-  for (const w of words) if (title.includes(w)) sc += 0.6;
+  // On topic: the first search counts most, matching by word stem ("pouring" ~ "pour").
+  const title = new Set(c.title.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 2).map(stem));
+  shot.queries.forEach((q, qi) => {
+    const ws = q.toLowerCase().split(/\W+/).filter((w) => w.length > 2 && !STOP.has(w)).map(stem);
+    const hit = ws.filter((w) => title.has(w)).length;
+    sc += hit * (qi === 0 ? 1.2 : 0.5) + (ws.length > 1 && hit === ws.length ? 1.5 : 0);
+  });
+  // Real footage, not graphics: titles that read like animation, templates or AI renders sink.
+  if (!/abstract/.test(shot.queries[0] ?? "") && FAKE.test(c.title)) sc -= 4;
   if ((c.w ?? 0) >= 1280 || (c.h ?? 0) >= 1280) sc += 1;
+  if (c.source === "freepik") sc += 1.5; // the preferred library
   return sc;
 }
 

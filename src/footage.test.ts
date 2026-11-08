@@ -80,3 +80,41 @@ test("footage: what a line wants gone isn't pictured, and the brand name isn't s
   assert.ok(!shots.some((s) => s.queries.some((q) => /orbit|pre-order|stress/.test(q))), JSON.stringify(shots.map((s) => s.queries)));
   assert.ok(shots[0].queries[0].includes("morning") || shots[0].queries[0].includes("sunrise"), shots[0].queries[0]);
 });
+
+import { wordCuts, personaOf, cast } from "./footage/plan";
+
+test("footage: a long line cuts to its second idea as the word is spoken", () => {
+  const v = voice(["Your phone buzzes all morning and your coffee goes cold again."]);
+  const parts = wordCuts({ s: 0, e: v.duration }, v.words);
+  assert.equal(parts.length, 2, JSON.stringify(parts));
+  const coffee = v.words.find((w) => w.w === "coffee")!;
+  assert.ok(Math.abs(parts[1].s - (coffee.s - 0.12)) < 0.01, "cut lands just before 'coffee'");
+  assert.equal(parts[1].key, "coffee");
+  assert.ok(parts.every((p) => p.e - p.s >= 1.4));
+  // a short line stays one shot
+  assert.equal(wordCuts({ s: 0, e: 2 }, voice(["Coffee and phone."]).words).length, 1);
+});
+
+test("footage: the audience from the brief is cast in the people shots", () => {
+  assert.equal(personaOf("Orbit, a smartwatch for runners"), "runner");
+  assert.equal(personaOf("an app for busy professionals"), "young professional");
+  assert.equal(personaOf("handmade candles"), undefined);
+  assert.equal(cast("person sleeping bed", "runner"), "runner sleeping bed");
+  assert.equal(cast("coffee pouring", "runner"), "coffee pouring");
+  const shots = planShots(VO, "Orbit, a smartwatch for runners", { text: "subtitles", brand: "Orbit" });
+  assert.ok(shots.some((s) => s.queries.some((q) => q.startsWith("runner"))), JSON.stringify(shots.map((s) => s.queries)));
+});
+
+test("footage: realism — graphics and AI renders sink below real footage; Freepik is preferred", () => {
+  const shot = { s: 0, e: 3, queries: ["coffee pouring"] };
+  const real = { id: "a", title: "Barista pouring coffee into cup", w: 1920, h: 1080, duration: 12, source: "pixabay" };
+  const anim = { id: "b", title: "Coffee pouring animation loop", w: 1920, h: 1080, duration: 12, source: "pixabay" };
+  const fp = { ...real, id: "c", source: "freepik" };
+  assert.ok(scoreClip(real, shot, "16:9", 1) > scoreClip(anim, shot, "16:9", 1) + 3);
+  assert.ok(scoreClip(fp, shot, "16:9", 1) > scoreClip(real, shot, "16:9", 1));
+});
+
+test("footage: filler verbs never become searches", () => {
+  const shots = planShots(voice(["Your coffee goes cold again and again."]), "", { text: "clean" });
+  assert.ok(!shots.some((s) => s.queries.some((q) => /\b(again|goes)\b/.test(q))), JSON.stringify(shots.map((s) => s.queries)));
+});

@@ -191,6 +191,8 @@ export interface Asset {
   duration?: number;
   /** the item's id at its source (used to report usage where a source requires it) */
   sourceId?: string;
+  /** a stock preview with the source's watermark; licensing replaces it with the real file */
+  watermarked?: boolean;
   /** fonts only: the family name it registers, and its weight */
   family?: string;
   weight?: number;
