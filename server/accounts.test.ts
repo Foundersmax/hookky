@@ -66,7 +66,7 @@ const linkIn = (to: string, re: RegExp) => {
 test("sign-up → confirm email → admin approval → sign in", { skip }, async () => {
   const owner = client();
   // The owner (in ADMIN_EMAILS) becomes an active admin as soon as they confirm.
-  assert.equal((await owner.call("POST", "/api/auth/signup", { email: "Owner@Rookker.test", password: "correct horse battery", name: "Owner" })).status, 200);
+  assert.equal((await owner.call("POST", "/api/auth/signup", { email: "Owner@Hookky.test", password: "correct horse battery", name: "Owner" })).status, 200);
   let link = linkIn("owner@hookky.test", /Confirm email/)!;
   let r = await owner.call("GET", link.pathname + link.search);
   assert.deepEqual([r.status, r.location], [303, "https://rookker.test/?auth=verified-admin"]);
