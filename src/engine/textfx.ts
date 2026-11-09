@@ -36,6 +36,8 @@ const font = (g: G, size: number, ctx: CanvasRenderingContext2D = g.ctx) => {
   return ctx.font;
 };
 const hitAll = (g: G, size: number) => g.hit?.({ field: "headline", x: g.pad, y: g.H * 0.3, w: g.W - g.pad * 2, h: g.H * 0.4, size, align: "center", lines: 1 });
+/** Calm or smooth motion asks for the minimal version: no shakes, flashes or trails. */
+const gentle = (g: G) => g.scene.motion === "calm" || g.scene.motion === "smooth";
 const GLYPHS = "ABCDEFGHJKLMNPQRSTUVWXYZ0123456789#%&$@!?";
 
 export const TEXT_TEMPLATES: Record<string, Tpl> = {
@@ -48,18 +50,19 @@ export const TEXT_TEMPLATES: Record<string, Tpl> = {
     const w = ws[k];
     const text = w.w.toUpperCase().replace(/[.,!?;:]+$/, "");
     const size = fit(g, text, W - pad * 1.6, (g.portrait ? H * 0.2 : H * 0.42));
-    const p = clamp((g.t - w.s + 0.04) / 0.16);
-    const s = lerp(1.7, 1, ease.outCubic(p));
-    const shake = (1 - p) * 0 + Math.exp(-(g.t - w.s) * 14) * 14 * u;
+    const soft = gentle(g);
+    const p = clamp((g.t - w.s + 0.04) / (soft ? 0.3 : 0.16));
+    const s = lerp(soft ? 1.12 : 1.7, 1, ease.outCubic(p));
+    const shake = soft ? 0 : Math.exp(-(g.t - w.s) * 14) * 14 * u;
     const isEm = em.has(plain(w.w)) || /\d/.test(w.w);
     // impact flash on emphasised words
-    if (isEm && g.t - w.s < 0.18) {
+    if (!soft && isEm && g.t - w.s < 0.18) {
       ctx.fillStyle = rgba(c.accent, 0.22 * (1 - (g.t - w.s) / 0.18));
       ctx.fillRect(0, 0, W, H);
     }
     ctx.save();
     ctx.translate(W / 2 + Math.sin(g.t * 90) * shake, H / 2 + Math.cos(g.t * 77) * shake);
-    ctx.rotate((1 - ease.outCubic(p)) * (k % 2 ? 0.08 : -0.08));
+    ctx.rotate(soft ? 0 : (1 - ease.outCubic(p)) * (k % 2 ? 0.08 : -0.08));
     ctx.scale(s, s);
     ctx.globalAlpha = clamp(p * 2);
     font(g, size);
@@ -140,12 +143,13 @@ export const TEXT_TEMPLATES: Record<string, Tpl> = {
     };
     if (k < 0) return;
     // the previous word rushing past
+    const trails = gentle(g) ? 1 : 3;
     if (k > 0) {
-      const p = clamp((g.t - ws[k].s + 0.04) / 0.25);
-      if (p < 1) for (let tr = 0; tr < 3; tr++) draw(k - 1, 1 + ease.inCubic(p) * (3 + tr * 0.6), (1 - p) * (tr ? 0.25 : 1));
+      const p = clamp((g.t - ws[k].s + 0.04) / (gentle(g) ? 0.35 : 0.25));
+      if (p < 1) for (let tr = 0; tr < trails; tr++) draw(k - 1, 1 + ease.inCubic(p) * (gentle(g) ? 0.8 : 3 + tr * 0.6), (1 - p) * (tr ? 0.25 : 1));
     }
-    const p = ease.outCubic(clamp((g.t - ws[k].s + 0.04) / 0.3));
-    for (let tr = 2; tr >= 0; tr--) draw(k, lerp(0.15, 1, p) * (1 - tr * 0.06 * (1 - p)), tr ? 0.2 * p : p);
+    const p = ease.outCubic(clamp((g.t - ws[k].s + 0.04) / (gentle(g) ? 0.45 : 0.3)));
+    for (let tr = trails - 1; tr >= 0; tr--) draw(k, lerp(gentle(g) ? 0.7 : 0.15, 1, p) * (1 - tr * 0.06 * (1 - p)), tr ? 0.2 * p : p);
     hitAll(g, 80);
   },
 
@@ -179,8 +183,8 @@ export const TEXT_TEMPLATES: Record<string, Tpl> = {
       for (let j = 0; j < w.w.length; j++) {
         const ch = w.w[j];
         const t0 = w.s + j * 0.035;
-        const p = ease.outBack(clamp((g.t - t0) / 0.32));
-        const wave = Math.sin(g.t * 5 - (x / W) * 9) * 10 * u * clamp(g.t - t0);
+        const p = (gentle(g) ? ease.outCubic : ease.outBack)(clamp((g.t - t0) / 0.32));
+        const wave = Math.sin(g.t * 5 - (x / W) * 9) * (gentle(g) ? 3 : 10) * u * clamp(g.t - t0);
         if (p > 0) {
           ctx.save();
           ctx.translate(x, rowY + (1 - p) * size * 0.8 + wave);
@@ -349,9 +353,10 @@ export const TEXT_TEMPLATES: Record<string, Tpl> = {
     font(g, size);
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    for (let i = -4; i <= 4; i++) {
+    const reach = gentle(g) ? 1 : 4;
+    for (let i = -reach; i <= reach; i++) {
       const y = H / 2 + i * lh + drift * (i < 0 ? -1 : 1);
-      const a = i === 0 ? 1 : Math.max(0, 0.55 - Math.abs(i) * 0.12) * p;
+      const a = i === 0 ? 1 : Math.max(0, (gentle(g) ? 0.25 : 0.55) - Math.abs(i) * 0.12) * p;
       if (a <= 0) continue;
       if (i === 0) {
         ctx.globalAlpha = clamp(p * 1.5);

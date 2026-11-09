@@ -129,3 +129,20 @@ test("formats: with a voice's insight, headlines highlight the stressed words", 
   const { scenes } = buildWithVoice(FORMATS.find((f) => f.id === "three-reasons")!, brief, v, []);
   assert.ok(scenes.some((s) => s.headline?.includes("*second*") || s.headline?.includes("*charge*")), scenes.map((s) => s.headline).join(" | "));
 });
+
+test("formats: the originals lead the text section; the minimal set stays quiet, even under a fast voice", () => {
+  const text = FORMATS.filter((f) => f.section === "text");
+  assert.equal(text[0].name, "Pattern Interrupt");
+  const minimal = text.filter((f) => ["slam", "decode", "zoom-tunnel", "wave-pop", "karaoke", "flip-deck", "type-rush", "echo-chamber"].includes(f.id));
+  assert.equal(minimal.length, 8);
+  assert.ok(text.indexOf(minimal[0]) > text.findIndex((f) => f.id === "last-chance"), "after the originals");
+  for (const f of minimal) {
+    const plain = buildFormat(f, brief, []);
+    const v = buildWithVoice(f, brief, { ...VO, insight: { pace: "fast", mood: "energetic", stressedWords: [] } as any }, []).scenes;
+    for (const s of [...plain, ...v]) {
+      assert.ok(!s.effects?.length, `${f.id}: no effects`);
+      assert.ok(["solid", "gradient", "grid", "dots", undefined].includes(s.background), `${f.id}: quiet background ${s.background}`);
+      assert.ok(["cut", "fade", "zoom", undefined].includes(s.transition), `${f.id}: soft transition ${s.transition}`);
+    }
+  }
+});
