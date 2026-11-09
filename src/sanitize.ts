@@ -2,6 +2,7 @@
 // an opened project file, an older saved version). Whatever comes in, what comes out is
 // something the renderer can draw without throwing.
 import type { Brand, Project, Scene, Stat, Aspect, Direction } from "./types";
+import { ICON_NAME, cleanIcon } from "./mograph/icons";
 import { TEMPLATES, TRANSITIONS, BACKGROUNDS, MOTIONS, PACES, GRADES, EFFECTS } from "./types";
 import { STYLE_PRESETS } from "./presets";
 import { LOOKS } from "./engine/fx";
@@ -93,6 +94,7 @@ export function sanitizeScene(input: unknown, keepId?: string): Scene {
     backdrop: Array.isArray(s.backdrop) ? list(s.backdrop, 8, ref) : undefined,
     font: ((f) => (f && /^[\w .'-]+$/.test(f) ? f : undefined))(str(s.font, 60)),
     notes: str(s.notes, 400),
+    icons: ((v) => (Array.isArray(v) ? (v.filter((x) => typeof x === "string" && ICON_NAME.test(x)).slice(0, 8) as string[]) : undefined))(s.icons),
     shot: ((v: any) => (v && typeof v === "object" && typeof v.query === "string" ? { type: String(v.type ?? "medium").slice(0, 20), query: v.query.slice(0, 80) } : undefined))(s.shot),
   };
   for (const k of Object.keys(scene) as (keyof Scene)[]) if (scene[k] === undefined) delete scene[k];
@@ -117,6 +119,17 @@ export function sanitizeBrand(input: unknown): Partial<Brand> & { style?: string
   return out;
 }
 
+/** The project's icon drawings: valid names and specs only, at most 120. */
+function cleanIcons(v: unknown): Project["icons"] {
+  if (!v || typeof v !== "object") return undefined;
+  const out: NonNullable<Project["icons"]> = {};
+  for (const [k, spec] of Object.entries(v as Record<string, unknown>).slice(0, 120)) {
+    const c = ICON_NAME.test(k) ? cleanIcon(spec) : undefined;
+    if (c) out[k] = c;
+  }
+  return out;
+}
+
 /** Clean a whole project (saved copy, opened file). `fallback` supplies anything missing. */
 export function sanitizeProject(input: unknown, fallback: Project): Project {
   const p = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
@@ -137,6 +150,7 @@ export function sanitizeProject(input: unknown, fallback: Project): Project {
     scenes: scenes.length ? scenes : fallback.scenes,
     audio: undefined,
     music: undefined,
+    ...((icons) => (icons && Object.keys(icons).length ? { icons } : {}))(cleanIcons(p.icons)),
   };
 }
 

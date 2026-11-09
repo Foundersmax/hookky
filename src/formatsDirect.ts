@@ -14,6 +14,79 @@ import { castOne, timingFor } from "./footage/cast";
 import { preferLicensed } from "./footage/license";
 import { queriesFor, type Shot, type ShotType } from "./footage/plan";
 import { clock } from "./clock";
+import { planMotion, motionScenes, pseudoVoice, type MotionBeat } from "./mograph/plan";
+import { builtinIcon } from "./mograph/ideas";
+import { cleanIcon, type IconSpec } from "./mograph/icons";
+
+/**
+ * A motion-graphics edit: the studio's beat plan, Claude's motion script (it can search the web to
+ * understand the product), then each icon idea found in the style's kit. Falls back step by step.
+ */
+async function motionEdit(f: Format, brief: ReturnType<typeof fill>, audio: AudioTrack | undefined, withClaude: boolean, step: (s: string) => void, notes: string[]) {
+  const st = f.motion!;
+  const voice = audio ? { duration: audio.duration, pauses: audio.pauses, words: audio.words, insight: audio.insight } : pseudoVoice(brief);
+  step("Planning a beat per line");
+  let beats: MotionBeat[] = planMotion(voice, brief);
+  let searched = 0;
+  if (withClaude) {
+    step("Claude is designing the motion script");
+    try {
+      const r = await fetch("/api/mograph/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          draft: beats.map((b) => ({ s: b.s, e: b.e, line: b.line, template: b.template, ideas: b.ideas })),
+          brief,
+          style: { name: st.name, kit: st.kit, blurb: st.blurb },
+          delivery: audio?.insight ? { mood: audio.insight.mood, pace: audio.insight.pace, stressed: audio.insight.stressedWords?.slice(0, 12) } : undefined,
+        }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && Array.isArray(j.beats) && j.beats.length === beats.length) {
+        // The timing and the words said are ours; the design is Claude's. The end card stays the end card.
+        beats = beats.map((b, i) => {
+          const c = j.beats[i] ?? {};
+          const last = i === beats.length - 1;
+          return { ...b, ...c, s: b.s, e: b.e, line: b.line, template: last ? b.template : c.template ?? b.template, ideas: c.ideas?.length ? c.ideas : b.ideas };
+        });
+        if (j.searched) searched = j.searched;
+      } else notes.push(`Claude unavailable (${String(j.error ?? r.status).replace(/\.$/, "")}), used the studio's motion plan`);
+    } catch (e: any) {
+      notes.push(`couldn't reach Claude (${e.message})`);
+    }
+  }
+
+  // Icons: every idea looked up in the kit (local kit first, then Iconify's web index).
+  const label = st.kit === "ph" ? "Phosphor" : st.kit[0].toUpperCase() + st.kit.slice(1);
+  step(`Searching ${label} for ${beats.reduce((a, b) => a + b.ideas.length, 0)} icons`);
+  const specs: Record<string, IconSpec> = {};
+  let found: (string | null)[][] = [];
+  try {
+    const all = [...new Set(beats.flatMap((b) => b.ideas))].slice(0, 60);
+    const r = await fetch("/api/icons/resolve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ideas: all, kit: st.kit }) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error ?? r.status);
+    const byIdea = new Map<string, string>();
+    for (const x of j.icons ?? []) {
+      const spec = cleanIcon(x.spec);
+      if (spec && x.name) (specs[x.name] = spec), byIdea.set(x.query, x.name);
+    }
+    found = beats.map((b) => b.ideas.map((i) => byIdea.get(i) ?? null));
+  } catch (e: any) {
+    notes.push(`icon search unavailable (${e.message}), used built-in icons`);
+  }
+  const used = new Set<string>();
+  const icons = beats.map((b, i) => b.ideas.map((idea, k) => {
+    const n = found[i]?.[k] ?? builtinIcon(idea, used) ?? null;
+    if (n) used.add(n);
+    return n;
+  }));
+  step("Animating");
+  const n = Object.keys(specs).length;
+  if (n) notes.push(`${n} ${label} icons`);
+  if (searched) notes.push(`Claude researched the product (${searched} web search${searched > 1 ? "es" : ""})`);
+  return { scenes: motionScenes(beats, icons, st, brief), icons: specs };
+}
 
 export interface CreateInput {
   format: Format;
@@ -73,12 +146,14 @@ export async function createFormat(input: CreateInput): Promise<string> {
   step(audio ? "Cutting to the voice-over" : "Building the draft");
   let scenes: Omit<Scene, "id">[];
   let captions = false;
-  if (audio) ({ scenes, captions } = buildWithVoice(f, brief, { duration: audio.duration, pauses: audio.pauses, words: audio.words, insight: audio.insight }, images));
+  let icons: Record<string, IconSpec> | undefined;
+  if (f.section === "mograph" && f.motion) ({ scenes, icons } = await motionEdit(f, brief, audio, input.withClaude, step, notes));
+  else if (audio) ({ scenes, captions } = buildWithVoice(f, brief, { duration: audio.duration, pauses: audio.pauses, words: audio.words, insight: audio.insight }, images));
   else scenes = buildFormat(f, brief, images);
   let title = `${brief.product} · ${f.name}`;
 
   // 4. Claude's pass (copy and choices; the timing stays when there's a voice-over).
-  if (input.withClaude && f.section !== "footage") {
+  if (input.withClaude && f.section !== "footage" && f.section !== "mograph") {
     step("Claude is writing");
     try {
       const r = await fetch("/api/format", {
@@ -116,7 +191,7 @@ export async function createFormat(input: CreateInput): Promise<string> {
         notes.push(`the music's drop lands on the reveal at ${at.toFixed(1)}s`);
       }
     }
-    if (!audio && music.beats?.length) scenes = snapToBeats(scenes, beatsInCut({ ...music, start: musicStart }, total + 1));
+    if (!audio && music.beats?.length && f.section !== "mograph") scenes = snapToBeats(scenes, beatsInCut({ ...music, start: musicStart }, total + 1));
   }
 
   applyStoryboard({ title, aspect: input.aspect, ...(input.keepBrand ? {} : { style: f.style }), fit_to_voiceover: false, scenes: scenes as never });
@@ -125,6 +200,7 @@ export async function createFormat(input: CreateInput): Promise<string> {
     project: {
       ...st.project,
       captions,
+      ...(icons && { icons: { ...st.project.icons, ...icons } }),
       brand: input.keepBrand ? st.project.brand : { ...st.project.brand, name: brief.product },
       // The mix from the analysis: music about 12 dB under the voice, dipping more under a slow read.
       music: music

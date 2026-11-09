@@ -27,7 +27,7 @@ const VOICES: { id: string; note: string }[] = [
   { id: "verse", note: "expressive" },
 ];
 const TONES = ["energetic", "warm", "calm", "dramatic", "bold"];
-const SECTION_ICON: Record<Section, string> = { text: "command", mixed: "image", footage: "clip" };
+const SECTION_ICON: Record<Section, string> = { text: "command", mixed: "image", footage: "clip", mograph: "sparkle" };
 
 function loadBrief(p: Project): Partial<Brief> {
   try {
@@ -272,7 +272,7 @@ export function FormatsSheet() {
         <div className="sheet-head">
           <div>
             <h3 id="formats-title">Creative formats</h3>
-            <p className="sound-sub">{FORMATS.length} attention structures in three kinds. Add a voice-over to any of them and the cut follows it, word for word.</p>
+            <p className="sound-sub">{FORMATS.length} attention structures in four kinds. Add a voice-over to any of them and the cut follows it, word for word.</p>
           </div>
           <button className="btn icon ghost" onClick={close} aria-label="Close" disabled={!!busy}>
             <Icon name="minus" />
@@ -391,7 +391,14 @@ export function FormatsSheet() {
               </div>
             )}
 
-            {pick.section !== "text" && (
+            {pick.section === "mograph" && pick.motion && (
+              <div className="mograph-note">
+                <b>{pick.motion.kit === "ph" ? "Phosphor Light" : pick.motion.kit[0].toUpperCase() + pick.motion.kit.slice(1)} icon kit</b>
+                <span>{claudeOk ? "Claude reads each line of the voice-over, researches the product on the web if the brief is thin, and designs a beat per line: icon, ring, flow or bars. Each idea is then found in the kit and drawn on as it's said." : "A beat per line of the voice-over: icon, ring, flow or bars, each idea found in the kit and drawn on as it's said."}</span>
+              </div>
+            )}
+
+            {pick.section !== "text" && pick.section !== "mograph" && (
               <label className="toggle">
                 <input type="checkbox" checked={useStock} onChange={(e) => setUseStock(e.target.checked)} />
                 {imgs.length ? `Use my ${imgs.length} image${imgs.length > 1 ? "s" : ""}, fill the rest with stock footage` : "Cast stock footage for every shot"}

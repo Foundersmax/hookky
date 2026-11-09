@@ -64,6 +64,12 @@ const STARTER_CONTENT: Partial<Record<Scene["template"], Partial<Scene>>> = {
   "flip-words": { headline: "Bold *moves* only" },
   typewriter: { headline: "Write it. Ship it. *Win*." },
   "echo-stack": { headline: "*Louder*" },
+  "icon-hero": { icons: ["lucide:sparkles"], headline: "Made *simple*" },
+  "icon-list": { headline: "Why it *works*", items: ["Fast", "Secure", "Simple"], icons: ["lucide:zap", "lucide:shield-check", "lucide:check-circle"] },
+  "metric-ring": { stat: { value: 87, suffix: "%", label: "of users feel the difference" }, icons: ["lucide:heart-pulse"] },
+  "process-flow": { headline: "How it *works*", items: ["Sign up", "Connect", "Launch"], icons: ["lucide:user", "lucide:link", "lucide:rocket"] },
+  "bar-compare": { headline: "Battery *life*", items: ["Others | 2 days", "Orbit | 10 days"] },
+  "icon-orbit": { headline: "Everything, *connected*", icons: ["lucide:watch", "lucide:smartphone", "lucide:heart-pulse", "lucide:moon", "lucide:activity", "lucide:music"] },
 };
 /** Starting lengths that give each template's starter copy time to read. */
 const START_DURATION: Partial<Record<Scene["template"], number>> = {
@@ -75,6 +81,7 @@ const TEMPLATE_NAMES: Record<string, string> = {
   "device-mockup": "Device mockup", countdown: "Countdown", "price-card": "Price card", testimonials: "Testimonials", "before-after": "Before / after", "logo-reveal": "Logo reveal", audiogram: "Audiogram",
   "text-mask": "Text mask", chat: "Chat thread", notification: "Notifications", "pov-caption": "POV caption", versus: "Versus", rating: "Star rating", spotlight: "Spotlight", "word-stack": "Word stack",
   "word-slam": "Word slam", scramble: "Scramble", "zoom-through": "Zoom through", "letter-wave": "Letter wave", "outline-fill": "Outline fill", "flip-words": "Flip words", typewriter: "Typewriter", "echo-stack": "Echo stack",
+  "icon-hero": "Icon hero", "icon-list": "Icon list", "metric-ring": "Metric ring", "process-flow": "Process flow", "bar-compare": "Bar compare", "icon-orbit": "Icon orbit",
 };
 
 export function CommandPalette({ host }: { host: PaletteHost }) {

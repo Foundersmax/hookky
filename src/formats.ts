@@ -6,21 +6,11 @@ import type { Aspect, Effect, Grade, Scene, TransitionId } from "./types";
 import { voiceSlots, clip as clipWords, type VoiceIn } from "./soundTemplates";
 import { LOOKS_PROD, assemble, planShots, queriesFor, type ProdLook, type Shot, type ShotType } from "./footage/plan";
 import type { VoiceInsight, MusicInsight } from "./audio/insight";
+import { MOTION_STYLES, planMotion, motionScenes, pseudoVoice, type MotionStyle } from "./mograph/plan";
+import { builtinIcon } from "./mograph/ideas";
 
-export interface Brief {
-  /** product or brand name */
-  product: string;
-  /** what it is / does, one line */
-  what: string;
-  /** who it's for */
-  audience: string;
-  /** up to 4 benefits */
-  benefits: string[];
-  /** the offer, if any ("30% off this week") */
-  offer: string;
-  cta: string;
-  url: string;
-}
+import type { Brief } from "./copy";
+export type { Brief } from "./copy";
 
 export const CATEGORIES = ["Social hooks", "E-commerce", "Apps & SaaS", "Brand & story", "Local & events", "Promos & offers"] as const;
 
@@ -29,6 +19,7 @@ export const SECTIONS = [
   { id: "text", label: "Text animations", note: "Kinetic type, no footage needed" },
   { id: "mixed", label: "Footage + text", note: "Your images and clips, with animated copy" },
   { id: "footage", label: "Footage", note: "Image and video edits; words only where they count" },
+  { id: "mograph", label: "Motion graphics", note: "Line icons that draw on, rings, flows; one kit" },
 ] as const;
 export type Section = (typeof SECTIONS)[number]["id"];
 export type Category = (typeof CATEGORIES)[number];
@@ -51,54 +42,13 @@ export interface Format {
   swatch: [string, string];
   /** footage formats: the production look their clips are graded with */
   look?: ProdLook;
+  /** motion-graphics formats: the kit, palette, ground and pace */
+  motion?: MotionStyle;
 }
 
 // ---------------------------------------------------------------- copy helpers
-const STOP = new Set("a an the and or for to of in on with your you our we is are it its that this from by at as".split(" "));
-/** Mark the strongest word with *asterisks* (a number, else the longest meaningful word). */
-export function em(text: string): string {
-  if (!text || text.includes("*")) return text;
-  const ws = text.split(" ");
-  let best = -1, sc = 0;
-  ws.forEach((w, i) => {
-    const t = w.replace(/[^\p{L}\p{N}%$€£]/gu, "");
-    if (!t || STOP.has(t.toLowerCase())) return;
-    const s = /\d/.test(t) ? 99 : t.length + (i === ws.length - 1 ? 1 : 0);
-    if (s > sc) (sc = s), (best = i);
-  });
-  if (best < 0) return text;
-  const m = ws[best].match(/^([^\p{L}\p{N}$€£]*)(.*?)([.,!?;:]*)$/u)!;
-  ws[best] = `${m[1]}*${m[2]}*${m[3]}`;
-  return ws.join(" ");
-}
-/** Highlight the word the speaker actually stressed, if it's in the line; else the strongest word. */
-export function emSpoken(text: string, stressed?: string[]): string {
-  if (!text || text.includes("*") || !stressed?.length) return em(text);
-  const ws = text.split(" ");
-  const i = ws.findIndex((w) => stressed.includes(w.toLowerCase().replace(/[^\p{L}\p{N}']/gu, "")));
-  if (i < 0) return em(text);
-  const m = ws[i].match(/^([^\p{L}\p{N}$€£]*)(.*?)([.,!?;:]*)$/u)!;
-  ws[i] = `${m[1]}*${m[2]}*${m[3]}`;
-  return ws.join(" ");
-}
-const words = (s: string, n: number) => s.split(/\s+/).filter(Boolean).slice(0, n).join(" ");
-const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-
-/** Fill the gaps in a brief so every format has something good to say. */
-export function fill(raw: Partial<Brief>): Brief {
-  const product = raw.product?.trim() || "Orbit";
-  const what = raw.what?.trim() || "the smartwatch that keeps up with you";
-  const benefits = (raw.benefits ?? []).map((b) => b.trim()).filter(Boolean);
-  return {
-    product,
-    what,
-    audience: raw.audience?.trim() || "people on the move",
-    benefits: benefits.length ? benefits.slice(0, 4) : ["Set up in minutes", "Built to last", "Loved by thousands"],
-    offer: raw.offer?.trim() || "",
-    cta: raw.cta?.trim() || (raw.offer?.trim() ? "Claim the offer" : "Get yours"),
-    url: raw.url?.trim() || "",
-  };
-}
+import { em, emSpoken, fill, words, cap, STOP_WORDS as STOP } from "./copy";
+export { em, emSpoken, fill } from "./copy";
 /** "30% off this week" → { value: 30, suffix: "%", label: "off this week" }. */
 export function offerStat(offer: string): Scene["stat"] | undefined {
   const pct = offer.match(/(\d{1,3})\s?%/);
@@ -525,6 +475,27 @@ FORMATS.push(...FOOTAGE);
 // The originals (Pattern Interrupt first) lead the text section; the minimal set follows them.
 FORMATS.splice(FORMATS.map((f) => f.section).lastIndexOf("text") + 1, 0, ...MINIMAL);
 
+// ---------------------------------------------------------------- motion graphics
+/** A motion-graphics edit from the built-in icons (previews, offline); the studio swaps in the kit's icons. */
+export function motionBuild(st: MotionStyle, raw: Partial<Brief>, voice: VoiceIn & { insight?: VoiceInsight }): Beat[] {
+  const beats = planMotion(voice, raw);
+  const used = new Set<string>();
+  const icons = beats.map((bt) => bt.ideas.map((idea) => {
+    const k = builtinIcon(idea, used);
+    if (k) used.add(k);
+    return k ?? null;
+  }));
+  return motionScenes(beats, icons, st, raw);
+}
+const MOTION_CATEGORY: Record<string, Category> = { "line-explainer": "Apps & SaaS", "clean-product": "Apps & SaaS", "data-story": "Promos & offers", "swiss-mono": "Brand & story", "soft-light": "E-commerce", "vertical-explainer": "Social hooks", "editorial-line": "Brand & story", "terminal-mono": "Apps & SaaS" };
+FORMATS.push(
+  ...MOTION_STYLES.map((st): Format => ({
+    id: `mg-${st.id}`, section: "mograph", name: st.name, category: MOTION_CATEGORY[st.id] ?? "Brand & story", hook: `${st.kit === "ph" ? "Phosphor" : st.kit[0].toUpperCase() + st.kit.slice(1)} icons`, blurb: st.blurb, aspect: st.aspect, style: st.style, swatch: st.swatch, motion: st,
+    beats: "One beat per spoken line: icon hero, icon list, metric ring, process flow, bar compare or icon orbit, chosen by what the line says; end card.",
+    build: (b) => motionBuild(st, b, pseudoVoice(b)),
+  })),
+);
+
 // ---------------------------------------------------------------- voice-over
 /** Templates whose headline can carry the spoken words, and how many words each holds. */
 const CARRY: Partial<Record<Scene["template"], number>> = { "word-slam": 12, scramble: 12, "zoom-through": 12, "letter-wave": 12, "outline-fill": 14, "flip-words": 12, typewriter: 16, "echo-stack": 12, "title-reveal": 6, "kinetic-words": 10, "word-stack": 6, "pov-caption": 10, fullbleed: 6, spotlight: 4, quote: 16, "split-feature": 6, "product-hero": 4, "device-mockup": 5, marquee: 4 };
@@ -537,6 +508,7 @@ const CARRY: Partial<Record<Scene["template"], number>> = { "word-slam": 12, scr
 export function buildWithVoice(f: Format, raw: Partial<Brief>, voice: VoiceIn & { insight?: VoiceInsight }, images: string[]): { scenes: Beat[]; captions: boolean } {
   const b = fill(raw);
   const hasWords = !!voice.words?.length;
+  if (f.section === "mograph" && f.motion) return { scenes: motionBuild(f.motion, b, voice), captions: false };
   if (f.section === "footage") {
     const shots: Shot[] = planShots(voice, briefText(b), { text: "clean", brand: b.product, min: 2, max: 3.8 }).map((sh, i) => ({ ...sh, clip: img(images, i) }));
     const L = LOOKS_PROD[f.look ?? "cinematic"];

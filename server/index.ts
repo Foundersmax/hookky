@@ -8,6 +8,9 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { claudeShotList, claudePickClip } from "./shots";
 import { claudeWriteFormat, claudeWriteScript, claudeListen } from "./formats";
 import { speak, voiceAvailable } from "./voice";
+import { resolveIcons } from "./icons";
+import { claudeMotionScript } from "./mograph";
+import { KITS } from "../src/mograph/icons";
 import { licenseFreepikVideo, licensesToday, freepikVideoStatus, probeFreepikVideo } from "./freepikVideo";
 import { runAgentTurn, claudeConfigured, resetConversation, claudeCheck, probeClaude } from "./agent";
 import { listConnectors, searchVisuals, searchVideos, importFromUrl, magnificUpscale, reportStockUse, type Orientation } from "./connectors";
@@ -153,6 +156,32 @@ app.post("/api/listen", async (req, res) => {
     }
     const b = req.body ?? {};
     res.json(await claudeListen({ transcript: String(b.transcript ?? ""), voice: b.voice, music: b.music, formats: b.formats ?? [] }));
+  } catch (e: any) {
+    res.status(503).json({ error: e?.message ?? String(e) });
+  }
+});
+
+// Icons for a motion-graphics script: one kit, an icon per idea (Iconify web search, then local kits).
+app.post("/api/icons/resolve", async (req, res) => {
+  try {
+    const b = req.body ?? {};
+    const kit = KITS.some((k) => k.id === b.kit) ? b.kit : "lucide";
+    const ideas = (Array.isArray(b.ideas) ? b.ideas : []).map((x: unknown) => String(x ?? "").slice(0, 60)).slice(0, 40);
+    res.json({ kit, icons: await resolveIcons(ideas, kit) });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message ?? String(e) });
+  }
+});
+
+// Claude designs the motion-graphics script from the studio's draft (one agent turn).
+app.post("/api/mograph/plan", async (req, res) => {
+  try {
+    if (req.user) {
+      const turn = await takeAgentTurn(req.user);
+      if (!turn.ok) return void res.status(429).json({ error: `You've used today's ${turn.limit} agent turns.` });
+    }
+    const b = req.body ?? {};
+    res.json(await claudeMotionScript({ draft: b.draft ?? [], brief: b.brief ?? {}, style: b.style ?? {}, delivery: b.delivery }));
   } catch (e: any) {
     res.status(503).json({ error: e?.message ?? String(e) });
   }

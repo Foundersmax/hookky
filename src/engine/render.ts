@@ -6,6 +6,8 @@ import { hasFx, applyFx } from "./fx";
 import { EXTRA_TEMPLATES } from "./templates2";
 import { TEXT_TEMPLATES } from "./textfx";
 import { EXTRA_BACKGROUNDS } from "./backgrounds";
+import { MOGRAPH_TEMPLATES } from "./mograph";
+import { BUILTIN_ICONS } from "../mograph/builtin";
 
 /** Looks up a drawable by asset ref; `t` is the scene-local time (video clips use it). */
 export type ImageGetter = (ref?: string, t?: number, rate?: number) => HTMLImageElement | undefined;
@@ -35,6 +37,8 @@ export interface G {
   abs: number; // absolute scene start
   img: ImageGetter;
   words?: Word[];
+  /** An icon's drawing by name (the project's own, else the built-in set). */
+  icon: (name?: string) => import("../mograph/icons").IconSpec | undefined;
   /** How loud the soundtrack is at an absolute time, 0–1 (the voice-over, else the music's beats). */
   level: (absT: number) => number;
   E: (x: number) => number;
@@ -237,6 +241,7 @@ export class Renderer {
       img: (ref) => img(ref, clipTimeAt(scene, lt), scene.clipSpeed ?? 1),
       words: p.audio?.words,
       level: levelFor(p),
+      icon: (name) => (name ? p.icons?.[name] ?? BUILTIN_ICONS[name] : undefined),
       E: MOTION[motion]?.E ?? ease.outExpo,
       sp: MOTION[motion]?.sp ?? 0.9,
       ...(record && { hit: (r: HitRegion) => this.hits.push(r) }),
@@ -613,6 +618,7 @@ export type Tpl = (g: G) => void;
 const TEMPLATES: Record<string, Tpl> = {
   ...EXTRA_TEMPLATES,
   ...TEXT_TEMPLATES,
+  ...MOGRAPH_TEMPLATES,
   "title-reveal"(g) {
     const { W, H, pad, ctx, c, u } = g;
     const align = g.scene.align ?? "center";

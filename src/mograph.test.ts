@@ -1,0 +1,63 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { planMotion, numbersIn, listIn, stepsIn, ideasIn, motionScenes, MOTION_STYLES } from "./mograph/plan";
+import { sanitizeScene } from "./sanitize";
+import { lintStoryboard } from "./agent/lint";
+
+function voice(lines: string[]) {
+  const words: { w: string; s: number; e: number }[] = [], pauses: { s: number; e: number }[] = [];
+  let t = 0.3;
+  lines.forEach((l, i) => {
+    for (const w of l.split(" ")) words.push({ w, s: +t.toFixed(2), e: +(t + 0.3).toFixed(2) }), (t += 0.34);
+    if (i < lines.length - 1) pauses.push({ s: +t.toFixed(2), e: +(t + 0.55).toFixed(2) }), (t += 0.55);
+  });
+  return { duration: +(t + 0.3).toFixed(2), pauses, words };
+}
+const brief = { product: "Orbit", what: "a smartwatch that coaches your sleep", audience: "runners", benefits: ["Ten-day battery", "Sleep coaching"], cta: "Pre-order", url: "orbit.watch" };
+
+test("mograph: reading lines — numbers, lists, steps, ideas", () => {
+  assert.deepEqual(numbersIn("87% of runners sleep better").map((n) => [n.value, n.suffix]), [[87, "%"]]);
+  assert.deepEqual(numbersIn("ten days on one charge").map((n) => n.value), [10, 1]);
+  assert.deepEqual(listIn("It's fast, simple and secure."), ["Fast", "Simple", "Secure"]);
+  assert.equal(listIn("The watch that knows you when you sleep at night"), null);
+  assert.deepEqual(stepsIn("First you wear it, then you sleep, finally you wake up rested."), ["You wear it", "You sleep", "You wake up rested"]);
+  assert.ok(ideasIn("Your coffee goes cold every morning").includes("coffee"));
+});
+
+test("mograph: a voice-over becomes a varied motion script, cut in its pauses", () => {
+  const v = voice([
+    "Your mornings feel slow and heavy.",
+    "Meet Orbit, the watch that coaches your sleep.",
+    "It's quiet, light and smart.",
+    "First you wear it, then you sleep, finally you wake up rested.",
+    "Eighty seven percent of runners sleep better in two weeks.",
+    "Ten days on one charge, while others need two.",
+    "Pre-order Orbit today.",
+  ]);
+  const beats = planMotion(v, brief);
+  const t = beats.map((b) => b.template);
+  assert.equal(t[0], "icon-hero");
+  assert.ok(t.includes("icon-orbit"), t.join());
+  assert.ok(t.includes("icon-list"), t.join());
+  assert.ok(t.includes("process-flow"), t.join());
+  assert.ok(t.includes("metric-ring") || t.includes("bar-compare"), t.join());
+  assert.equal(t.at(-1), "cta-end");
+  for (let i = 0; i < beats.length - 1; i++) assert.ok(v.pauses.some((p) => beats[i].e >= p.s - 0.02 && beats[i].e <= p.e + 0.02), `cut ${beats[i].e} in a pause`);
+  for (const b of beats.filter((x) => x.template !== "cta-end")) assert.ok(b.ideas.length || b.template === "bar-compare", `${b.template} has icon ideas`);
+  const metric = beats.find((b) => b.template === "metric-ring");
+  if (metric) assert.ok(metric.stat!.value > 0);
+});
+
+test("mograph: scenes come out clean, as long as the voice-over, and pass the notes", () => {
+  const v = voice(["Your mornings feel slow.", "Meet Orbit, the watch that coaches your sleep.", "It's quiet, light and smart.", "Pre-order Orbit today."]);
+  const beats = planMotion(v, brief);
+  const icons = beats.map((b) => b.ideas.map((_, k) => (k % 2 ? "lucide:moon" : "lucide:watch")));
+  for (const st of MOTION_STYLES) {
+    const scenes = motionScenes(beats, icons, st, brief).map((s) => sanitizeScene(s));
+    assert.ok(Math.abs(scenes.reduce((a, s) => a + s.duration, 0) - v.duration) < 0.03);
+    assert.ok(scenes.filter((s) => s.template !== "cta-end").every((s) => s.background === st.background && s.motion === st.motion));
+    assert.ok(scenes.some((s) => s.icons?.length));
+    const notes = lintStoryboard({ scenes, brand: { bg: "#000", fg: "#fff", accent: "#C8FF3D", name: "Orbit" }, audio: { duration: v.duration, pauses: v.pauses, hasWords: true } });
+    assert.deepEqual(notes.filter((n) => n.level === "warn").map((n) => n.message), [], st.id);
+  }
+});

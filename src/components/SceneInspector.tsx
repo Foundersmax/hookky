@@ -52,6 +52,12 @@ const USES: Record<string, (keyof Scene)[]> = {
   "flip-words": ["headline"],
   typewriter: ["headline"],
   "echo-stack": ["headline"],
+  "icon-hero": ["kicker", "headline", "subline"],
+  "icon-list": ["headline", "items"],
+  "metric-ring": ["headline", "stat"],
+  "process-flow": ["headline", "items"],
+  "bar-compare": ["headline", "items"],
+  "icon-orbit": ["kicker", "headline", "subline"],
 };
 const ITEMS_LABEL: Record<string, string> = {
   testimonials: "Quotes, one per line: quote — name, role",
@@ -60,6 +66,9 @@ const ITEMS_LABEL: Record<string, string> = {
   chat: "Messages, one per line (> for your side)",
   notification: "Notifications: App: message",
   versus: "Rows: feature (or feature | them | us)",
+  "icon-list": "Ideas, one per line (each gets an icon)",
+  "process-flow": "Steps, one per line",
+  "bar-compare": "Bars: label | value, one per line",
 };
 
 export function SceneInspector() {

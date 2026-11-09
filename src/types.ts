@@ -39,6 +39,12 @@ export const TEMPLATES = [
   "flip-words",
   "typewriter",
   "echo-stack",
+  "icon-hero",
+  "icon-list",
+  "metric-ring",
+  "process-flow",
+  "bar-compare",
+  "icon-orbit",
 ] as const;
 export type TemplateId = (typeof TEMPLATES)[number];
 
@@ -105,6 +111,8 @@ export interface Scene {
   font?: string;
   /** Banners shown full-bleed behind the scene's text, crossfading in turn (asset refs, up to 8). */
   backdrop?: string[];
+  /** Icons for motion graphics ("lucide:moon"), drawn from the project's icon kit. */
+  icons?: string[];
   /** How this shot was cast by the footage director: its kind and what was searched. */
   shot?: { type: string; query: string };
   notes?: string;
@@ -191,6 +199,8 @@ export interface Project {
   grain: boolean;
   audio?: AudioTrack;
   music?: MusicTrack;
+  /** Icon drawings the scenes use, kept with the project so it renders and exports offline. */
+  icons?: Record<string, import("./mograph/icons").IconSpec>;
 }
 
 export interface Asset {
