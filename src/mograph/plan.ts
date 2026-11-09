@@ -128,7 +128,8 @@ const fmtNum = (n: { value: number; prefix: string; suffix: string }) => `${n.pr
  */
 export function planMotion(v: VoiceIn & { insight?: { stressedWords?: string[] } }, raw: Partial<Brief>, opts: { prefer?: MotionStyle["prefer"] } = {}): MotionBeat[] {
   const b = fill(raw);
-  const slots = voiceSlots(v, 2, 4.2);
+  // Motion beats can be short (an icon reads in ~1.4 s); a longer minimum folds lines into the end card.
+  const slots = voiceSlots(v, 1.4, 4.2);
   const stressed = v.insight?.stressedWords;
   const named = (t: string) => new RegExp(`\\b${b.product.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(t);
   let orbitUsed = false;
@@ -147,7 +148,7 @@ export function planMotion(v: VoiceIn & { insight?: { stressedWords?: string[] }
       return { ...base, template: "route-map", headline: emSpoken(shortWords(line, 5), stressed), items: [places[0] ?? "Pickup", places[1] ?? "Your door"], ...(mins && { stat: { value: mins.value, suffix: /hour/.test(mins.suffix) ? "h" : "min", label: "Arriving in" } }), ideas: [vehicle] };
     }
     // The product's UI: a dashboard tour, a live panel, or the dashboard itself.
-    const short = (x: string) => cap(shortWords(x, 3));
+    const short = (x: string) => cap(shortWords(x, 4));
     const feats = b.benefits.slice(0, 4).map(short);
     const ui = (template: "dashboard" | "dashboard-focus" | "live-metrics"): MotionBeat => {
       const n = nums[0];
@@ -228,7 +229,7 @@ function varied(beats: MotionBeat[]): MotionBeat[] {
   return beats.map((bt, i) => {
     if (i >= 2 && bt.template === "icon-hero" && beats[i - 1].template === "icon-hero" && beats[i - 2].template === "icon-hero") {
       const items = ideasIn(bt.line).slice(0, 3).map(cap);
-      if (items.length >= 2) return { ...bt, template: "icon-list", headline: undefined, items, ideas: items };
+      if (items.length >= 3) return { ...bt, template: "icon-list", headline: undefined, items, ideas: items };
     }
     return bt;
   });
@@ -242,7 +243,11 @@ export function motionScenes(beats: MotionBeat[], icons: (string | null)[][], st
   const r2 = (x: number) => Math.round(x * 100) / 100;
   return beats.map((bt, i): Omit<Scene, "id"> => {
     const duration = +(r2(bt.e) - r2(bt.s)).toFixed(2);
-    const names = (icons[i] ?? []).filter((n): n is string => !!n);
+    // Lists and flows pair icons with items by position; only the orbit can drop a repeat.
+    const found = icons[i] ?? [];
+    let names = bt.template === "icon-orbit" ? [...new Set(found.filter((n): n is string => !!n))] : found.some(Boolean) ? found.map((n) => n ?? "lucide:check-circle") : [];
+    // An icon template never goes out empty: the hero, orbit and metric fall back to a neutral mark.
+    if (!names.length && (bt.template === "icon-hero" || bt.template === "icon-orbit")) names = ["lucide:sparkles"];
     const common = { duration, background: st.background, motion: st.motion, transition: i === 0 ? ("cut" as const) : ("fade" as const) };
     if (bt.template === "cta-end") return { ...common, template: "cta-end", headline: bt.headline ?? b.product, cta: b.cta, url: b.url || undefined };
     return {
@@ -260,7 +265,8 @@ export function motionScenes(beats: MotionBeat[], icons: (string | null)[][], st
 /** Without a voice-over: a narration from the brief, timed like a measured read (for previews and drafts). */
 export function pseudoVoice(raw: Partial<Brief>): VoiceIn {
   const b = fill(raw);
-  const lines = [`Meet ${b.product}.`, `${cap(b.what)}.`, ...b.benefits.slice(0, 3).map((x) => `${cap(clean(x))}.`), ...(b.offer ? [`${cap(clean(b.offer))}.`] : []), `${cap(b.cta)}${b.url ? ` at ${b.url}` : ""}.`];
+  // hook first, then the reveal, like a real read
+  const lines = [`${cap(b.what)}.`, `Meet ${b.product}.`, ...b.benefits.slice(0, 3).map((x) => `${cap(clean(x))}.`), ...(b.offer ? [`${cap(clean(b.offer))}.`] : []), `${cap(b.cta)}${b.url ? ` at ${b.url}` : ""}.`];
   const words: Word[] = [], pauses: { s: number; e: number }[] = [];
   let t = 0.3;
   lines.forEach((l, i) => {

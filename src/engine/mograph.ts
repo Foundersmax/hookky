@@ -107,6 +107,15 @@ export const splitItem = (it: string) => {
   return { label, value };
 };
 
+/** A headline size whose lines (up to two, plus a kicker) fit between y and the bottom margin. */
+function fitBelow(g: G, y: number, size: number) {
+  const { ctx, W, H, pad, u, scene } = g;
+  if (!scene.headline) return size;
+  const room = H - pad * 0.6 - y - (scene.kicker ? 50 * u : 0) - (scene.subline ? 60 * u : 0);
+  const lines = layoutText(ctx, scene.headline, F(g, size), W - pad * 2, 2).lines.length;
+  return Math.max(24 * u, Math.min(size, room / (lines * 1.08)));
+}
+
 // ---------------------------------------------------------------- templates
 export const MOGRAPH_TEMPLATES: Record<string, Tpl> = {
   /** One icon draws on inside a ring that sweeps round; the line lands beneath. */
@@ -146,7 +155,7 @@ export const MOGRAPH_TEMPLATES: Record<string, Tpl> = {
     const p = win(g.t, Math.min(t0, 0.4), 1.2 * g.sp);
     const float = Math.sin(g.t * 1.4) * 4 * u;
     drawIcon(ctx, g.icon(scene.icons?.[0]), cx, cy + float, size, p, c.fg, weightFor(g, size));
-    if (scene.headline || scene.kicker) textStack(g, { x: W / 2, y: cy + R + 70 * u, maxW: W - pad * 2, align: "center", size: headlineSize(g, 0.52), delay: 0.45, maxLines: 2 });
+    if (scene.headline || scene.kicker) textStack(g, { x: W / 2, y: cy + R + 70 * u, maxW: W - pad * 2, align: "center", size: fitBelow(g, cy + R + 70 * u, headlineSize(g, 0.52)), delay: 0.45, maxLines: 2 });
   },
 
   /** Two to four ideas, each an icon that draws on as it's said, joined by a hairline. */
@@ -203,8 +212,8 @@ export const MOGRAPH_TEMPLATES: Record<string, Tpl> = {
       drawIcon(ctx, g.icon(scene.icons?.[i]), x, y, iconSize, p, c.fg, weightFor(g, iconSize));
       const f = B(g, (vertical ? 40 : 34) * u, 600);
       const lp = ease.outCubic(win(g.t, cues[i] + 0.25, 0.5));
-      if (vertical) drawLabel(ctx, label, f, x + ring + 36 * u + (1 - lp) * 20 * u, y, "left", c.fg, lp);
-      else drawLabel(ctx, label, f, x, y + ring + 56 * u + (1 - lp) * 16 * u, "center", c.fg, lp);
+      if (vertical) drawLabel(ctx, label, f, x + ring + 36 * u + (1 - lp) * 20 * u, y, "left", c.fg, lp, W - pad - (x + ring + 36 * u));
+      else drawLabel(ctx, label, f, x, y + ring + 56 * u + (1 - lp) * 16 * u, "center", c.fg, lp, ((W - pad * 2) / n) * 0.92);
       g.hit?.({ field: `items.${i}`, x: vertical ? x + ring + 36 * u : x - ring * 1.5, y: vertical ? y - 30 * u : y + ring + 26 * u, w: vertical ? W - x - ring - pad : ring * 3, h: 60 * u, size: 34 * u, align: vertical ? "left" : "center", lines: 1 });
     });
   },
@@ -246,7 +255,7 @@ export const MOGRAPH_TEMPLATES: Record<string, Tpl> = {
     const v = st.value * ease.outCubic(win(g.t, Math.min(t0, 0.6), 1.5 * g.sp));
     const txt = `${st.prefix ?? ""}${v.toFixed(st.decimals ?? 0)}${st.suffix ?? ""}`;
     const size = Math.min(R * 0.62, ((R * 1.5) / Math.max(1, measure(ctx, txt, F(g, 100)))) * 100);
-    drawLabel(ctx, txt, F(g, size), cx, cy + (ic ? R * 0.12 : 0), "center", c.fg, win(g.t, 0.1, 0.4));
+    drawLabel(ctx, txt, F(g, size), cx, cy + (ic ? R * 0.12 : 0), "center", c.fg, win(g.t, 0.1, 0.4), R * 1.6);
     g.hit?.({ field: "stat.value", x: cx - R * 0.7, y: cy - size * 0.5, w: R * 1.4, h: size, size, align: "center", lines: 1 });
     let y = cy + R + 90 * u;
     if (st.label) {
@@ -332,10 +341,10 @@ export const MOGRAPH_TEMPLATES: Record<string, Tpl> = {
       const num = String(i + 1).padStart(2, "0");
       if (vertical) {
         drawLabel(ctx, num, K(g, 20 * u), x + r + 34 * u, y - 26 * u, "left", c.accent, lp);
-        drawLabel(ctx, label, B(g, 38 * u, 600), x + r + 34 * u, y + 16 * u, "left", c.fg, Math.max(0.35, lp));
+        drawLabel(ctx, label, B(g, 38 * u, 600), x + r + 34 * u, y + 16 * u, "left", c.fg, Math.max(0.35, lp), W - pad - (x + r + 34 * u));
       } else {
         drawLabel(ctx, num, K(g, 18 * u), x, y + r + 40 * u, "center", c.accent, lp);
-        drawLabel(ctx, label, B(g, 32 * u, 600), x, y + r + 84 * u, "center", c.fg, Math.max(0.35, lp));
+        drawLabel(ctx, label, B(g, 32 * u, 600), x, y + r + 84 * u, "center", c.fg, Math.max(0.35, lp), ((W - pad * 2) / n) * 0.92);
       }
       g.hit?.({ field: `items.${i}`, x: vertical ? x + r + 34 * u : x - r * 2, y: vertical ? y - 10 * u : y + r + 60 * u, w: vertical ? W - x - r - pad : r * 4, h: 50 * u, size: 32 * u, align: vertical ? "left" : "center", lines: 1 });
     });
@@ -368,7 +377,7 @@ export const MOGRAPH_TEMPLATES: Record<string, Tpl> = {
       const y = top + i * rowH;
       const p = ease.outCubic(win(g.t, cues[i], 0.9 * g.sp));
       const isBest = i === best;
-      drawLabel(ctx, r.label, B(g, (g.portrait ? 40 : 34) * u, 600), x0, y + rowH * 0.2, "left", isBest ? c.fg : rgba(c.fg, 0.7), win(g.t, cues[i] - 0.1, 0.4));
+      drawLabel(ctx, r.label, B(g, (g.portrait ? 40 : 34) * u, 600), x0, y + rowH * 0.2, "left", isBest ? c.fg : rgba(c.fg, 0.7), win(g.t, cues[i] - 0.1, 0.4), W - pad - x0);
       g.hit?.({ field: `items.${i}`, x: x0, y, w: barMax, h: rowH * 0.4, size: 28 * u, align: "left", lines: 1 });
       if (hasIcons) drawIcon(ctx, g.icon(scene.icons?.[i]), pad + iconW / 2, y + rowH * 0.55, iconW, win(g.t, cues[i], 0.8), isBest ? c.accent : rgba(c.fg, 0.6), weightFor(g, iconW) * 0.8);
       const bh = rowH * 0.26, by = y + rowH * 0.42;
@@ -383,7 +392,7 @@ export const MOGRAPH_TEMPLATES: Record<string, Tpl> = {
         ctx.roundRect(x0, by, w, bh, bh / 2);
         ctx.fill();
         const suffix = (r.value ?? "").replace(/^[\d.,]+/, "");
-        drawLabel(ctx, `${(vals[i] * p).toFixed(Number.isInteger(vals[i]) ? 0 : 1)}${suffix}`, F(g, (g.portrait ? 52 : 46) * u), x0 + w + 20 * u, by + bh / 2, "left", isBest ? c.accent : rgba(c.fg, 0.75), p);
+        drawLabel(ctx, `${(vals[i] * p).toFixed(Number.isInteger(vals[i]) ? 0 : 1)}${suffix}`, F(g, (g.portrait ? 52 : 46) * u), x0 + w + 20 * u, by + bh / 2, "left", isBest ? c.accent : rgba(c.fg, 0.75), p, Math.max(80 * u, W - pad * 0.5 - (x0 + w + 20 * u)));
       }
     });
   },
@@ -442,7 +451,7 @@ export const MOGRAPH_TEMPLATES: Record<string, Tpl> = {
     const ink = mix(c.accent, "#000000", 0.78);
     if (icons[0]) drawIcon(ctx, g.icon(icons[0]), cx, cy, core * 1.1, win(g.t, 0.15, 0.8), ink, weightFor(g, core * 1.1));
     else drawLabel(ctx, (stripMarks(brand.name || "•")[0] ?? "•").toUpperCase(), F(g, core * 1.1), cx, cy + core * 0.04, "center", ink, appear);
-    if (scene.headline || scene.kicker) textStack(g, { x: W / 2, y: cy + R + R * 0.28 + 30 * u, maxW: W - pad * 2, align: "center", size: headlineSize(g, 0.48), delay: 0.5, maxLines: 2 });
+    if (scene.headline || scene.kicker) textStack(g, { x: W / 2, y: cy + R + R * 0.28 + 30 * u, maxW: W - pad * 2, align: "center", size: fitBelow(g, cy + R + R * 0.28 + 30 * u, headlineSize(g, 0.48)), delay: 0.5, maxLines: 2 });
     void kicker;
   },
 };

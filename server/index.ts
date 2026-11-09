@@ -166,7 +166,8 @@ app.post("/api/icons/resolve", async (req, res) => {
   try {
     const b = req.body ?? {};
     const kit = KITS.some((k) => k.id === b.kit) ? b.kit : "lucide";
-    const ideas = (Array.isArray(b.ideas) ? b.ideas : []).map((x: unknown) => String(x ?? "").slice(0, 60)).slice(0, 40);
+    if (!Array.isArray(b.ideas)) return void res.status(400).json({ error: "ideas must be a list." });
+    const ideas = b.ideas.filter((x: unknown) => typeof x === "string" || typeof x === "number").map((x: unknown) => String(x).replace(/\s+/g, " ").trim().slice(0, 60)).filter(Boolean).slice(0, 40);
     res.json({ kit, icons: await resolveIcons(ideas, kit) });
   } catch (e: any) {
     res.status(500).json({ error: e?.message ?? String(e) });
@@ -176,12 +177,15 @@ app.post("/api/icons/resolve", async (req, res) => {
 // Claude designs the motion-graphics script from the studio's draft (one agent turn).
 app.post("/api/mograph/plan", async (req, res) => {
   try {
+    const b = req.body ?? {};
+    // Check the request before spending a turn on it.
+    if (!Array.isArray(b.draft) || !b.draft.length || b.draft.length > 40) return void res.status(400).json({ error: "Send a draft of 1–40 beats." });
+    if (b.brief !== undefined && (typeof b.brief !== "object" || Array.isArray(b.brief))) return void res.status(400).json({ error: "The brief must be an object." });
     if (req.user) {
       const turn = await takeAgentTurn(req.user);
       if (!turn.ok) return void res.status(429).json({ error: `You've used today's ${turn.limit} agent turns.` });
     }
-    const b = req.body ?? {};
-    res.json(await claudeMotionScript({ draft: b.draft ?? [], brief: b.brief ?? {}, style: b.style ?? {}, delivery: b.delivery }));
+    res.json(await claudeMotionScript({ draft: b.draft, brief: b.brief ?? {}, style: b.style ?? {}, delivery: b.delivery }));
   } catch (e: any) {
     res.status(503).json({ error: e?.message ?? String(e) });
   }
@@ -317,6 +321,9 @@ app.get("/api/video", (req, res) => proxyVideo(req, res));
 // API errors: a database outage gets a clear "try again" instead of a bare 500.
 app.use("/api", (err: any, _req: express.Request, res: express.Response, next: express.NextFunction) => {
   if (res.headersSent) return next(err);
+  // A malformed or oversized request body is the caller's mistake, not ours.
+  if (err?.type === "entity.parse.failed") return void res.status(400).json({ error: "The request body isn't valid JSON." });
+  if (err?.type === "entity.too.large") return void res.status(413).json({ error: "That request is too large." });
   const dbDown = /ECONNREFUSED|ETIMEDOUT|ENOTFOUND|terminat|Connection|too many clients|the database system/i.test(String(err?.message ?? err) + String(err?.code ?? ""));
   console.error(dbDown ? `Database unavailable: ${err?.message ?? err}` : err);
   res.status(dbDown ? 503 : 500).json({ error: dbDown ? "Rookker can't reach its database right now. Try again in a minute." : "Something went wrong on our side. Try again." });

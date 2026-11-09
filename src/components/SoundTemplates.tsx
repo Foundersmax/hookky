@@ -52,6 +52,8 @@ function previewProject(t: SoundTemplate, base: Project, copy: Copy, imgs: strin
 }
 
 /** A canvas that plays a project in a loop (only while `live`), or holds one telling frame. */
+const SIGNATURE = new Set(["dashboard", "dashboard-focus", "live-metrics", "icon-orbit", "world-map", "route-map", "line-chart", "column-chart", "donut-chart", "kpi-grid", "metric-ring", "process-flow", "icon-list"]);
+
 export function LoopPreview({ project, height, live, clockRef }: { project: Project; height: number; live: boolean; clockRef?: { current: (() => number) | null } }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [W, H] = ASPECT_SIZE[project.aspect];
@@ -65,7 +67,10 @@ export function LoopPreview({ project, height, live, clockRef }: { project: Proj
     let t2 = 0;
     // A reveal if there is one (not a punch on an accent background), else a third of the way in.
     const drop = project.scenes.findIndex((s, i) => i > 0 && (s.template === "logo-reveal" || s.template === "audiogram" || (s.effects?.includes("flash") && s.background !== "accent")));
-    const still = drop >= 0 ? project.scenes.slice(0, drop).reduce((a, s) => a + s.duration, 0) + Math.min(1.2, project.scenes[drop].duration * 0.6) : total * 0.33;
+    // Motion graphics show their signature beat (the dashboard, the orbit, a chart), well into its build.
+    const sig = drop >= 0 ? -1 : project.scenes.findIndex((s) => SIGNATURE.has(s.template));
+    const at = (k: number, f: number, cap: number) => project.scenes.slice(0, k).reduce((a, s) => a + s.duration, 0) + Math.min(cap, project.scenes[k].duration * f);
+    const still = drop >= 0 ? at(drop, 0.6, 1.2) : sig >= 0 ? at(sig, 0.85, 3) : total * 0.33;
     const draw = (t: number) => {
       try {
         r.render(project, t, images.still);

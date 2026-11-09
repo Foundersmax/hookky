@@ -15,7 +15,7 @@ function header(g: G, align: "left" | "center" = "center", scale = 0.42): number
   const { ctx, W, u, c, scene, pad } = g;
   let top = pad;
   if (scene.kicker) {
-    drawLabel(ctx, scene.kicker.toUpperCase(), K(g, 20 * u), align === "center" ? W / 2 : pad, top + 10 * u, align, c.accent, win(g.t, 0, 0.4));
+    drawLabel(ctx, scene.kicker.toUpperCase(), K(g, 20 * u), align === "center" ? W / 2 : pad, top + 10 * u, align, c.accent, win(g.t, 0, 0.4), W - pad * 2);
     top += 44 * u;
   }
   if (!scene.headline) return top;
@@ -46,7 +46,8 @@ function tag(g: G, text: string, x: number, y: number, alpha: number, size = 26)
   const { ctx, u, c } = g;
   if (alpha <= 0) return;
   const f = B(g, size * u, 700);
-  const w = measure(ctx, text, f) + 28 * u, h = size * u * 1.7;
+  const maxW = g.W - g.pad * 2;
+  const w = Math.min(maxW, measure(ctx, text, f)) + 28 * u, h = size * u * 1.7;
   ctx.save();
   ctx.globalAlpha *= clamp(alpha);
   ctx.fillStyle = c.accent;
@@ -54,7 +55,7 @@ function tag(g: G, text: string, x: number, y: number, alpha: number, size = 26)
   ctx.roundRect(x - w / 2, y - h / 2, w, h, h / 2);
   ctx.fill();
   ctx.restore();
-  drawLabel(ctx, text, f, x, y + 1 * u, "center", mix(c.accent, "#000000", 0.8), alpha);
+  drawLabel(ctx, text, f, x, y + 1 * u, "center", mix(c.accent, "#000000", 0.8), alpha, maxW);
 }
 
 // ---------------------------------------------------------------- world map
@@ -112,7 +113,7 @@ export const DATA_TEMPLATES: Record<string, Tpl> = {
       ctx.stroke();
     }
     ctx.restore();
-    pts.forEach((p, i) => p.label && drawLabel(ctx, p.label, B(g, (g.portrait ? 26 : 22) * u, 500), X(i), box.y + box.h + 40 * u, i === 0 ? "left" : i === n - 1 ? "right" : "center", rgba(c.fg, 0.5), gridIn));
+    pts.forEach((p, i) => p.label && drawLabel(ctx, p.label, B(g, (g.portrait ? 26 : 22) * u, 500), X(i), box.y + box.h + 40 * u, i === 0 ? "left" : i === n - 1 ? "right" : "center", rgba(c.fg, 0.5), gridIn, (box.w / Math.max(1, n - 1)) * (i === 0 || i === n - 1 ? 0.5 : 0.9)));
     // the line, drawn to `head` (in point units) — timed to the voice saying the last value
     const t0 = Math.min(cue(g, pts[0]?.label, 0.3), g.dur * 0.3);
     const t1 = Math.max(t0 + 0.8, Math.min(cue(g, pts[n - 1]?.label, g.dur * 0.6), g.dur * 0.75));
@@ -180,7 +181,7 @@ export const DATA_TEMPLATES: Record<string, Tpl> = {
       const a = win(g.t, t1, 0.5);
       const gy = box.y + box.h * 0.55;
       drawLabel(ctx, `${pct > 0 ? "+" : ""}${Math.round(pct * ease.outCubic(a))}%`, F(g, 72 * u), W - pad, gy, "right", c.accent, a);
-      drawLabel(ctx, pct > 0 ? (pts[0].label && !/^(then|start|before)$/i.test(pts[0].label) ? `growth since ${pts[0].label}` : "growth") : "change", B(g, 24 * u, 500), W - pad, gy + 56 * u, "right", rgba(c.fg, 0.55), a);
+      drawLabel(ctx, pct > 0 ? (pts[0].label && !/^(then|start|before)$/i.test(pts[0].label) ? `growth since ${pts[0].label}` : "growth") : "change", B(g, 24 * u, 500), W - pad, gy + 56 * u, "right", rgba(c.fg, 0.55), a, 240 * u);
     }
     g.hit?.({ field: "items", x: box.x, y: box.y, w: box.w, h: box.h, size: 24 * u, align: "left", lines: n });
   },
@@ -220,8 +221,8 @@ export const DATA_TEMPLATES: Record<string, Tpl> = {
       ctx.roundRect(x - bw / 2, box.y + box.h - h, bw, h, [Math.min(bw / 2, 14 * u), Math.min(bw / 2, 14 * u), 0, 0]);
       ctx.fill();
       ctx.restore();
-      if (p > 0) drawLabel(ctx, fmt(col.value * p, col.decimals, col.prefix, col.suffix), F(g, Math.min(slot * 0.3, (g.portrait ? 44 : 40) * u)), x, box.y + box.h - h - 32 * u, "center", isBest ? c.accent : rgba(c.fg, 0.8), clamp(p * 2));
-      drawLabel(ctx, col.label, B(g, (g.portrait ? 26 : 24) * u, 600), x, box.y + box.h + 42 * u, "center", isBest ? c.fg : rgba(c.fg, 0.55), win(g.t, cues[i] - 0.1, 0.4));
+      if (p > 0) drawLabel(ctx, fmt(col.value * p, col.decimals, col.prefix, col.suffix), F(g, Math.min(slot * 0.3, (g.portrait ? 44 : 40) * u)), x, box.y + box.h - h - 32 * u, "center", isBest ? c.accent : rgba(c.fg, 0.8), clamp(p * 2), slot * 0.95);
+      drawLabel(ctx, col.label, B(g, (g.portrait ? 26 : 24) * u, 600), x, box.y + box.h + 42 * u, "center", isBest ? c.fg : rgba(c.fg, 0.55), win(g.t, cues[i] - 0.1, 0.4), slot * 0.92);
       g.hit?.({ field: `items.${i}`, x: x - slot / 2, y: box.y + box.h + 20 * u, w: slot, h: 46 * u, size: 24 * u, align: "center", lines: 1 });
     });
   },
@@ -234,8 +235,9 @@ export const DATA_TEMPLATES: Record<string, Tpl> = {
     const total = segs.reduce((a, s) => a + Math.max(0, s.value), 0) || 1;
     const cues = staged(g, segs.map((s) => s.label), 0.3, 0.5);
     const side = W / H > 1.25;
-    const R = side ? Math.min((H - top - pad) * 0.42, W * 0.2) : Math.min(W * 0.32, (H - top - pad) * 0.3);
-    const cx = side ? W * 0.36 : W / 2, cy = side ? top + (H - top - pad) / 2 : top + R + 40 * u;
+    const legendRow = side ? Math.min(80 * u, (H - top - pad) / segs.length) : Math.min(76 * u, (H - top - pad) * 0.42 / segs.length);
+    const R = side ? Math.min((H - top - pad) * 0.42, W * 0.2) : Math.max(60 * u, Math.min(W * 0.32, (H - top - pad - legendRow * segs.length - 110 * u) / 2.6));
+    const cx = side ? W * 0.36 : W / 2, cy = side ? top + (H - top - pad) / 2 : top + R * 1.3 + 20 * u;
     const colors = segs.map((_, i) => (i === 0 ? c.accent : rgba(c.fg, [0.55, 0.32, 0.2, 0.12][i - 1] ?? 0.1)));
     const thick = R * 0.3, gap = 0.025;
     let a = -Math.PI / 2;
@@ -263,12 +265,12 @@ export const DATA_TEMPLATES: Record<string, Tpl> = {
     const pct = lead.suffix.startsWith("%") ? lead.value : (lead.value / total) * 100;
     const txt = `${Math.round(pct * lp)}%`;
     drawLabel(ctx, txt, F(g, Math.min(R * 0.5, ((R * 1.1) / Math.max(1, measure(ctx, "100%", F(g, 100)))) * 100)), cx, cy - 8 * u, "center", c.fg, win(g.t, cues[0], 0.4));
-    drawLabel(ctx, lead.label, B(g, 24 * u, 500), cx, cy + R * 0.3, "center", rgba(c.fg, 0.6), win(g.t, cues[0] + 0.2, 0.4));
+    drawLabel(ctx, lead.label, B(g, 24 * u, 500), cx, cy + R * 0.3, "center", rgba(c.fg, 0.6), win(g.t, cues[0] + 0.2, 0.4), R * 1.2);
     // legend
     segs.forEach((s, i) => {
       const lp2 = ease.outCubic(win(g.t, cues[i] + 0.1, 0.5));
       const x = side ? cx + R + thick + 90 * u : pad + 40 * u;
-      const y = side ? cy - ((segs.length - 1) * 80 * u) / 2 + i * 80 * u : cy + R + thick + 70 * u + i * 76 * u;
+      const y = side ? cy - ((segs.length - 1) * legendRow) / 2 + i * legendRow : cy + R + thick + 50 * u + i * legendRow;
       ctx.save();
       ctx.globalAlpha *= lp2;
       ctx.fillStyle = colors[i];
@@ -276,9 +278,9 @@ export const DATA_TEMPLATES: Record<string, Tpl> = {
       ctx.roundRect(x + (1 - lp2) * 20 * u, y - 10 * u, 20 * u, 20 * u, 6 * u);
       ctx.fill();
       ctx.restore();
-      drawLabel(ctx, s.label, B(g, (g.portrait ? 34 : 36) * u, 600), x + 40 * u + (1 - lp2) * 20 * u, y, "left", c.fg, lp2);
+      drawLabel(ctx, s.label, B(g, (g.portrait ? 34 : 36) * u, 600), x + 40 * u + (1 - lp2) * 20 * u, y, "left", c.fg, lp2, (side ? W - pad : W - pad - 40 * u) - (x + 40 * u) - 130 * u);
       const val = s.suffix.startsWith("%") || !s.suffix ? `${Math.round(s.suffix.startsWith("%") ? s.value : (s.value / total) * 100)}%` : fmt(s.value, s.decimals, s.prefix, s.suffix);
-      drawLabel(ctx, val, F(g, (g.portrait ? 34 : 38) * u), side ? W - pad : W - pad - 40 * u, y, "right", i === 0 ? c.accent : rgba(c.fg, 0.7), lp2);
+      drawLabel(ctx, val, F(g, (g.portrait ? 34 : 38) * u), side ? W - pad : W - pad - 40 * u, y, "right", i === 0 ? c.accent : rgba(c.fg, 0.7), lp2, 120 * u);
       g.hit?.({ field: `items.${i}`, x: x + 40 * u, y: y - 22 * u, w: 300 * u, h: 44 * u, size: 30 * u, align: "left", lines: 1 });
     });
   },
@@ -325,8 +327,8 @@ export const DATA_TEMPLATES: Record<string, Tpl> = {
       const v = k.value * ease.outCubic(win(g.t, cues[i], 1.3 * g.sp));
       const txt = fmt(v, k.decimals, k.prefix, k.suffix);
       const size = Math.min(th * 0.34, ((tw - 60 * u) / Math.max(1, measure(ctx, fmt(k.value, k.decimals, k.prefix, k.suffix), F(g, 100)))) * 100);
-      drawLabel(ctx, txt, F(g, size), x + 30 * u, y + th * 0.6, "left", c.fg, 1);
-      drawLabel(ctx, k.label, B(g, Math.min(28 * u, th * 0.12), 500), x + 30 * u, y + th - 34 * u, "left", rgba(c.fg, 0.6), 1);
+      drawLabel(ctx, txt, F(g, size), x + 30 * u, y + th * 0.6, "left", c.fg, 1, tw - 60 * u);
+      drawLabel(ctx, k.label, B(g, Math.min(28 * u, th * 0.12), 500), x + 30 * u, y + th - 34 * u, "left", rgba(c.fg, 0.6), 1, tw - 60 * u);
       ctx.restore();
       g.hit?.({ field: `items.${i}`, x, y, w: tw, h: th, size: 28 * u, align: "left", lines: 1 });
     });
@@ -353,31 +355,39 @@ export const DATA_TEMPLATES: Record<string, Tpl> = {
     ctx.clip();
     const c0 = Math.max(0, Math.floor((P.lon0 + 180) / WORLD.step) - 1), c1 = Math.min(WORLD.cols - 1, Math.ceil((P.lon1 + 180) / WORLD.step) + 1);
     const r0 = Math.max(0, Math.floor((WORLD.lat0 - P.lat0) / WORLD.step) - 1), r1 = Math.min(WORLD.rows - 1, Math.ceil((WORLD.lat0 - P.lat1) / WORLD.step) + 1);
+    // Dots are batched into a few paths by opacity (one fill per bucket, not per dot); small dots are squares.
+    const BUCKETS = 8;
+    const paths = Array.from({ length: BUCKETS + 1 }, () => new Path2D());
+    const square = r < 2.2 * u;
+    const dot = (path: Path2D, x: number, y: number) => {
+      if (square) path.rect(x - r, y - r, r * 2, r * 2);
+      else {
+        path.moveTo(x + r, y);
+        path.arc(x, y, r, 0, Math.PI * 2);
+      }
+    };
     for (let row = r0; row <= r1; row++) {
       const y = P.y(WORLD.lat0 - (row + 0.5) * WORLD.step);
       for (let col = c0; col <= c1; col++) {
         if (!landAt(col, row)) continue;
-        const lon = -180 + (col + 0.5) * WORLD.step;
-        const x = P.x(lon);
+        const x = P.x(-180 + (col + 0.5) * WORLD.step);
         if (x < -r || x > W + r) continue;
         // a left-to-right sweep reveals the land, with a little shimmer
         const k = clamp((reveal * 1.4 - (x / W) * 0.4 - hash(col * 31 + row) * 0.2) / 0.6);
         if (k <= 0) continue;
-        ctx.fillStyle = rgba(c.fg, (0.2 + 0.08 * hash(col + row * 7)) * k);
-        ctx.beginPath();
-        ctx.arc(x, y, r, 0, Math.PI * 2);
-        ctx.fill();
+        const a = (0.2 + 0.08 * hash(col + row * 7)) * k; // 0 … 0.28
+        dot(paths[Math.min(BUCKETS, Math.round((a / 0.28) * BUCKETS))], x, y);
       }
       // wrap: Chukotka and friends past 180°
       if (P.lon1 > 180) for (let col = 0; col < Math.ceil((P.lon1 - 180) / WORLD.step); col++) {
-        if (!landAt(col, row)) continue;
-        const x = P.x(180 + (col + 0.5) * WORLD.step);
-        ctx.fillStyle = rgba(c.fg, 0.22 * reveal);
-        ctx.beginPath();
-        ctx.arc(x, y, r, 0, Math.PI * 2);
-        ctx.fill();
+        if (landAt(col, row)) dot(paths[Math.round(((0.22 * reveal) / 0.28) * BUCKETS)], P.x(180 + (col + 0.5) * WORLD.step), y);
       }
     }
+    paths.forEach((path, i) => {
+      if (!i) return;
+      ctx.fillStyle = rgba(c.fg, (i / BUCKETS) * 0.28);
+      ctx.fill(path);
+    });
     ctx.restore();
     if (!places.length) return;
     const cues = staged(g, places.map((p) => p.name), 0.5, 0.55);
@@ -438,7 +448,8 @@ export const DATA_TEMPLATES: Record<string, Tpl> = {
       const below = y < box.y + 90 * u;
       const lx = clamp(x, pad + 80 * u, W - pad - 80 * u);
       const f = B(g, (g.portrait ? 30 : 26) * u, 650);
-      const w = measure(ctx, pl.name, f) + 30 * u, h = 48 * u;
+      const maxW = Math.min(W * 0.42, 420 * u);
+      const w = Math.min(maxW, measure(ctx, pl.name, f)) + 30 * u, h = 48 * u;
       const ly = below ? y + 50 * u : y - 50 * u;
       const la = clamp(win(g.t, cues[i] + 0.15, 0.4));
       ctx.save();
@@ -451,7 +462,7 @@ export const DATA_TEMPLATES: Record<string, Tpl> = {
       ctx.fill();
       ctx.stroke();
       ctx.restore();
-      drawLabel(ctx, pl.name, f, lx, ly + 1 * u, "center", c.fg, la);
+      drawLabel(ctx, pl.name, f, lx, ly + 1 * u, "center", c.fg, la, maxW);
       g.hit?.({ field: `items.${i}`, x: lx - w / 2, y: ly - h / 2, w, h, size: 26 * u, align: "center", lines: 1 });
     });
   },
@@ -564,7 +575,8 @@ export const DATA_TEMPLATES: Record<string, Tpl> = {
       ctx.stroke();
       ctx.restore();
       const f = B(g, (g.portrait ? 30 : 26) * u, 650);
-      const w = measure(ctx, label, f) + 32 * u, h = 50 * u;
+      const maxW = W * 0.5;
+      const w = Math.min(maxW, measure(ctx, label, f)) + 32 * u, h = 50 * u;
       const lx = clamp(q.x, pad + w / 2, W - pad - w / 2), ly = q.y - 56 * u;
       ctx.save();
       ctx.globalAlpha *= clamp(a);
@@ -573,7 +585,7 @@ export const DATA_TEMPLATES: Record<string, Tpl> = {
       ctx.roundRect(lx - w / 2, ly - h / 2, w, h, 12 * u);
       ctx.fill();
       ctx.restore();
-      drawLabel(ctx, label, f, lx, ly + 1 * u, "center", c.bg, a);
+      drawLabel(ctx, label, f, lx, ly + 1 * u, "center", c.bg, a, maxW);
       g.hit?.({ field, x: lx - w / 2, y: ly - h / 2, w, h, size: 26 * u, align: "center", lines: 1 });
     };
     pin(route[0], from, false, win(g.t, Math.max(0, t0 - 0.5), 0.5), "items.0");
@@ -629,8 +641,8 @@ export const DATA_TEMPLATES: Record<string, Tpl> = {
       ctx.restore();
       const left = p >= 1 ? 0 : st.value * (1 - p);
       const arrived = p >= 1;
-      drawLabel(ctx, (arrived ? "ARRIVED" : st.label || "ARRIVING IN").toUpperCase(), K(g, 18 * u), x + 32 * u, y + 40 * u, "left", rgba(c.fg, 0.55), cardIn);
-      drawLabel(ctx, arrived ? "Right on time" : fmt(Math.ceil(left), 0, st.prefix ?? "", st.suffix ?? " min"), F(g, 50 * u), x + 32 * u, y + 88 * u, "left", arrived ? c.accent : c.fg, cardIn);
+      drawLabel(ctx, (arrived ? "ARRIVED" : st.label || "ARRIVING IN").toUpperCase(), K(g, 18 * u), x + 32 * u, y + 40 * u, "left", rgba(c.fg, 0.55), cardIn, cw - 64 * u);
+      drawLabel(ctx, arrived ? "Right on time" : fmt(Math.ceil(left), 0, st.prefix ?? "", st.suffix ?? " min"), F(g, 50 * u), x + 32 * u, y + 88 * u, "left", arrived ? c.accent : c.fg, cardIn, cw - 64 * u);
       // progress bar along the bottom of the card
       ctx.fillStyle = rgba(c.fg, 0.1 * cardIn);
       ctx.fillRect(x + 32 * u, y + ch - 14 * u, cw - 64 * u, 4 * u);

@@ -109,3 +109,12 @@ test("motion plan: dashboards where the line calls for them, and where a dashboa
   assert.equal(planMotion({ duration: t, pauses, words }, brief)[3].template, "icon-orbit");
   assert.ok(MOTION_STYLES.length >= 15 && MOTION_STYLES.filter((s) => s.prefer).length >= 3);
 });
+
+test("motion scenes: icons stay paired with their items when one isn't found", async () => {
+  const { motionScenes, MOTION_STYLES } = await import("./mograph/plan");
+  const beat = { s: 0, e: 3, line: "Fast, quirky and secure", template: "icon-list" as const, items: ["Fast", "Quirky", "Secure"], ideas: ["fast", "quirky", "secure"] };
+  const [sc] = motionScenes([beat, { ...beat, s: 3, e: 5, template: "cta-end" as const }], [["lucide:zap", null, "lucide:shield-check"], []], MOTION_STYLES[0], { product: "Orbit" });
+  assert.deepEqual(sc.icons, ["lucide:zap", "lucide:check-circle", "lucide:shield-check"]);
+  const [hero] = motionScenes([{ ...beat, template: "icon-hero" as const }, { ...beat, template: "cta-end" as const }], [[null], []], MOTION_STYLES[0], {});
+  assert.deepEqual(hero.icons, ["lucide:sparkles"], "a hero is never empty");
+});

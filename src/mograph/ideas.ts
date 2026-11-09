@@ -14,7 +14,7 @@ export const IDEAS: Record<string, string[]> = {
   world: ["globe", "earth"], global: ["globe"], travel: ["plane", "map"], location: ["map-pin"], home: ["home", "house"], city: ["building", "building-2"],
   idea: ["lightbulb"], smart: ["brain", "sparkles", "cpu"], ai: ["sparkles", "brain", "bot"], magic: ["sparkles", "wand"], new: ["sparkles", "badge"], quality: ["award", "gem"], best: ["award", "trophy", "crown"],
   easy: ["check-circle", "mouse-pointer-click"], simple: ["check-circle", "circle"], done: ["check", "check-circle"], check: ["check"], start: ["play", "rocket"], launch: ["rocket"], goal: ["target", "flag"], win: ["trophy"],
-  coffee: ["coffee", "cup-soda"], food: ["utensils", "chef-hat"], eat: ["utensils"], drink: ["cup-soda", "wine"], shop: ["shopping-bag", "store"], sales: ["chart-line", "trending-up"], chaos: ["circle-alert", "zap"], buy: ["shopping-cart", "shopping-bag"], delivery: ["truck", "package"], order: ["package", "shopping-bag"],
+  coffee: ["coffee", "cup-soda"], food: ["utensils", "chef-hat"], eat: ["utensils"], drink: ["cup-soda", "wine"], shop: ["shopping-bag", "store"], sales: ["chart-line", "trending-up"], built: ["shield-check"], build: ["layout-grid"], minute: ["timer", "clock"], minutes: ["timer", "clock"], setup: ["settings", "wrench"], last: ["shield-check", "award"], durable: ["shield-check"], loved: ["heart"], thousands: ["users"], millions: ["users", "globe"], chaos: ["circle-alert", "zap"], buy: ["shopping-cart", "shopping-bag"], delivery: ["truck", "package"], order: ["package", "shopping-bag"],
   watch: ["watch"], music: ["music", "headphones"], listen: ["headphones", "ear"], video: ["video", "clapperboard"], photo: ["camera", "image"], design: ["pen-tool", "palette"], write: ["pen-line", "pencil"], code: ["code", "terminal"],
   calendar: ["calendar"], day: ["sun", "calendar"], week: ["calendar-days"], year: ["calendar"], stress: ["wind", "heart-pulse", "frown"], calm: ["leaf", "wind"], nature: ["leaf", "trees"], water: ["droplet", "waves"], weather: ["cloud-sun"],
   learn: ["graduation-cap", "book-open"], book: ["book-open"], work: ["briefcase", "laptop"], laptop: ["laptop"], cloud: ["cloud"], connect: ["link", "plug"], share: ["share-2", "send"], chat: ["message-circle"],
@@ -33,6 +33,11 @@ export function builtinIcon(idea: string, used = new Set<string>()): string | un
     if (BUILTIN_ICONS[k] && !used.has(k)) return k;
   }
   for (const c of cands) for (const k of Object.keys(BUILTIN_ICONS)) if (!used.has(k) && k.slice(7).split("-").includes(c)) return k;
+  // Compound words: "smartwatch" → watch, "lifestyle" → … (an icon name inside the word).
+  for (const w of words) if (w.length > 5) for (const k of Object.keys(BUILTIN_ICONS)) {
+    const base = k.slice(7);
+    if (!used.has(k) && base.length >= 4 && !base.includes("-") && w.includes(base)) return k;
+  }
   // Nothing fresh: an icon already used elsewhere beats an empty circle.
   if (used.size) return builtinIcon(idea);
   return undefined;

@@ -80,7 +80,7 @@ export async function claudeMotionScript(input: { draft: unknown[]; brief: Recor
         output_config: { effort: "high" },
         betas: ["server-side-fallback-2026-07-01"],
         ...({ fallbacks: "default" } as object),
-      } as Anthropic.Beta.MessageCreateParamsNonStreaming);
+      } as Anthropic.Beta.MessageCreateParamsNonStreaming, { timeout: 75_000, maxRetries: 1 });
       const use = msg.content.find((b) => b.type === "tool_use" && (b as { name?: string }).name === "motion_script") as { input?: { beats?: unknown[] } } | undefined;
       if (use) {
         const beats = Array.isArray(use.input?.beats) ? use.input!.beats! : [];

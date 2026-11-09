@@ -75,29 +75,55 @@ export async function iconSpec(full: string): Promise<IconSpec | null> {
 
 let webOk = true;
 /** For each idea, the best icon in the kit that isn't already used; null when nothing fits. */
-export async function resolveIcons(ideas: string[], kit: KitId): Promise<{ query: string; name: string | null; spec: IconSpec | null; via: "web" | "local" | "none" }[]> {
-  const used = new Set<string>();
-  const out = [];
-  for (const q of ideas.slice(0, 40)) {
-    let names: string[] = [];
-    let via: "web" | "local" | "none" = "none";
-    if (webOk) {
-      try {
-        names = await webSearch(q, kit);
-        if (names.length) via = "web";
-      } catch {
-        webOk = false; // the web library is unreachable from here; use the kits on disk
-        setTimeout(() => (webOk = true), 60_000);
-      }
+const cache = new Map<string, { names: string[]; via: "web" | "local" | "none" }>();
+/** Candidate icon names for one idea: the dictionary's picks first, then the web index (cached). */
+async function candidates(q: string, kit: KitId, deadline: number) {
+  const key = `${kit}|${q.toLowerCase()}`;
+  const hit = cache.get(key);
+  if (hit) return hit;
+  let web: string[] = [];
+  let via: "web" | "local" | "none" = "none";
+  if (webOk && Date.now() < deadline) {
+    try {
+      web = await webSearch(q, kit);
+      if (web.length) via = "web";
+    } catch {
+      webOk = false; // the web library is unreachable from here; use the kits on disk for a minute
+      setTimeout(() => (webOk = true), 60_000).unref?.();
     }
-    const local = localSearch(q, kit);
-    // Prefer an icon the dictionary meant (it knows ideas the web search may read literally).
-    names = [...new Set([...local.slice(0, 2), ...names, ...local])];
-    if (via === "none" && local.length) via = "local";
-    const name = names.find((n) => !used.has(n)) ?? names[0] ?? null;
-    const spec = name ? await iconSpec(name).catch(() => null) : null;
-    if (name) used.add(name);
-    out.push({ query: q, name: spec ? name : null, spec, via: spec ? via : "none" });
+  }
+  const local = localSearch(q, kit);
+  const names = [...new Set([...local.slice(0, 2), ...web, ...local])];
+  if (via === "none" && local.length) via = "local";
+  const out = { names, via };
+  if (via === "web" || !webOk) {
+    if (cache.size > 2000) cache.delete(cache.keys().next().value!);
+    cache.set(key, out);
   }
   return out;
+}
+
+/**
+ * Find an icon for each idea in one kit: six lookups at a time, the web index only within an
+ * 8-second budget (then the kits on disk), and no icon used twice in one ad.
+ */
+export async function resolveIcons(ideas: string[], kit: KitId): Promise<{ query: string; name: string | null; spec: IconSpec | null; via: "web" | "local" | "none" }[]> {
+  const qs = ideas.slice(0, 40);
+  const deadline = Date.now() + 8000;
+  const found: { names: string[]; via: "web" | "local" | "none" }[] = new Array(qs.length);
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(6, qs.length) }, async () => {
+      for (let i = next++; i < qs.length; i = next++) found[i] = await candidates(qs[i], kit, deadline);
+    }),
+  );
+  // Assign in order so the first idea gets first pick, then fetch the drawings.
+  const used = new Set<string>();
+  const names = qs.map((_, i) => {
+    const n = found[i].names.find((x) => !used.has(x)) ?? found[i].names[0] ?? null;
+    if (n) used.add(n);
+    return n;
+  });
+  const specs = await Promise.all(names.map((n) => (n ? iconSpec(n).catch(() => null) : null)));
+  return qs.map((query, i) => ({ query, name: specs[i] ? names[i] : null, spec: specs[i], via: specs[i] ? found[i].via : "none" }));
 }

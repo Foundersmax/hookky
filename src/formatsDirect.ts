@@ -14,9 +14,40 @@ import { castOne, timingFor } from "./footage/cast";
 import { preferLicensed } from "./footage/license";
 import { queriesFor, type Shot, type ShotType } from "./footage/plan";
 import { clock } from "./clock";
-import { planMotion, motionScenes, pseudoVoice, type MotionBeat } from "./mograph/plan";
+import { planMotion, motionScenes, pseudoVoice, MOTION_TEMPLATES, type MotionBeat } from "./mograph/plan";
 import { builtinIcon } from "./mograph/ideas";
 import { cleanIcon, type IconSpec } from "./mograph/icons";
+import { placeAt } from "./mograph/places";
+
+const strs = (v: unknown, n: number, len: number) => (Array.isArray(v) ? v.filter((x) => typeof x === "string" && x.trim()).map((x: string) => x.trim().slice(0, len)).slice(0, n) : undefined);
+/** Claude's design for a beat over ours: only well-formed fields; our timing, words and end card stay. */
+export function mergeBeat(b: MotionBeat, raw: unknown, last: boolean): MotionBeat {
+  const c = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const template = !last && typeof c.template === "string" && (MOTION_TEMPLATES as string[]).includes(c.template) && c.template !== "cta-end" ? (c.template as MotionBeat["template"]) : b.template;
+  const st = c.stat as Record<string, unknown> | undefined;
+  const stat = st && typeof st === "object" && Number.isFinite(Number(st.value)) ? { value: Number(st.value), ...(typeof st.prefix === "string" && { prefix: st.prefix.slice(0, 4) }), ...(typeof st.suffix === "string" && { suffix: st.suffix.slice(0, 12) }), ...(typeof st.label === "string" && { label: st.label.slice(0, 80) }) } : undefined;
+  const items = strs(c.items, 12, 80), ideas = strs(c.ideas, 7, 40);
+  // A chart or map without its data would draw empty: keep the studio's beat instead.
+  const valued = (items ?? []).filter((x) => /\|\s*[^|]*\d/.test(x)).length;
+  const lacks =
+    (template === "world-map" && !(items ?? []).some((x) => placeAt(x.split("|")[0]))) ||
+    (template === "route-map" && (items ?? []).length < 2) ||
+    ((template === "line-chart" || template === "column-chart" || template === "donut-chart" || template === "bar-compare") && valued < 2) ||
+    (template === "kpi-grid" && valued < 2) ||
+    (template === "metric-ring" && !stat) ||
+    ((template === "icon-list" || template === "process-flow") && (items ?? []).length < 2);
+  if (lacks && template !== b.template) return { ...b, ideas: ideas?.length ? ideas : b.ideas };
+  const text = (v: unknown, n: number) => (typeof v === "string" && v.trim() ? v.trim().slice(0, n) : undefined);
+  return {
+    ...b,
+    template,
+    kicker: text(c.kicker, 30) ?? (template === b.template ? b.kicker : undefined),
+    headline: last ? b.headline : text(c.headline, 80) ?? (template === b.template ? b.headline : undefined),
+    items: items?.length ? items : template === b.template ? b.items : undefined,
+    stat: stat ?? (template === b.template ? b.stat : undefined),
+    ideas: ideas?.length ? ideas : b.ideas,
+  };
+}
 
 /**
  * A motion-graphics edit: the studio's beat plan, Claude's motion script (it can search the web to
@@ -33,6 +64,7 @@ async function motionEdit(f: Format, brief: ReturnType<typeof fill>, audio: Audi
     try {
       const r = await fetch("/api/mograph/plan", {
         method: "POST",
+        signal: AbortSignal.timeout(90_000),
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           draft: beats.map((b) => ({ s: b.s, e: b.e, line: b.line, template: b.template, ideas: b.ideas })),
@@ -44,15 +76,11 @@ async function motionEdit(f: Format, brief: ReturnType<typeof fill>, audio: Audi
       const j = await r.json().catch(() => ({}));
       if (r.ok && Array.isArray(j.beats) && j.beats.length === beats.length) {
         // The timing and the words said are ours; the design is Claude's. The end card stays the end card.
-        beats = beats.map((b, i) => {
-          const c = j.beats[i] ?? {};
-          const last = i === beats.length - 1;
-          return { ...b, ...c, s: b.s, e: b.e, line: b.line, template: last ? b.template : c.template ?? b.template, ideas: c.ideas?.length ? c.ideas : b.ideas };
-        });
+        beats = beats.map((b, i) => mergeBeat(b, j.beats[i], i === beats.length - 1));
         if (j.searched) searched = j.searched;
       } else notes.push(`Claude unavailable (${String(j.error ?? r.status).replace(/\.$/, "")}), used the studio's motion plan`);
     } catch (e: any) {
-      notes.push(`couldn't reach Claude (${e.message})`);
+      notes.push(e?.name === "TimeoutError" ? "Claude took too long, used the studio's motion plan" : `couldn't reach Claude (${e.message})`);
     }
   }
 
@@ -62,10 +90,10 @@ async function motionEdit(f: Format, brief: ReturnType<typeof fill>, audio: Audi
   const specs: Record<string, IconSpec> = {};
   let found: (string | null)[][] = [];
   try {
-    const all = [...new Set(beats.flatMap((b) => b.ideas))].slice(0, 60);
-    const r = await fetch("/api/icons/resolve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ideas: all, kit: st.kit }) });
-    const j = await r.json();
-    if (!r.ok) throw new Error(j.error ?? r.status);
+    const all = [...new Set(beats.flatMap((b) => b.ideas).map((x) => String(x).trim()).filter(Boolean))].slice(0, 40);
+    const r = await fetch("/api/icons/resolve", { method: "POST", signal: AbortSignal.timeout(20_000), headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ideas: all, kit: st.kit }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(String(j.error ?? r.status));
     const byIdea = new Map<string, string>();
     for (const x of j.icons ?? []) {
       const spec = cleanIcon(x.spec);
@@ -73,7 +101,7 @@ async function motionEdit(f: Format, brief: ReturnType<typeof fill>, audio: Audi
     }
     found = beats.map((b) => b.ideas.map((i) => byIdea.get(i) ?? null));
   } catch (e: any) {
-    notes.push(`icon search unavailable (${e.message}), used built-in icons`);
+    notes.push(e?.name === "TimeoutError" ? "the icon search took too long, used built-in icons" : "the icon search is unavailable, used built-in icons");
   }
   const used = new Set<string>();
   const icons = beats.map((b, i) => b.ideas.map((idea, k) => {

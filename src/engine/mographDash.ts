@@ -85,6 +85,26 @@ function spark(g: G, r: Rect, vals: number[], p: number, color: string, fill = t
   return { x: hx, y: hy };
 }
 
+/** Where everything sits in a dashboard of `n` KPI cards inside R (pure: no drawing). */
+function dashLayout(R: Rect, n: number) {
+  const narrow = R.w / R.h < 1.05;
+  const s = Math.min(R.w / 1600, R.h / 900) * (narrow ? 1.5 : 1); // UI scale
+  const S = (v: number) => v * s;
+  const barH = S(64), sideW = narrow ? 0 : S(84), P = S(28), gx = S(20);
+  const C = { x: R.x + sideW + P, y: R.y + barH + P, w: R.w - sideW - P * 2, h: R.h - barH - P * 2 };
+  const top = C.y + S(54);
+  const kCols = narrow ? Math.min(2, n) : n, kRows = Math.ceil(n / kCols);
+  const kh = S(narrow ? 150 : 132), kw = (C.w - gx * (kCols - 1)) / kCols;
+  const kpiRect: Rect = { x: C.x, y: top, w: C.w, h: kh * kRows + gx * (kRows - 1) };
+  const row2 = top + kpiRect.h + gx, rest = C.y + C.h - row2;
+  const chartH = narrow ? rest * 0.5 : rest * 0.62;
+  const chart: Rect = narrow ? { x: C.x, y: row2, w: C.w, h: chartH } : { x: C.x, y: row2, w: C.w * 0.66 - gx / 2, h: chartH };
+  const side: Rect = narrow ? { x: C.x, y: row2 + chartH + gx, w: C.w * 0.45, h: rest - chartH - gx } : { x: chart.x + chart.w + gx, y: row2, w: C.w - chart.w - gx, h: chartH };
+  const tableTop = narrow ? side.y : row2 + chartH + gx;
+  const table: Rect = narrow ? { x: side.x + side.w + gx, y: side.y, w: C.w - side.w - gx, h: side.h } : { x: C.x, y: tableTop, w: C.w, h: C.y + C.h - tableTop };
+  return { narrow, S, barH, sideW, gx, C, top, kCols, kh, kw, kpiRect, chart, side, table };
+}
+
 const DEFAULT_NAV = ["lucide:layout-grid", "lucide:chart-line", "lucide:users", "lucide:wallet", "lucide:bell"];
 
 /**
@@ -93,22 +113,23 @@ const DEFAULT_NAV = ["lucide:layout-grid", "lucide:chart-line", "lucide:users", 
  */
 function dashboard(g: G, R: Rect, t: number, kpiCues: number[], kpis: Kpi[]): Rect[] {
   const { ctx, u, c, scene, brand } = g;
-  const narrow = R.w / R.h < 1.05;
   const rnd = seeded(g, 1);
-  const s = Math.min(R.w / 1600, R.h / 900) * (narrow ? 1.5 : 1); // UI scale
-  const S = (v: number) => v * s;
+  const { narrow, S, barH, sideW, gx, C, top, kCols, kh, kw, kpiRect, chart, side, table } = dashLayout(R, kpis.length);
   // window
   const inA = ease.outCubic(win(t, 0, 0.6));
   ctx.save();
   ctx.globalAlpha *= inA;
-  ctx.shadowColor = rgba("#000000", 0.28);
-  ctx.shadowBlur = S(60);
-  ctx.shadowOffsetY = S(20);
+  // a soft drop shadow from a few stacked translucent shapes (a blur this size costs ~10 ms a frame)
+  for (let k = 4; k >= 1; k--) {
+    ctx.fillStyle = rgba("#000000", 0.05);
+    ctx.beginPath();
+    ctx.roundRect(R.x - S(6 * k), R.y + S(10 + 4 * k) - S(6 * k), R.w + S(12 * k), R.h + S(12 * k), S(22 + 6 * k));
+    ctx.fill();
+  }
   ctx.fillStyle = mix(c.bg, c.fg, 0.02);
   ctx.beginPath();
   ctx.roundRect(R.x, R.y, R.w, R.h, S(22));
   ctx.fill();
-  ctx.shadowColor = "transparent";
   ctx.strokeStyle = rgba(c.fg, 0.1);
   ctx.lineWidth = 1.5 * u;
   ctx.stroke();
@@ -118,7 +139,6 @@ function dashboard(g: G, R: Rect, t: number, kpiCues: number[], kpis: Kpi[]): Re
   ctx.roundRect(R.x, R.y, R.w, R.h, S(22));
   ctx.clip();
   // top bar
-  const barH = S(64);
   ctx.globalAlpha = inA;
   ctx.fillStyle = rgba(c.fg, 0.03);
   ctx.fillRect(R.x, R.y, R.w, barH);
@@ -129,21 +149,22 @@ function dashboard(g: G, R: Rect, t: number, kpiCues: number[], kpis: Kpi[]): Re
     ctx.fill();
   });
   const name = (brand.name || "Dashboard").replace(/\*/g, "");
-  drawLabel(ctx, name, B(g, S(22), 650), R.x + S(120), R.y + barH / 2, "left", c.fg, inA);
-  // search pill and avatar
-  const sw = Math.min(S(360), R.w * 0.3);
-  ctx.fillStyle = rgba(c.fg, 0.05);
-  ctx.beginPath();
-  ctx.roundRect(R.x + R.w - sw - S(90), R.y + barH / 2 - S(17), sw, S(34), S(17));
-  ctx.fill();
-  drawLabel(ctx, "Search", B(g, S(17), 500), R.x + R.w - sw - S(64), R.y + barH / 2, "left", rgba(c.fg, 0.35), inA);
+  drawLabel(ctx, name, B(g, S(22), 650), R.x + S(120), R.y + barH / 2, "left", c.fg, inA, R.w * 0.4);
+  // search pill and avatar (wide windows only)
+  const sw = R.w > S(900) ? Math.min(S(360), R.w * 0.3) : 0;
+  if (sw) {
+    ctx.fillStyle = rgba(c.fg, 0.05);
+    ctx.beginPath();
+    ctx.roundRect(R.x + R.w - sw - S(90), R.y + barH / 2 - S(17), sw, S(34), S(17));
+    ctx.fill();
+    drawLabel(ctx, "Search", B(g, S(17), 500), R.x + R.w - sw - S(64), R.y + barH / 2, "left", rgba(c.fg, 0.35), inA, sw - S(40));
+  }
   ctx.fillStyle = c.accent;
   ctx.beginPath();
   ctx.arc(R.x + R.w - S(42), R.y + barH / 2, S(16), 0, Math.PI * 2);
   ctx.fill();
   ctx.globalAlpha = 1;
   // sidebar
-  const sideW = narrow ? 0 : S(84);
   if (sideW) {
     const sa = ease.outCubic(win(t, 0.15, 0.5));
     ctx.fillStyle = rgba(c.fg, 0.025 * sa);
@@ -162,28 +183,19 @@ function dashboard(g: G, R: Rect, t: number, kpiCues: number[], kpis: Kpi[]): Re
     });
   }
   // content grid
-  const P = S(28), gx = S(20);
-  const C = { x: R.x + sideW + P, y: R.y + barH + P, w: R.w - sideW - P * 2, h: R.h - barH - P * 2 };
   const title = scene.kicker || "Overview";
-  drawLabel(ctx, title, F(g, S(34)), C.x, C.y + S(16), "left", c.fg, win(t, 0.2, 0.4));
-  const top = C.y + S(54);
-  const n = kpis.length;
-  const kCols = narrow ? 2 : n;
-  const kRows = Math.ceil(n / kCols);
-  const kh = S(narrow ? 150 : 132);
-  const kw = (C.w - gx * (kCols - 1)) / kCols;
-  const kpiRect: Rect = { x: C.x, y: top, w: C.w, h: kh * kRows + gx * (kRows - 1) };
+  drawLabel(ctx, title, F(g, S(34)), C.x, C.y + S(16), "left", c.fg, win(t, 0.2, 0.4), C.w);
   kpis.forEach((k, i) => {
     const r = { x: C.x + (i % kCols) * (kw + gx), y: top + Math.floor(i / kCols) * (kh + gx), w: kw, h: kh };
     const a = ease.outCubic(win(t, kpiCues[i], 0.5));
     card(g, r, a);
     if (a <= 0) return;
     const yy = r.y + (1 - a) * 18 * u;
-    drawLabel(ctx, k.label, B(g, S(19), 550), r.x + S(22), yy + S(32), "left", rgba(c.fg, 0.6), a);
+    drawLabel(ctx, k.label, B(g, S(19), 550), r.x + S(22), yy + S(32), "left", rgba(c.fg, 0.6), a, r.w - S(44) - (k.delta ? S(90) : 0));
     if (k.value) {
       const cp = ease.outCubic(win(t, kpiCues[i] + 0.1, 1.1));
       const f = F(g, Math.min(S(46), ((r.w - S(44)) / Math.max(1, measure(ctx, k.value, F(g, 100)))) * 100));
-      drawLabel(ctx, counting(k.value, cp), f, r.x + S(22), yy + r.h * 0.62, "left", c.fg, a);
+      drawLabel(ctx, counting(k.value, cp), f, r.x + S(22), yy + r.h * 0.62, "left", c.fg, a, r.w - S(44));
     } else {
       // no figure given: a mini trend instead of a made-up number
       spark(g, { x: r.x + S(22), y: yy + S(58), w: r.w * 0.55, h: r.h - S(84) }, series(seeded(g, 10 + i), 8), ease.inOutCubic(win(t, kpiCues[i] + 0.1, 0.9)), c.accent, false, 2.5);
@@ -191,7 +203,7 @@ function dashboard(g: G, R: Rect, t: number, kpiCues: number[], kpis: Kpi[]): Re
     if (k.delta) {
       const up = !k.delta.trim().startsWith("-");
       const f = B(g, S(17), 700);
-      const w = measure(ctx, k.delta, f) + S(20);
+      const w = Math.min(S(90), measure(ctx, k.delta, f)) + S(20);
       ctx.save();
       ctx.globalAlpha *= win(t, kpiCues[i] + 0.6, 0.4);
       ctx.fillStyle = rgba(up ? c.accent : "#FF5F57", 0.16);
@@ -199,21 +211,16 @@ function dashboard(g: G, R: Rect, t: number, kpiCues: number[], kpis: Kpi[]): Re
       ctx.roundRect(r.x + r.w - w - S(18), yy + S(18), w, S(28), S(14));
       ctx.fill();
       ctx.restore();
-      drawLabel(ctx, k.delta, f, r.x + r.w - w / 2 - S(18), yy + S(32), "center", up ? c.accent : "#FF5F57", win(t, kpiCues[i] + 0.6, 0.4));
+      drawLabel(ctx, k.delta, f, r.x + r.w - w / 2 - S(18), yy + S(32), "center", up ? c.accent : "#FF5F57", win(t, kpiCues[i] + 0.6, 0.4), S(90));
     }
   });
   // main chart + side card
-  const row2 = top + kpiRect.h + gx;
-  const rest = C.y + C.h - row2;
-  const chartH = narrow ? rest * 0.5 : rest * 0.62;
-  const chart: Rect = narrow ? { x: C.x, y: row2, w: C.w, h: chartH } : { x: C.x, y: row2, w: C.w * 0.66 - gx / 2, h: chartH };
-  const side: Rect = narrow ? { x: C.x, y: row2 + chartH + gx, w: C.w * 0.45, h: rest - chartH - gx } : { x: chart.x + chart.w + gx, y: row2, w: C.w - chart.w - gx, h: chartH };
   const t0 = Math.max(...kpiCues.slice(0, 2), 0.4) + 0.2;
   card(g, chart, ease.outCubic(win(t, t0, 0.5)));
   const ca = win(t, t0, 0.5);
   if (ca > 0) {
-    drawLabel(ctx, scene.stat?.label || "Performance", B(g, S(20), 650), chart.x + S(24), chart.y + S(34), "left", c.fg, ca);
-    if (scene.stat) drawLabel(ctx, `${scene.stat.prefix ?? ""}${counting(String(scene.stat.value), ease.outCubic(win(t, t0 + 0.3, 1.2)))}${scene.stat.suffix ?? ""}`, F(g, S(40)), chart.x + chart.w - S(24), chart.y + S(40), "right", c.accent, ca);
+    drawLabel(ctx, scene.stat?.label || "Performance", B(g, S(20), 650), chart.x + S(24), chart.y + S(34), "left", c.fg, ca, chart.w * (scene.stat ? 0.5 : 0.9));
+    if (scene.stat) drawLabel(ctx, `${scene.stat.prefix ?? ""}${counting(String(scene.stat.value), ease.outCubic(win(t, t0 + 0.3, 1.2)))}${scene.stat.suffix ?? ""}`, F(g, S(40)), chart.x + chart.w - S(24), chart.y + S(40), "right", c.accent, ca, chart.w * 0.42);
     // gridlines
     ctx.strokeStyle = rgba(c.fg, 0.06);
     ctx.lineWidth = 1 * u;
@@ -255,8 +262,6 @@ function dashboard(g: G, R: Rect, t: number, kpiCues: number[], kpis: Kpi[]): Re
     });
   }
   // activity rows
-  const tableTop = narrow ? side.y : row2 + chartH + gx;
-  const table: Rect = narrow ? { x: side.x + side.w + gx, y: side.y, w: C.w - side.w - gx, h: side.h } : { x: C.x, y: tableTop, w: C.w, h: C.y + C.h - tableTop };
   const r0 = s0 + 0.25;
   card(g, table, ease.outCubic(win(t, r0, 0.5)));
   if (win(t, r0, 0.5) > 0) {
@@ -333,13 +338,8 @@ export const DASH_TEMPLATES: Record<string, Tpl> = {
     // camera: which widget, and how far through the move
     let k = -1;
     for (let i = 0; i < cues.length; i++) if (g.t >= cues[i]) k = i;
-    // the layout's rects (drawn into an empty clip, so nothing shows)
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(0, 0, 0, 0);
-    ctx.clip();
-    const rects = dashboard(g, R, 99, kp.map(() => 0), kp);
-    ctx.restore();
+    const L = dashLayout(R, kp.length);
+    const rects = [L.kpiRect, L.chart, L.side, L.table];
     const targetOf = (i: number) => {
       if (i < 0) return { s: 1, x: W / 2, y: H / 2 };
       const r = rects[i % rects.length];
@@ -380,6 +380,7 @@ export const DASH_TEMPLATES: Record<string, Tpl> = {
       const text = feats[k];
       const f = F(g, (g.portrait ? 58 : 52) * u);
       const w = Math.min(W - pad * 2, measure(ctx, text, f) + 70 * u), h = 96 * u;
+      const textW = w - 70 * u;
       const y = H - pad - h / 2 - (1 - a) * 20 * u;
       ctx.save();
       ctx.globalAlpha *= a;
@@ -388,7 +389,7 @@ export const DASH_TEMPLATES: Record<string, Tpl> = {
       ctx.roundRect(W / 2 - w / 2, y - h / 2, w, h, h / 2);
       ctx.fill();
       ctx.restore();
-      drawLabel(ctx, text, f, W / 2, y + 2 * u, "center", mix(c.accent, "#000000", 0.82), a);
+      drawLabel(ctx, text, f, W / 2, y + 2 * u, "center", mix(c.accent, "#000000", 0.82), a, textW);
       drawLabel(ctx, String(k + 1).padStart(2, "0"), K(g, 18 * u), W / 2, y - h / 2 - 24 * u, "center", c.accent, a);
       g.hit?.({ field: `items.${k}`, x: W / 2 - w / 2, y: y - h / 2, w, h, size: 52 * u, align: "center", lines: 1 });
     } else if (scene.headline) {
@@ -439,8 +440,8 @@ export const DASH_TEMPLATES: Record<string, Tpl> = {
       const p = ease.outCubic(win(g.t, Math.min(cue(g, `${st.value}`, 0.3), g.dur * 0.4), 1.4 * g.sp));
       const txt = `${st.prefix ?? ""}${counting(String(st.value), p)}${st.suffix ? (st.suffix.length > 2 ? ` ${st.suffix}` : st.suffix) : ""}`;
       const size = Math.min(panel.h * 0.26, ((panel.w - 60 * u) / Math.max(1, measure(ctx, txt, F(g, 100)))) * 100);
-      drawLabel(ctx, txt, F(g, size), panel.x + 28 * u, panel.y + 70 * u + size * 0.6, "left", c.fg, a);
-      if (st.label) drawLabel(ctx, st.label, B(g, 26 * u, 500), panel.x + 28 * u, panel.y + 70 * u + size * 1.25, "left", rgba(c.fg, 0.55), win(g.t, 0.6, 0.4));
+      drawLabel(ctx, txt, F(g, size), panel.x + 28 * u, panel.y + 70 * u + size * 0.6, "left", c.fg, a, panel.w - 56 * u);
+      if (st.label) drawLabel(ctx, st.label, B(g, 26 * u, 500), panel.x + 28 * u, panel.y + 70 * u + size * 1.25, "left", rgba(c.fg, 0.55), win(g.t, 0.6, 0.4), panel.w - 56 * u);
       g.hit?.({ field: "stat.value", x: panel.x, y: panel.y + 70 * u, w: panel.w, h: size, size, align: "left", lines: 1 });
     }
     // the stream: bars scrolling left, newest in the accent
@@ -498,8 +499,8 @@ export const DASH_TEMPLATES: Record<string, Tpl> = {
       ctx.fill();
       ctx.restore();
       if (ic) drawIcon(ctx, ic, feed.x + 54 * u, cy, 24 * u, alpha, age === 0 ? mix(c.accent, "#000000", 0.8) : rgba(c.fg, 0.7), weightFor(g, 24 * u) * 0.9);
-      drawLabel(ctx, e.label, B(g, 24 * u, 650), feed.x + 92 * u, cy - (e.detail ? 12 * u : 0), "left", c.fg, alpha);
-      if (e.detail) drawLabel(ctx, e.detail, B(g, 20 * u, 500), feed.x + 92 * u, cy + 16 * u, "left", rgba(c.fg, 0.55), alpha);
+      drawLabel(ctx, e.label, B(g, 24 * u, 650), feed.x + 92 * u, cy - (e.detail ? 12 * u : 0), "left", c.fg, alpha, feed.w - 92 * u - 80 * u);
+      if (e.detail) drawLabel(ctx, e.detail, B(g, 20 * u, 500), feed.x + 92 * u, cy + 16 * u, "left", rgba(c.fg, 0.55), alpha, feed.w - 92 * u - 80 * u);
       drawLabel(ctx, age === 0 ? "now" : `${Math.max(1, Math.round((g.t - cues[i])))}s`, B(g, 18 * u, 500), feed.x + feed.w - 28 * u, cy, "right", rgba(c.fg, 0.45), alpha);
       g.hit?.({ field: `items.${i}`, x: feed.x, y: cy - rowH / 2, w: feed.w, h: rowH, size: 24 * u, align: "left", lines: 1 });
     });

@@ -190,9 +190,27 @@ export function drawLabel(
   align: CanvasTextAlign,
   color: string,
   alpha = 1,
+  maxW?: number,
 ) {
   ctx.save();
   setFont(ctx, f);
+  // Fit a width: shrink a little (to 72%), then cut with an ellipsis. Never spill off the frame.
+  if (maxW !== undefined && maxW > 0 && text) {
+    let w = ctx.measureText(text).width;
+    if (w > maxW) {
+      setFont(ctx, { ...f, size: f.size * Math.max(0.72, maxW / w) });
+      w = ctx.measureText(text).width;
+      if (w > maxW) {
+        let lo = 0, hi = text.length;
+        while (lo < hi) {
+          const mid = (lo + hi + 1) >> 1;
+          if (ctx.measureText(text.slice(0, mid).trimEnd() + "…").width <= maxW) lo = mid;
+          else hi = mid - 1;
+        }
+        text = lo ? text.slice(0, lo).trimEnd() + "…" : "";
+      }
+    }
+  }
   ctx.textAlign = align;
   ctx.textBaseline = "middle";
   ctx.fillStyle = color;
