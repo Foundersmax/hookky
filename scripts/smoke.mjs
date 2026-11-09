@@ -19,7 +19,8 @@ try {
   const page = await browser.newPage();
   const pageErrors = [];
   page.on("pageerror", (e) => pageErrors.push(e.message));
-  await page.goto(`http://localhost:${port}/smoke.html`);
+  // A cold dev server compiles the whole engine on first load; give it time on slow CI machines.
+  await page.goto(`http://localhost:${port}/smoke.html`, { waitUntil: "domcontentloaded", timeout: 120000 });
   await page.waitForFunction(() => window.__smoke, null, { timeout: 180000 });
   const r = await page.evaluate(() => window.__smoke);
   console.log(`Engine smoke test: ${r.frames} frames rendered, ${r.failureCount} failure(s).`);
