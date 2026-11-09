@@ -14,7 +14,7 @@ export const IDEAS: Record<string, string[]> = {
   world: ["globe", "earth"], global: ["globe"], travel: ["plane", "map"], location: ["map-pin"], home: ["home", "house"], city: ["building", "building-2"],
   idea: ["lightbulb"], smart: ["brain", "sparkles", "cpu"], ai: ["sparkles", "brain", "bot"], magic: ["sparkles", "wand"], new: ["sparkles", "badge"], quality: ["award", "gem"], best: ["award", "trophy", "crown"],
   easy: ["check-circle", "mouse-pointer-click"], simple: ["check-circle", "circle"], done: ["check", "check-circle"], check: ["check"], start: ["play", "rocket"], launch: ["rocket"], goal: ["target", "flag"], win: ["trophy"],
-  coffee: ["coffee", "cup-soda"], food: ["utensils", "chef-hat"], eat: ["utensils"], drink: ["cup-soda", "wine"], shop: ["shopping-bag", "store"], buy: ["shopping-cart", "shopping-bag"], delivery: ["truck", "package"], order: ["package", "shopping-bag"],
+  coffee: ["coffee", "cup-soda"], food: ["utensils", "chef-hat"], eat: ["utensils"], drink: ["cup-soda", "wine"], shop: ["shopping-bag", "store"], sales: ["chart-line", "trending-up"], chaos: ["circle-alert", "zap"], buy: ["shopping-cart", "shopping-bag"], delivery: ["truck", "package"], order: ["package", "shopping-bag"],
   watch: ["watch"], music: ["music", "headphones"], listen: ["headphones", "ear"], video: ["video", "clapperboard"], photo: ["camera", "image"], design: ["pen-tool", "palette"], write: ["pen-line", "pencil"], code: ["code", "terminal"],
   calendar: ["calendar"], day: ["sun", "calendar"], week: ["calendar-days"], year: ["calendar"], stress: ["wind", "heart-pulse", "frown"], calm: ["leaf", "wind"], nature: ["leaf", "trees"], water: ["droplet", "waves"], weather: ["cloud-sun"],
   learn: ["graduation-cap", "book-open"], book: ["book-open"], work: ["briefcase", "laptop"], laptop: ["laptop"], cloud: ["cloud"], connect: ["link", "plug"], share: ["share-2", "send"], chat: ["message-circle"],
@@ -22,7 +22,7 @@ export const IDEAS: Record<string, string[]> = {
   star: ["star"], review: ["star", "message-square-quote"], rating: ["star"], love: ["heart"], like: ["thumbs-up", "heart"], happy: ["smile"], gift: ["gift"], car: ["car"], bike: ["bike"], dog: ["dog"], cat: ["cat"], baby: ["baby"],
 };
 
-const stem = (w: string) => w.toLowerCase().replace(/[^a-z0-9]/g, "").replace(/(ies)$/, "y").replace(/(ing|ed|es|s)$/, "");
+const stem = (w: string) => w.toLowerCase().replace(/[^a-z0-9]/g, "").replace(/(ies)$/, "y").replace(/(ing|ed|es|s)$/, "").replace(/([b-df-hj-np-tv-z])\1$/, "$1"); // running → run
 
 /** The best icon from the built-in set for an idea (previews and offline), skipping ones in `used`. */
 export function builtinIcon(idea: string, used = new Set<string>()): string | undefined {

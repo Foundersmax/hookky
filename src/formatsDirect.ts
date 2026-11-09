@@ -26,7 +26,7 @@ async function motionEdit(f: Format, brief: ReturnType<typeof fill>, audio: Audi
   const st = f.motion!;
   const voice = audio ? { duration: audio.duration, pauses: audio.pauses, words: audio.words, insight: audio.insight } : pseudoVoice(brief);
   step("Planning a beat per line");
-  let beats: MotionBeat[] = planMotion(voice, brief);
+  let beats: MotionBeat[] = planMotion(voice, brief, { prefer: st.prefer });
   let searched = 0;
   if (withClaude) {
     step("Claude is designing the motion script");
@@ -37,7 +37,7 @@ async function motionEdit(f: Format, brief: ReturnType<typeof fill>, audio: Audi
         body: JSON.stringify({
           draft: beats.map((b) => ({ s: b.s, e: b.e, line: b.line, template: b.template, ideas: b.ideas })),
           brief,
-          style: { name: st.name, kit: st.kit, blurb: st.blurb },
+          style: { name: st.name, kit: st.kit, blurb: st.blurb, ...(st.prefer && { leads_with: st.prefer }) },
           delivery: audio?.insight ? { mood: audio.insight.mood, pace: audio.insight.pace, stressed: audio.insight.stressedWords?.slice(0, 12) } : undefined,
         }),
       });

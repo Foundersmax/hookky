@@ -64,6 +64,9 @@ const USES: Record<string, (keyof Scene)[]> = {
   "kpi-grid": ["kicker", "headline", "items"],
   "world-map": ["kicker", "headline", "items"],
   "route-map": ["headline", "items", "stat"],
+  dashboard: ["kicker", "headline", "items", "stat"],
+  "dashboard-focus": ["headline", "items"],
+  "live-metrics": ["headline", "items", "stat"],
 };
 const ITEMS_LABEL: Record<string, string> = {
   testimonials: "Quotes, one per line: quote — name, role",
@@ -81,6 +84,9 @@ const ITEMS_LABEL: Record<string, string> = {
   "kpi-grid": "Numbers: label | value, 2–4 lines",
   "world-map": "Places, one per line (cities, countries, regions)",
   "route-map": "From, then to",
+  dashboard: "KPI cards: label | value | change (value optional)",
+  "dashboard-focus": "Features to tour, one per line (up to 4)",
+  "live-metrics": "Events: label | detail, one per line",
 };
 
 export function SceneInspector() {

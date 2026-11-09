@@ -75,6 +75,9 @@ const STARTER_CONTENT: Partial<Record<Scene["template"], Partial<Scene>>> = {
   "donut-chart": { headline: "Where they *shop*", items: ["Mobile | 64%", "Desktop | 28%", "Tablet | 8%"] },
   "kpi-grid": { headline: "By the *numbers*", items: ["Users | 120k", "Countries | 40", "Rating | 4.9", "Uptime | 99.9%"], icons: ["lucide:users", "lucide:globe", "lucide:star", "lucide:zap"] },
   "world-map": { headline: "Now in *five cities*", items: ["London", "Lagos", "New York", "Dubai", "Singapore"] },
+  dashboard: { headline: "Everything in *one view*", kicker: "Overview", items: ["Revenue | $48.2k | +12%", "Active users | 8,940 | +8%", "Conversion | 3.8% | +0.6%"], stat: { value: 48200, prefix: "$", label: "Revenue this month" } },
+  "dashboard-focus": { headline: "A *tour* of the product", items: ["Live revenue", "Trends at a glance", "Where it comes from", "Every order, tracked"] },
+  "live-metrics": { headline: "Happening *right now*", items: ["New order | $49 · Lagos", "New sign-up | from Instagram", "Payment received | $129"], stat: { value: 1284, label: "orders today" }, icons: ["lucide:shopping-bag", "lucide:user", "lucide:credit-card"] },
   "route-map": { headline: "At your door, *fast*", items: ["Kitchen", "Your door"], stat: { value: 18, suffix: "min", label: "Arriving in" }, icons: ["lucide:bike"] },
 };
 /** Starting lengths that give each template's starter copy time to read. */
@@ -87,7 +90,7 @@ const TEMPLATE_NAMES: Record<string, string> = {
   "device-mockup": "Device mockup", countdown: "Countdown", "price-card": "Price card", testimonials: "Testimonials", "before-after": "Before / after", "logo-reveal": "Logo reveal", audiogram: "Audiogram",
   "text-mask": "Text mask", chat: "Chat thread", notification: "Notifications", "pov-caption": "POV caption", versus: "Versus", rating: "Star rating", spotlight: "Spotlight", "word-stack": "Word stack",
   "word-slam": "Word slam", scramble: "Scramble", "zoom-through": "Zoom through", "letter-wave": "Letter wave", "outline-fill": "Outline fill", "flip-words": "Flip words", typewriter: "Typewriter", "echo-stack": "Echo stack",
-  "icon-hero": "Icon hero", "icon-list": "Icon list", "metric-ring": "Metric ring", "process-flow": "Process flow", "bar-compare": "Bar compare", "icon-orbit": "Icon orbit", "line-chart": "Line chart", "column-chart": "Column chart", "donut-chart": "Donut chart", "kpi-grid": "KPI grid", "world-map": "World map", "route-map": "Route map",
+  "icon-hero": "Icon hero", "icon-list": "Icon list", "metric-ring": "Metric ring", "process-flow": "Process flow", "bar-compare": "Bar compare", "icon-orbit": "Icon orbit", "line-chart": "Line chart", "column-chart": "Column chart", "donut-chart": "Donut chart", "kpi-grid": "KPI grid", "world-map": "World map", "route-map": "Route map", dashboard: "Dashboard", "dashboard-focus": "Dashboard tour", "live-metrics": "Live metrics",
 };
 
 export function CommandPalette({ host }: { host: PaletteHost }) {

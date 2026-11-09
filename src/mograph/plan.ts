@@ -9,8 +9,8 @@ import { keywords } from "../footage/plan";
 import { emSpoken, fill, type Brief } from "../copy";
 import { placesIn } from "./places";
 
-export type MotionTemplate = "icon-hero" | "icon-list" | "metric-ring" | "process-flow" | "bar-compare" | "icon-orbit" | "line-chart" | "column-chart" | "donut-chart" | "kpi-grid" | "world-map" | "route-map" | "cta-end";
-export const MOTION_TEMPLATES: MotionTemplate[] = ["icon-hero", "icon-list", "metric-ring", "process-flow", "bar-compare", "icon-orbit", "line-chart", "column-chart", "donut-chart", "kpi-grid", "world-map", "route-map", "cta-end"];
+export type MotionTemplate = "icon-hero" | "icon-list" | "metric-ring" | "process-flow" | "bar-compare" | "icon-orbit" | "line-chart" | "column-chart" | "donut-chart" | "kpi-grid" | "world-map" | "route-map" | "dashboard" | "dashboard-focus" | "live-metrics" | "cta-end";
+export const MOTION_TEMPLATES: MotionTemplate[] = ["icon-hero", "icon-list", "metric-ring", "process-flow", "bar-compare", "icon-orbit", "line-chart", "column-chart", "donut-chart", "kpi-grid", "world-map", "route-map", "dashboard", "dashboard-focus", "live-metrics", "cta-end"];
 
 /** One beat of the script, timed to a stretch of the voice-over. */
 export interface MotionBeat {
@@ -38,6 +38,8 @@ export interface MotionStyle {
   aspect: Aspect;
   motion: NonNullable<Scene["motion"]>;
   swatch: [string, string];
+  /** where the product is named, show this instead of the icon orbit (a dashboard style leads with its UI) */
+  prefer?: "dashboard" | "dashboard-focus" | "live-metrics";
 }
 
 export const MOTION_STYLES: MotionStyle[] = [
@@ -48,6 +50,13 @@ export const MOTION_STYLES: MotionStyle[] = [
   { id: "soft-light", name: "Soft Light", blurb: "Light outlined icons, rosy neutrals and a gentle gradient. Beauty and lifestyle.", kit: "ph", style: "blush", background: "gradient", aspect: "9:16", motion: "calm", swatch: ["#F6E9E4", "#C8553D"] },
   { id: "editorial-line", name: "Editorial Line", blurb: "Serif headlines, cobalt line icons on stone. Considered, magazine-quiet.", kit: "iconoir", style: "editorial", background: "solid", aspect: "4:5", motion: "calm", swatch: ["#EEEAE3", "#2F55FF"] },
   { id: "terminal-mono", name: "Terminal Mono", blurb: "Monospace, ink-black icons on paper, dotted grid. For dev tools and fintech.", kit: "tabler", style: "mono", background: "dots", aspect: "1:1", motion: "snappy", swatch: ["#E9E7E1", "#0D0D0D"] },
+  { id: "midnight-dashboard", name: "Midnight Dashboard", blurb: "Your product's dashboard assembling itself on deep blue: KPI cards, a live chart, breakdowns.", kit: "tabler", style: "midnight", background: "grid", aspect: "16:9", motion: "smooth", swatch: ["#070B14", "#38BDF8"], prefer: "dashboard" },
+  { id: "product-tour", name: "Product Tour", blurb: "A clean dashboard, then the camera flies to each feature as it's said. SaaS walkthroughs.", kit: "lucide", style: "clean", background: "solid", aspect: "16:9", motion: "smooth", swatch: ["#FFFFFF", "#0A66FF"], prefer: "dashboard-focus" },
+  { id: "live-ops", name: "Live Ops", blurb: "Phosphor green on black: live counters, a streaming chart and an event feed.", kit: "lucide", style: "terminal", background: "grid", aspect: "16:9", motion: "snappy", swatch: ["#050805", "#39FF88"], prefer: "live-metrics" },
+  { id: "sunset-glow", name: "Sunset Glow", blurb: "Warm plum and tangerine, soft gradient, friendly type. Consumer apps and DTC.", kit: "ph", style: "sunset", background: "gradient", aspect: "9:16", motion: "smooth", swatch: ["#1A0F1F", "#FF7A45"] },
+  { id: "pastel-pop", name: "Pastel Pop", blurb: "Lilac, violet and bouncy timing; rounded and playful. Lifestyle and creator tools.", kit: "lucide", style: "pastel", background: "blobs", aspect: "1:1", motion: "bouncy", swatch: ["#F4F1FF", "#7C5CFF"] },
+  { id: "field-notes", name: "Field Notes", blurb: "Deep green, amber icons, a considered serif. Sustainability, food, outdoors.", kit: "iconoir", style: "forest", background: "dots", aspect: "4:5", motion: "calm", swatch: ["#0E1A14", "#F2B544"] },
+  { id: "fintech-night", name: "Fintech Night", blurb: "Midnight blue with a live-metrics lead: money moving, in real time. Vertical.", kit: "tabler", style: "midnight", background: "solid", aspect: "9:16", motion: "snappy", swatch: ["#070B14", "#38BDF8"], prefer: "live-metrics" },
   { id: "vertical-explainer", name: "Vertical Explainer", blurb: "The line-icon explainer built for Reels and Shorts: one idea per screen.", kit: "lucide", style: "noir", background: "solid", aspect: "9:16", motion: "smooth", swatch: ["#0B0B0C", "#2CF5C1"] },
 ];
 export const motionStyle = (id: string) => MOTION_STYLES.find((m) => m.id === id) ?? MOTION_STYLES[0];
@@ -117,7 +126,7 @@ const fmtNum = (n: { value: number; prefix: string; suffix: string }) => `${n.pr
  * Plan a motion-graphics edit for a voice-over: one beat per spoken phrase (cut in its pauses),
  * the template each line calls for, the words on screen and the ideas to find icons for.
  */
-export function planMotion(v: VoiceIn & { insight?: { stressedWords?: string[] } }, raw: Partial<Brief>): MotionBeat[] {
+export function planMotion(v: VoiceIn & { insight?: { stressedWords?: string[] } }, raw: Partial<Brief>, opts: { prefer?: MotionStyle["prefer"] } = {}): MotionBeat[] {
   const b = fill(raw);
   const slots = voiceSlots(v, 2, 4.2);
   const stressed = v.insight?.stressedWords;
@@ -137,6 +146,18 @@ export function planMotion(v: VoiceIn & { insight?: { stressedWords?: string[] }
       const vehicle = /\b(ride|driver|car)\b/i.test(line) ? "car" : /\b(truck|freight|ship)\b/i.test(line) ? "truck" : "bike";
       return { ...base, template: "route-map", headline: emSpoken(shortWords(line, 5), stressed), items: [places[0] ?? "Pickup", places[1] ?? "Your door"], ...(mins && { stat: { value: mins.value, suffix: /hour/.test(mins.suffix) ? "h" : "min", label: "Arriving in" } }), ideas: [vehicle] };
     }
+    // The product's UI: a dashboard tour, a live panel, or the dashboard itself.
+    const short = (x: string) => cap(shortWords(x, 3));
+    const feats = b.benefits.slice(0, 4).map(short);
+    const ui = (template: "dashboard" | "dashboard-focus" | "live-metrics"): MotionBeat => {
+      const n = nums[0];
+      const stat = n ? { value: n.value, ...(n.prefix && { prefix: n.prefix }), ...(n.suffix && { suffix: n.suffix.trim() }), label: labelAfter(line, n.at) || undefined } : undefined;
+      if (template === "dashboard-focus") return { ...base, template, headline: emSpoken(shortWords(line, 6), stressed), items: (listIn(line) ?? feats).slice(0, 4), ideas: [] };
+      if (template === "live-metrics") return { ...base, template, headline: emSpoken(shortWords(line, 5), stressed), items: feats.slice(0, 3), ...(stat && { stat }), ideas: ["bell"] };
+      return { ...base, template, kicker: "Overview", headline: emSpoken(shortWords(line, 6), stressed), items: feats.slice(0, 3), ...(stat && { stat }), ideas: ["layout grid", "chart", "users", "wallet", "bell"] };
+    };
+    if (/\b(real[- ]?time|live|as it happens|instantly|every second)\b/i.test(line) && i > 0) return ui("live-metrics");
+    if (/\b(dashboards?|analytics|insights|reporting|reports|at a glance|one view|one place|all in one)\b/i.test(line) && i > 0) return ui(feats.length >= 2 ? "dashboard-focus" : "dashboard");
     // Places said: the world map, pins in the order they're said.
     if (places.length) {
       // the pins name the places; the headline says the rest ("Now shipping to London and Lagos" → "Now shipping")
@@ -182,13 +203,15 @@ export function planMotion(v: VoiceIn & { insight?: { stressedWords?: string[] }
     }
     const steps = stepsIn(line);
     if (steps) return { ...base, template: "process-flow", headline: undefined, items: steps, ideas: steps.map((s) => ideasIn(s, b.product)[0] ?? s) };
-    const list = listIn(line);
-    if (list) return { ...base, template: "icon-list", headline: i === 0 ? headline : undefined, items: list, ideas: list.map((s) => ideasIn(s, b.product)[0] ?? s) };
     if (!orbitUsed && named(line) && i > 0) {
       orbitUsed = true;
+      if (opts.prefer) return ui(opts.prefer);
       const world = [...new Set([...ideasIn(b.what), ...b.benefits.flatMap((x) => ideasIn(x, b.product).slice(0, 1))])].slice(0, 5);
       return { ...base, template: "icon-orbit", headline, ideas: [ideasIn(b.what, b.product)[0] ?? "sparkles", ...world] };
     }
+    // (after the product reveal: "Meet Orbit, your command centre" is a reveal, not a list)
+    const list = listIn(line);
+    if (list) return { ...base, template: "icon-list", headline: i === 0 ? headline : undefined, items: list, ideas: list.map((s) => ideasIn(s, b.product)[0] ?? s) };
     const ideas = ideasIn(line, b.product);
     // A line with several picturable ideas reads better as a list than one icon.
     if (ideas.length >= 3 && i > 0 && line.split(" ").length <= 12) {

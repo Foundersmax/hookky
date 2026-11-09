@@ -8,6 +8,7 @@ import { TEXT_TEMPLATES } from "./textfx";
 import { EXTRA_BACKGROUNDS } from "./backgrounds";
 import { MOGRAPH_TEMPLATES } from "./mograph";
 import { DATA_TEMPLATES } from "./mographData";
+import { DASH_TEMPLATES } from "./mographDash";
 import { BUILTIN_ICONS } from "../mograph/builtin";
 
 /** Looks up a drawable by asset ref; `t` is the scene-local time (video clips use it). */
@@ -621,6 +622,7 @@ const TEMPLATES: Record<string, Tpl> = {
   ...TEXT_TEMPLATES,
   ...MOGRAPH_TEMPLATES,
   ...DATA_TEMPLATES,
+  ...DASH_TEMPLATES,
   "title-reveal"(g) {
     const { W, H, pad, ctx, c, u } = g;
     const align = g.scene.align ?? "center";

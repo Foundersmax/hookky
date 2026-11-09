@@ -51,6 +51,9 @@ export const TEMPLATES = [
   "kpi-grid",
   "world-map",
   "route-map",
+  "dashboard",
+  "dashboard-focus",
+  "live-metrics",
 ] as const;
 export type TemplateId = (typeof TEMPLATES)[number];
 

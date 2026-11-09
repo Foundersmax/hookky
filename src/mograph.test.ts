@@ -91,3 +91,21 @@ test("world mask: land where land is", async () => {
   for (const p of ["lagos", "paris", "brazil", "japan", "australia", "kenya"]) assert.ok(cell(...placeAt(p)!), p);
   for (const [lon, lat] of [[-30, 30], [-150, 10], [80, -20], [-150, 71]]) assert.ok(!cell(lon, lat), `${lon},${lat} is sea`);
 });
+
+test("motion plan: dashboards where the line calls for them, and where a dashboard style names the product", async () => {
+  const { planMotion, MOTION_STYLES } = await import("./mograph/plan");
+  const lines = ["Running a store is chaos.", "See every sale in one dashboard.", "Track orders in real time.", "Meet Orbit, your command centre.", "Orbit. Start free."];
+  const words: { w: string; s: number; e: number }[] = [], pauses: { s: number; e: number }[] = [];
+  let t = 0.3;
+  lines.forEach((l) => {
+    for (const w of l.split(" ")) words.push({ w, s: t, e: t + 0.3 }), (t += 0.36);
+    pauses.push({ s: t, e: t + 0.6 });
+    t += 0.6;
+  });
+  const brief = { product: "Orbit", benefits: ["Live revenue tracking", "Smart inventory alerts", "One-click reports"] };
+  const beats = planMotion({ duration: t, pauses, words }, brief, { prefer: "dashboard" });
+  assert.deepEqual(beats.map((b) => b.template), ["icon-hero", "dashboard-focus", "live-metrics", "dashboard", "cta-end"]);
+  assert.ok(beats[3].items!.every((x) => !x.includes("|")), "no invented KPI values");
+  assert.equal(planMotion({ duration: t, pauses, words }, brief)[3].template, "icon-orbit");
+  assert.ok(MOTION_STYLES.length >= 15 && MOTION_STYLES.filter((s) => s.prefer).length >= 3);
+});

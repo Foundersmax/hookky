@@ -21,7 +21,7 @@ function kitSet(prefix: string): IconSet | undefined {
 }
 const kitOf = (id: string) => KITS.find((k) => k.id === id) ?? KITS[0];
 
-const stem = (w: string) => w.toLowerCase().replace(/[^a-z0-9]/g, "").replace(/(ies)$/, "y").replace(/(ing|ed|es|s)$/, "");
+const stem = (w: string) => w.toLowerCase().replace(/[^a-z0-9]/g, "").replace(/(ies)$/, "y").replace(/(ing|ed|es|s)$/, "").replace(/([b-df-hj-np-tv-z])\1$/, "$1"); // running → run
 
 /** Icon names in a kit for an idea, best first, from its names, aliases and the ideas dictionary. */
 export function localSearch(query: string, kit: KitId, limit = 6): string[] {

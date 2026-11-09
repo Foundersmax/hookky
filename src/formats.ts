@@ -478,7 +478,7 @@ FORMATS.splice(FORMATS.map((f) => f.section).lastIndexOf("text") + 1, 0, ...MINI
 // ---------------------------------------------------------------- motion graphics
 /** A motion-graphics edit from the built-in icons (previews, offline); the studio swaps in the kit's icons. */
 export function motionBuild(st: MotionStyle, raw: Partial<Brief>, voice: VoiceIn & { insight?: VoiceInsight }): Beat[] {
-  const beats = planMotion(voice, raw);
+  const beats = planMotion(voice, raw, { prefer: st.prefer });
   const used = new Set<string>();
   const icons = beats.map((bt) => bt.ideas.map((idea) => {
     const k = builtinIcon(idea, used);
@@ -487,7 +487,7 @@ export function motionBuild(st: MotionStyle, raw: Partial<Brief>, voice: VoiceIn
   }));
   return motionScenes(beats, icons, st, raw);
 }
-const MOTION_CATEGORY: Record<string, Category> = { "line-explainer": "Apps & SaaS", "clean-product": "Apps & SaaS", "data-story": "Promos & offers", "swiss-mono": "Brand & story", "soft-light": "E-commerce", "vertical-explainer": "Social hooks", "editorial-line": "Brand & story", "terminal-mono": "Apps & SaaS" };
+const MOTION_CATEGORY: Record<string, Category> = { "line-explainer": "Apps & SaaS", "clean-product": "Apps & SaaS", "data-story": "Promos & offers", "swiss-mono": "Brand & story", "soft-light": "E-commerce", "vertical-explainer": "Social hooks", "editorial-line": "Brand & story", "terminal-mono": "Apps & SaaS", "midnight-dashboard": "Apps & SaaS", "product-tour": "Apps & SaaS", "live-ops": "Apps & SaaS", "sunset-glow": "E-commerce", "pastel-pop": "Social hooks", "field-notes": "Brand & story", "fintech-night": "Apps & SaaS" };
 FORMATS.push(
   ...MOTION_STYLES.map((st): Format => ({
     id: `mg-${st.id}`, section: "mograph", name: st.name, category: MOTION_CATEGORY[st.id] ?? "Brand & story", hook: `${st.kit === "ph" ? "Phosphor" : st.kit[0].toUpperCase() + st.kit.slice(1)} icons`, blurb: st.blurb, aspect: st.aspect, style: st.style, swatch: st.swatch, motion: st,
