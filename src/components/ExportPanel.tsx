@@ -76,7 +76,7 @@ export function ExportPanel({ toast }: { toast: (s: string) => void }) {
     });
 
   const ext = typeof VideoEncoder !== "undefined" ? "mp4" : pickMime().ext;
-  const slug = (project.title || "hookky").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "hookky";
+  const slug = (project.title || "rookker").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "rookker";
   const total = totalDuration(project);
   const busy = !!progress;
 
@@ -243,7 +243,7 @@ export function ExportPanel({ toast }: { toast: (s: string) => void }) {
           if (!f) return;
           try {
             const p = JSON.parse(await f.text());
-            if (!Array.isArray(p?.scenes) || !p.scenes.length) throw new Error("That file isn't a Hookky project.");
+            if (!Array.isArray(p?.scenes) || !p.scenes.length) throw new Error("That file isn't a Rookker project.");
             await importProject(p);
             toast("Imported as a new project");
           } catch (err: any) {

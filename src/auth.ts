@@ -18,7 +18,7 @@ export async function authCall(path: string, body: unknown): Promise<AuthResult>
     if (!res.ok) return { ok: false, error: json.error || `Something went wrong (${res.status}). Try again.`, code: json.code };
     return { ok: true, ...json };
   } catch {
-    return { ok: false, error: "Can't reach Hookky. Check your connection and try again." };
+    return { ok: false, error: "Can't reach Rookker. Check your connection and try again." };
   }
 }
 

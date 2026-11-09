@@ -1,4 +1,4 @@
-// Hookky motion engine — renders a Project at time t onto a 2D canvas.
+// Rookker motion engine — renders a Project at time t onto a 2D canvas.
 import type { Project, Scene, Brand, Word, TransitionId } from "../types";
 import { clamp, ease, lerp, win, rgba, mix, contrast, hash } from "./util";
 import { layoutText, drawLayout, drawLabel, displayWeight, displayTracking, stripMarks, measure, type FontSpec, type Layout } from "./text";
@@ -270,7 +270,7 @@ const reported = new WeakSet<Scene>();
 function reportOnce(scene: Scene, err: unknown) {
   if (reported.has(scene)) return;
   reported.add(scene);
-  console.error(`Hookky: scene "${scene.id}" (${scene.template}) failed to render`, err);
+  console.error(`Rookker: scene "${scene.id}" (${scene.template}) failed to render`, err);
 }
 
 // ---------------------------------------------------------------- colours per scene

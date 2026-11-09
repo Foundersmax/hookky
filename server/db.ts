@@ -1,4 +1,4 @@
-// Postgres for accounts. Accounts switch on when DATABASE_URL is set; without it Hookky runs as
+// Postgres for accounts. Accounts switch on when DATABASE_URL is set; without it Rookker runs as
 // before (open, or behind HOOKKY_PASSWORD).
 import pg from "pg";
 

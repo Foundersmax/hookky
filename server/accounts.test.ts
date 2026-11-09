@@ -66,7 +66,7 @@ const linkIn = (to: string, re: RegExp) => {
 test("sign-up → confirm email → admin approval → sign in", { skip }, async () => {
   const owner = client();
   // The owner (in ADMIN_EMAILS) becomes an active admin as soon as they confirm.
-  assert.equal((await owner.call("POST", "/api/auth/signup", { email: "Owner@Hookky.test", password: "correct horse battery", name: "Owner" })).status, 200);
+  assert.equal((await owner.call("POST", "/api/auth/signup", { email: "Owner@Rookker.test", password: "correct horse battery", name: "Owner" })).status, 200);
   let link = linkIn("owner@hookky.test", /Confirm email/)!;
   let r = await owner.call("GET", link.pathname + link.search);
   assert.deepEqual([r.status, r.location], [303, "https://rookker.test/?auth=verified-admin"]);
@@ -83,7 +83,7 @@ test("sign-up → confirm email → admin approval → sign in", { skip }, async
   link = linkIn("ana@hookky.test", /Confirm email/)!;
   assert.equal((await ana.call("GET", link.pathname + link.search)).location, "https://rookker.test/?auth=verified");
   assert.equal((await ana.call("GET", link.pathname + link.search)).location, "https://rookker.test/?auth=link-expired", "links work once");
-  assert.ok(outbox.some((m) => m.to === "owner@hookky.test" && /New Hookky sign-up: ana@hookky.test/.test(m.subject)), "admins hear about it");
+  assert.ok(outbox.some((m) => m.to === "owner@hookky.test" && /New Rookker sign-up: ana@hookky.test/.test(m.subject)), "admins hear about it");
   r = await ana.call("POST", "/api/auth/login", { email: "ana@hookky.test", password: "ana's long password" });
   assert.deepEqual([r.status, r.json.code], [403, "pending"]);
   assert.equal((await ana.call("GET", "/api/thing")).status, 401, "no session yet");

@@ -1,4 +1,4 @@
-// Landing page: plays the showcase with the real Hookky engine, in the hero and in four formats.
+// Landing page: plays the showcase with the real Rookker engine, in the hero and in four formats.
 import { Renderer, totalDuration } from "../src/engine/render";
 import { ASPECT_SIZE, type Aspect, type Project } from "../src/types";
 import { showcase } from "./showcase";

@@ -1,4 +1,4 @@
-// Bridges to the claude.ai artifact runtime when Hookky is hosted there.
+// Bridges to the claude.ai artifact runtime when Rookker is hosted there.
 // Elsewhere `window.claude` is absent and every capability resolves to null.
 
 type SampleFn = ((input: string | { role: "user" | "assistant"; content: string }[], opts?: Record<string, unknown>) => Promise<{ text: string; truncated: boolean }>) & {

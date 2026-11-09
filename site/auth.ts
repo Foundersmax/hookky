@@ -85,7 +85,7 @@ async function call(path: string, body: unknown): Promise<Reply> {
     const j = await res.json().catch(() => ({}));
     return { ...j, ok: res.ok, error: j.error || (res.ok ? "" : `Something went wrong (${res.status}). Try again.`) };
   } catch {
-    return { ok: false, error: "Can't reach Hookky right now. Check your connection and try again." };
+    return { ok: false, error: "Can't reach Rookker right now. Check your connection and try again." };
   }
 }
 

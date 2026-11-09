@@ -17,8 +17,8 @@ const css = cssHrefs.map(read).join("\n");
 // keep a literal "</script" inside the bundle from closing the inline tag
 const js = jsSrcs.map(read).join("\n").replace(/<\/script/gi, "<\\/script");
 
-const page = `<title>Hookky</title>
-<meta name="description" content="Hookky turns briefs, references and voice-overs into minimal animated graphics for product ads and launches.">
+const page = `<title>Rookker</title>
+<meta name="description" content="Rookker turns briefs, references and voice-overs into minimal animated graphics for product ads and launches.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 ${fonts}

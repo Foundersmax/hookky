@@ -12,7 +12,7 @@ export async function proxyVideo(req: Request, res: Response, fetcher: Fetcher =
   if (!videoHostAllowed(raw)) return void res.status(400).send("Only clips from the connected stock video sources can be streamed.");
   const range = typeof req.headers.range === "string" && /^bytes=\d*-\d*$/.test(req.headers.range) ? req.headers.range : undefined;
   try {
-    const { res: r } = await fetcher(raw, { headers: { "User-Agent": "Mozilla/5.0 (compatible; Hookky/0.1)", ...(range && { Range: range }) }, timeoutMs: 300_000 });
+    const { res: r } = await fetcher(raw, { headers: { "User-Agent": "Mozilla/5.0 (compatible; Rookker/0.1)", ...(range && { Range: range }) }, timeoutMs: 300_000 });
     let type = (r.headers.get("content-type") || "").toLowerCase();
     if (type.startsWith("application/octet-stream") || type.startsWith("binary/octet-stream")) type = /\.webm(\?|$)/i.test(raw) ? "video/webm" : "video/mp4";
     if (!(r.status === 200 || r.status === 206) || !/^video\/(mp4|webm|quicktime)/.test(type) || !r.body) {

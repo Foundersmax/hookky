@@ -119,7 +119,7 @@ export function LibraryPanel({ toast }: { toast: (s: string) => void }) {
       {!hasServer && (
         <div className="card">
           <h4>Upload your visuals</h4>
-          <span className="muted">Searching Pinterest, Freepik, Envato and other sources, and importing from links, need the self-hosted Hookky server. Here, upload product shots, logos and references.</span>
+          <span className="muted">Searching Pinterest, Freepik, Envato and other sources, and importing from links, need the self-hosted Rookker server. Here, upload product shots, logos and references.</span>
         </div>
       )}
       {hasServer && (<>

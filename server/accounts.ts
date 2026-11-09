@@ -181,8 +181,8 @@ async function sendVerify(req: Request, u: { id: number; email: string; name: st
   return sendMail({
     to: u.email,
     toName: u.name,
-    subject: "Confirm your email for Hookky",
-    lines: [`Hi${u.name ? ` ${u.name}` : ""},`, "Confirm your email address to finish signing up for Hookky."],
+    subject: "Confirm your email for Rookker",
+    lines: [`Hi${u.name ? ` ${u.name}` : ""},`, "Confirm your email address to finish signing up for Rookker."],
     action: { label: "Confirm email", url: `${appUrl(req)}/api/auth/verify?token=${t}` },
     footer: `This link works for ${VERIFY_HOURS} hours. If you didn't sign up, ignore this email.`,
   });
@@ -195,7 +195,7 @@ async function notifyAdmins(req: Request, u: { email: string; name: string }) {
     [...to].map((email) =>
       sendMail({
         to: email,
-        subject: `New Hookky sign-up: ${u.email}`,
+        subject: `New Rookker sign-up: ${u.email}`,
         lines: [`${u.name || u.email} (${u.email}) confirmed their email and is waiting for approval.`],
         action: { label: "Review sign-ups", url: `${appUrl(req)}/?admin=pending` },
       }),
@@ -231,7 +231,7 @@ export async function requireUser(req: Request, res: Response, next: NextFunctio
   if (!req.path.startsWith("/api/") || PUBLIC_API.has(req.path) || req.path.startsWith("/api/auth/")) return next();
   try {
     const u = await sessionUser(req);
-    if (!u) return void res.status(401).json({ error: "Sign in to use Hookky.", code: "signed_out" });
+    if (!u) return void res.status(401).json({ error: "Sign in to use Rookker.", code: "signed_out" });
     req.user = u;
     if (req.path.startsWith("/api/admin/") && u.role !== "admin") return void res.status(403).json({ error: "Admins only." });
     next();
@@ -256,7 +256,7 @@ export function sameOrigin(req: Request, res: Response, next: NextFunction) {
 
 // ---------------------------------------------------------------- routes
 const publicUser = (u: User) => ({ id: u.id, email: u.email, name: u.name, role: u.role });
-const generic = "If that address can sign in to Hookky, we've sent it an email. Check your inbox (and spam).";
+const generic = "If that address can sign in to Rookker, we've sent it an email. Check your inbox (and spam).";
 
 export function accountRoutes() {
   const r = express.Router();
@@ -323,7 +323,7 @@ export function accountRoutes() {
     if (!ok) return void res.status(401).json({ error: "That email and password don't match." });
     if (u.status === "unverified") return void res.status(403).json({ code: "unverified", error: "Confirm your email first. We can send the link again." });
     if (u.status === "pending") return void res.status(403).json({ code: "pending", error: "Your account is waiting for an admin to approve it. You'll get an email when it's ready." });
-    if (u.status === "disabled") return void res.status(403).json({ code: "disabled", error: "This account has been disabled. Contact your Hookky admin." });
+    if (u.status === "disabled") return void res.status(403).json({ code: "disabled", error: "This account has been disabled. Contact your Rookker admin." });
     await startSession(req, res, Number(u.id));
     res.json({ user: publicUser({ ...u, id: Number(u.id) }) });
   });
@@ -345,8 +345,8 @@ export function accountRoutes() {
       await sendMail({
         to: u.email,
         toName: u.name,
-        subject: "Reset your Hookky password",
-        lines: ["Someone (hopefully you) asked to reset the password for this Hookky account."],
+        subject: "Reset your Rookker password",
+        lines: ["Someone (hopefully you) asked to reset the password for this Rookker account."],
         action: { label: "Choose a new password", url: `${siteUrl(req)}/?reset=${t}` },
         footer: `This link works for ${RESET_MINUTES} minutes. If you didn't ask for it, ignore this email; your password stays the same.`,
       });
@@ -418,9 +418,9 @@ export function accountRoutes() {
           await sendMail({
             to: u.email,
             toName: u.name,
-            subject: "Your Hookky account is ready",
+            subject: "Your Rookker account is ready",
             lines: [`Hi${u.name ? ` ${u.name}` : ""},`, action === "approve" ? "An admin approved your account. You can sign in now." : "Your account has been turned back on. You can sign in again."],
-            action: { label: "Open Hookky", url: appUrl(req) },
+            action: { label: "Open Rookker", url: appUrl(req) },
           });
         break;
       }

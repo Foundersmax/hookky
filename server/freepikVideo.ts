@@ -20,7 +20,7 @@ async function call(path: string): Promise<any> {
     let res: Response;
     try {
       res = await fetch(b + path, {
-        headers: { "x-magnific-api-key": key, "x-freepik-api-key": key, "Accept-Language": "en-US", Accept: "application/json", "User-Agent": "Hookky/1.0" },
+        headers: { "x-magnific-api-key": key, "x-freepik-api-key": key, "Accept-Language": "en-US", Accept: "application/json", "User-Agent": "Rookker/1.0" },
         signal: AbortSignal.timeout(20000),
       });
     } catch (e: any) {

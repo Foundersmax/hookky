@@ -53,8 +53,8 @@ if (password && !accounts) {
     const [scheme, encoded] = (req.headers.authorization ?? "").split(" ");
     const given = scheme === "Basic" && encoded ? Buffer.from(encoded, "base64").toString("utf8").split(":").slice(1).join(":") : "";
     if (given && timingSafeEqual(digest(given), expected)) return next();
-    res.setHeader("WWW-Authenticate", 'Basic realm="Hookky", charset="UTF-8"');
-    res.status(401).send("Sign in to use Hookky.");
+    res.setHeader("WWW-Authenticate", 'Basic realm="Rookker", charset="UTF-8"');
+    res.status(401).send("Sign in to use Rookker.");
   });
 }
 
@@ -240,7 +240,7 @@ app.get("/api/img", async (req, res) => {
     let hit = cache.get(raw);
     if (!hit) {
       const origin = (() => { try { return new URL(raw).origin; } catch { return ""; } })();
-      const { res: r } = await safeFetch(raw, { headers: { "User-Agent": "Mozilla/5.0 (compatible; Hookky/0.1)", ...(origin && { Referer: origin }) }, timeoutMs: 20000 });
+      const { res: r } = await safeFetch(raw, { headers: { "User-Agent": "Mozilla/5.0 (compatible; Rookker/0.1)", ...(origin && { Referer: origin }) }, timeoutMs: 20000 });
       const type = r.headers.get("content-type") || "";
       if (!r.ok || !/^image\/(png|jpe?g|webp|gif|avif)/i.test(type)) {
         await r.body?.cancel().catch(() => {});
@@ -290,7 +290,7 @@ app.use("/api", (err: any, _req: express.Request, res: express.Response, next: e
   if (res.headersSent) return next(err);
   const dbDown = /ECONNREFUSED|ETIMEDOUT|ENOTFOUND|terminat|Connection|too many clients|the database system/i.test(String(err?.message ?? err) + String(err?.code ?? ""));
   console.error(dbDown ? `Database unavailable: ${err?.message ?? err}` : err);
-  res.status(dbDown ? 503 : 500).json({ error: dbDown ? "Hookky can't reach its database right now. Try again in a minute." : "Something went wrong on our side. Try again." });
+  res.status(dbDown ? 503 : 500).json({ error: dbDown ? "Rookker can't reach its database right now. Try again in a minute." : "Something went wrong on our side. Try again." });
 });
 
 if (process.env.NODE_ENV === "production") {
@@ -311,7 +311,7 @@ async function recheckClaude() {
 const port = Number(process.env.PORT || 8787);
 app.listen(port, () => {
   if (process.env.NODE_ENV === "production" && !password && !accounts) console.warn("Neither DATABASE_URL (accounts) nor HOOKKY_PASSWORD is set: anyone with the URL can use this deploy and its API keys.");
-  console.log(`Hookky API on http://localhost:${port}  ·  agent: ${claudeConfigured() ? "Claude" : "local director"}  ·  transcription: ${transcriptionProvider()}`);
+  console.log(`Rookker API on http://localhost:${port}  ·  agent: ${claudeConfigured() ? "Claude" : "local director"}  ·  transcription: ${transcriptionProvider()}`);
   if (process.env.NODE_ENV !== "test") void probeFreepikVideo();
   if (claudeConfigured() && process.env.NODE_ENV !== "test") void probeClaude().then((c) => c === "ok" && console.log("Claude key check: ok"));
 });

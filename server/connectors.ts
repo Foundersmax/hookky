@@ -4,7 +4,7 @@ import type { Asset } from "../src/types";
 import { safeFetch, readLimited } from "./safeFetch";
 import { searchFreepikVideos, freepikKey } from "./freepikVideo";
 
-const UA = "Hookky/0.1 (+https://localhost)";
+const UA = "Rookker/0.1 (+https://localhost)";
 const env = (k: string) => process.env[k]?.trim() || "";
 
 export interface ConnectorInfo {
@@ -304,7 +304,7 @@ export async function searchVisuals(query: string, sources: string[] | undefined
 
 // ---------- URL import: works for Pinterest pins, Behance, Dribbble, product pages, etc.
 export async function importFromUrl(pageUrl: string, max = 16): Promise<{ assets: Asset[]; title?: string }> {
-  const { res, url: u } = await safeFetch(pageUrl, { headers: { "User-Agent": "Mozilla/5.0 (compatible; Hookky/0.1)", Accept: "text/html,image/*" } });
+  const { res, url: u } = await safeFetch(pageUrl, { headers: { "User-Agent": "Mozilla/5.0 (compatible; Rookker/0.1)", Accept: "text/html,image/*" } });
   if (!res.ok) throw new Error(`Page responded ${res.status}`);
   const type = res.headers.get("content-type") || "";
   if (type.startsWith("image/")) {

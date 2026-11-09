@@ -16,7 +16,7 @@ export interface Mail {
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
-/** Minimal, client-safe HTML (tables, inline styles) matching Hookky's look. */
+/** Minimal, client-safe HTML (tables, inline styles) matching Rookker's look. */
 export function renderMail(m: Mail): { html: string; text: string } {
   const paras = m.lines.map((l) => `<p style="margin:0 0 14px;font:15px/1.55 -apple-system,Segoe UI,Inter,Arial,sans-serif;color:#1d1d1f">${esc(l)}</p>`).join("");
   const button = m.action
@@ -28,7 +28,7 @@ export function renderMail(m: Mail): { html: string; text: string } {
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#fff;border-radius:16px;padding:28px">
 <tr><td>
-<p style="margin:0 0 22px;font:700 18px -apple-system,Segoe UI,Inter,Arial,sans-serif;letter-spacing:-.02em;color:#111">hookky</p>
+<p style="margin:0 0 22px;font:700 18px -apple-system,Segoe UI,Inter,Arial,sans-serif;letter-spacing:-.02em;color:#111">rookker</p>
 ${paras}${button}${footer}
 </td></tr></table></td></tr></table></body></html>`;
   const text = [...m.lines, ...(m.action ? ["", `${m.action.label}: ${m.action.url}`] : []), ...(m.footer ? ["", m.footer] : [])].join("\n");
@@ -53,7 +53,7 @@ export async function sendMail(m: Mail): Promise<boolean> {
       method: "POST",
       headers: { "api-key": env("BREVO_API_KEY"), "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({
-        sender: { name: env("MAIL_FROM_NAME") || "Hookky", email: env("MAIL_FROM") || "no-reply@rookker.com" },
+        sender: { name: env("MAIL_FROM_NAME") || "Rookker", email: env("MAIL_FROM") || "no-reply@rookker.com" },
         to: [{ email: m.to, ...(m.toName && { name: m.toName }) }],
         subject: m.subject,
         htmlContent: html,

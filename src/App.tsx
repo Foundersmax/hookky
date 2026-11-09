@@ -107,7 +107,7 @@ export function App() {
         if (st.auth.user?.role === "admin" && new URL(location.href).searchParams.get("admin") === "pending") setState({ view: "admin" });
       })
       .catch(async () => {
-        // No Hookky server: on claude.ai the page can still call Claude itself.
+        // No Rookker server: on claude.ai the page can still call Claude itself.
         const sample = await sampleCap;
         setState({ health: { agent: sample ? "hosted" : "local", transcription: "none", connectors: [] }, auth: { status: "off" } });
       });

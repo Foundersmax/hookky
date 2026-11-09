@@ -412,7 +412,7 @@ kbd { font: 10.5px var(--mono); border: 1px solid var(--line-2); border-bottom-w
 @media (max-width: 640px) { .palette-backdrop { padding-top: 12px; } .palette-foot { display: none; } }
 
 /* =====================================================================
-   Production refresh. Hookky's identity: the lime hook on near-black.
+   Production refresh. Rookker's identity: the lime hook on near-black.
    Layered last so it refines the look without touching layout.
    --brand fills primary actions (lime in both themes, ink text);
    --accent draws thin lines and text, deepened to olive on light so it stays legible.

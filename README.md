@@ -1,11 +1,11 @@
 <p align="left">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/logo-dark.svg">
-    <img src="docs/logo-light.svg" alt="Hookky" height="48">
+    <img src="docs/logo-light.svg" alt="Rookker" height="48">
   </picture>
 </p>
 
-# Hookky
+# Rookker
 
 [![CI](https://github.com/Foundersmax/hookky/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Foundersmax/hookky/actions/workflows/ci.yml)
 
@@ -62,7 +62,7 @@ The Blueprint uses the `starter` plan so the service stays awake. Change `plan` 
 
 ### Accounts (sign-up, approval, email via Brevo)
 
-Set `DATABASE_URL` and Hookky switches from the shared password to accounts:
+Set `DATABASE_URL` and Rookker switches from the shared password to accounts:
 
 - **Sign-up** with name, email and password (10+ characters, hashed with scrypt). Brevo sends a confirmation link; after confirming, the person waits for an admin.
 - **Admins** are the addresses in `ADMIN_EMAILS`; they become admins as soon as they confirm. Admins get an email for each new sign-up and manage everyone under **account menu → People and approvals**: approve, disable (signs them out everywhere), turn back on, make or remove admins, set a daily agent limit, delete.
@@ -76,7 +76,7 @@ On Render: create a **Postgres** database, then on the hookky service set `DATAB
 
 ### Landing page on GitHub Pages
 
-`site/` is the marketing page: it plays a live promo with the real Hookky engine (in the hero, and in all four formats side by side). Its **Open the studio** buttons point to `app.` on whatever domain serves the page, so `rookker.com` links to `app.rookker.com` with no configuration.
+`site/` is the marketing page: it plays a live promo with the real Rookker engine (in the hero, and in all four formats side by side). Its **Open the studio** buttons point to `app.` on whatever domain serves the page, so `rookker.com` links to `app.rookker.com` with no configuration.
 
 - `npm run dev:site` to work on it, `npm run build:site` to build `dist-site/`.
 - `.github/workflows/pages.yml` publishes it on every push that touches the page or the engine.
@@ -100,7 +100,7 @@ Add `app.rookker.com` under the Render service's (it's already listed in `render
 - Exports and saves go through the viewer's save prompt (`downloads` capability).
 - Image search, link import and transcription need the Express server, so the hosted page asks for uploads instead and aligns a pasted script to the voice-over.
 
-The app picks its mode at startup: Hookky server if `/api/health` answers, otherwise Claude through the host if available, otherwise the local director.
+The app picks its mode at startup: Rookker server if `/api/health` answers, otherwise Claude through the host if available, otherwise the local director.
 
 ## Keys (`.env`)
 
@@ -110,11 +110,11 @@ The app picks its mode at startup: Hookky server if `/api/health` answers, other
 | `ANTHROPIC_API_KEY` | The Claude creative agent (default model `claude-opus-5-5`, override with `CLAUDE_MODEL`). It uses vision on your uploads and web search for research (`CLAUDE_WEB_SEARCH=off` to disable). |
 | `UNSPLASH_ACCESS_KEY` | Free stock photo search |
 | `PIXABAY_API_KEY`, `PEXELS_API_KEY` | Free stock photo **and stock video** search (both free keys; Pexels has paused new keys) |
-| `COVERR_API_KEY` | Free stock video from Coverr (coverr.co/developers). Hookky reports each Coverr clip you use, as Coverr's API terms require. |
+| `COVERR_API_KEY` | Free stock video from Coverr (coverr.co/developers). Rookker reports each Coverr clip you use, as Coverr's API terms require. |
 | `FREEPIK_API_KEY` | Freepik stock search **and** the Magnific upscaler (Magnific's API is served through Freepik) |
 | `ENVATO_TOKEN` | Envato **Market** search (GraphicRiver). Envato Elements has no public API, so use URL import for Elements pages. |
 | `PINTEREST_ACCESS_TOKEN` | Searches **your own** pins and boards (Pinterest API v5 has no public global search). Any public pin URL also imports with no key. |
-| `DEEPGRAM_API_KEY` or `OPENAI_API_KEY` | Automatic VO transcription with exact word timings. Without either, paste the script and Hookky aligns it to the detected speech. |
+| `DEEPGRAM_API_KEY` or `OPENAI_API_KEY` | Automatic VO transcription with exact word timings. Without either, paste the script and Rookker aligns it to the detected speech. |
 
 Openverse (800M+ openly licensed images) and URL import need no key.
 

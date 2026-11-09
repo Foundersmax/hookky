@@ -1,4 +1,4 @@
-// Hookky effects: colour grades, camera moves, energy and atmosphere, applied to a rendered scene.
+// Rookker effects: colour grades, camera moves, energy and atmosphere, applied to a rendered scene.
 // The scene is drawn into `src` first; applyFx composites it onto the target with the scene's
 // grade and effects. Everything is deterministic (seeded by the scene id and driven by scene
 // time), so the preview, every export, thumbnails and contact sheets show the same frame.

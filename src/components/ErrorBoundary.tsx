@@ -9,7 +9,7 @@ export class ErrorBoundary extends Component<{ area: string; className?: string;
   }
 
   componentDidCatch(error: Error, info: { componentStack?: string | null }) {
-    console.error(`Hookky: the ${this.props.area} crashed`, error, info.componentStack);
+    console.error(`Rookker: the ${this.props.area} crashed`, error, info.componentStack);
   }
 
   render() {

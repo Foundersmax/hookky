@@ -59,7 +59,7 @@ export function defaultProject(): Project {
       { id: uid(), template: "title-reveal", duration: 4.3, kicker: "Introducing", headline: "Motion, *made simple.*", subline: "Describe it. Add a voice-over. Watch it move.", background: "dots", transition: "circle" },
       { id: uid(), template: "feature-list", duration: 5, kicker: "How it works", headline: "Three steps", items: ["Chat your *brief*", "Pull references from anywhere", "Sync to your *voice-over*"], background: "solid", transition: "push-up" },
       { id: uid(), template: "stat-counter", duration: 2.8, kicker: "Render time", stat: { value: 60, suffix: "s", label: "From idea to animated ad" }, background: "invert", transition: "wipe" },
-      { id: uid(), template: "cta-end", duration: 3.4, headline: "Start *creating*", cta: "Open the studio", url: "hookky.app", background: "blobs", transition: "zoom" },
+      { id: uid(), template: "cta-end", duration: 3.4, headline: "Start *creating*", cta: "Open the studio", url: "rookker.com", background: "blobs", transition: "zoom" },
     ],
   };
 }

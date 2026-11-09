@@ -1,4 +1,4 @@
-// Shared data model for Hookky (client + server).
+// Shared data model for Rookker (client + server).
 
 export type Aspect = "16:9" | "9:16" | "1:1" | "4:5";
 
