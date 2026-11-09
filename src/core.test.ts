@@ -48,7 +48,7 @@ test("sanitizeScene clamps lengths and strips control characters", () => {
   assert.ok(s.headline!.length <= 160);
   assert.ok(!s.headline!.includes("\u0000"));
   assert.equal(s.duration, 15);
-  assert.equal(s.items!.length, 6);
+  assert.equal(s.items!.length, 12);
 });
 
 test("sanitizeBrand keeps only valid colours, fonts and style ids", () => {

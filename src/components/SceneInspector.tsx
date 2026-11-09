@@ -58,6 +58,12 @@ const USES: Record<string, (keyof Scene)[]> = {
   "process-flow": ["headline", "items"],
   "bar-compare": ["headline", "items"],
   "icon-orbit": ["kicker", "headline", "subline"],
+  "line-chart": ["kicker", "headline", "items"],
+  "column-chart": ["kicker", "headline", "items"],
+  "donut-chart": ["kicker", "headline", "items"],
+  "kpi-grid": ["kicker", "headline", "items"],
+  "world-map": ["kicker", "headline", "items"],
+  "route-map": ["headline", "items", "stat"],
 };
 const ITEMS_LABEL: Record<string, string> = {
   testimonials: "Quotes, one per line: quote — name, role",
@@ -69,6 +75,12 @@ const ITEMS_LABEL: Record<string, string> = {
   "icon-list": "Ideas, one per line (each gets an icon)",
   "process-flow": "Steps, one per line",
   "bar-compare": "Bars: label | value, one per line",
+  "line-chart": "Points: label | value, one per line (3–12)",
+  "column-chart": "Columns: label | value, one per line",
+  "donut-chart": "Shares: label | value, the lead first",
+  "kpi-grid": "Numbers: label | value, 2–4 lines",
+  "world-map": "Places, one per line (cities, countries, regions)",
+  "route-map": "From, then to",
 };
 
 export function SceneInspector() {

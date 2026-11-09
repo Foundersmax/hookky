@@ -21,7 +21,7 @@ const TOOL = {
             template: { type: "string", enum: MOTION_TEMPLATES },
             kicker: { type: "string", description: "tiny label above the headline, 1-2 words, optional" },
             headline: { type: "string", description: "≤ 6 words, taken from what is said, one *accent* word" },
-            items: { type: "array", items: { type: "string" }, maxItems: 4, description: "icon-list ideas / process-flow steps (≤ 3 words each) / bar-compare rows as 'label | value'" },
+            items: { type: "array", items: { type: "string" }, maxItems: 12, description: "icon-list ideas / process-flow steps (≤ 3 words each) / 'label | value' rows for bar-compare, line-chart (3–12 points), column-chart, donut-chart, kpi-grid / place names for world-map / [from, to] for route-map" },
             stat: { type: "object", properties: { value: { type: "number" }, prefix: { type: "string" }, suffix: { type: "string" }, label: { type: "string" } }, required: ["value"] },
             ideas: { type: "array", items: { type: "string" }, maxItems: 7, description: "what each icon shows, in order: concrete nouns an icon kit has (moon, battery, shield, chart, coffee cup), 1-2 words" },
           },
@@ -42,9 +42,15 @@ Templates:
 - process-flow: 2-4 steps joined by a line with a travelling dot. For sequences ("first… then…", "sign up, connect, launch").
 - bar-compare: 2-4 bars "label | value". Only with real numbers from the voice-over or brief.
 - icon-orbit: the product at the centre (ideas[0]) with its world orbiting (ideas[1..6]). Once, where the product is named.
+- line-chart: a line that draws itself with an area fill and a riding value tag; items "label | value" (3–12 points, e.g. months). For growth over time ("grew from 12k to 48k"). Use only numbers that are said or in the brief; points between two said numbers may be a smooth interpolation, labelled "Then" … "Now".
+- column-chart: columns rising in turn, the biggest in the accent; items "label | value" (years, plans, segments).
+- donut-chart: shares of a whole sweeping in; items "label | value%" with the lead share first. Only when the shares are said.
+- kpi-grid: 2–4 numbers in tiles counting up; items "label | value"; ideas give each tile an icon. For a line full of proof ("120k users, 40 countries, 4.9 stars").
+- world-map: a dotted world that glides to the places named; pins drop as each is said and arcs fly from the first. items: place names (cities, countries or regions like "Europe"), in the order spoken. For reach, shipping, offices, "available in…".
+- route-map: a street map; the route draws from items[0] to items[1], a courier rides it (ideas[0]: bike, car, truck, scooter), stat {value, suffix:"min", label:"Arriving in"} counts down. For delivery, rides, "at your door in 20 minutes".
 - cta-end: the end card. The last beat.
 
-Craft: one idea per beat; the screen should say less than the voice, never more; headlines are the key words of what is said with one *accent* word (prefer the words the speaker stresses); vary templates (never three alike in a row); icon ideas must be concrete, drawable nouns that exist in icon libraries (not abstractions like "innovation"); never invent numbers, prices or claims. If the brief is thin, use web search (at most twice) to understand what the product is and who it's for, then design. Keep the draft's beat count and order; improve its choices. Finish by calling motion_script.`;
+Craft: one idea per beat; the screen should say less than the voice, never more; headlines are the key words of what is said with one *accent* word (prefer the words the speaker stresses); vary templates (never three alike in a row); icon ideas must be concrete, drawable nouns that exist in icon libraries (not abstractions like "innovation"); never invent numbers, prices, places or claims; a chart or map needs data that's actually in the voice-over or the brief. If the brief is thin, use web search (at most twice) to understand what the product is and who it's for, then design. Keep the draft's beat count and order; improve its choices. Finish by calling motion_script.`;
 
 export async function claudeMotionScript(input: { draft: unknown[]; brief: Record<string, unknown>; style: Record<string, unknown>; delivery?: Record<string, unknown> }) {
   if (!claudeConfigured()) throw new Error("Claude isn't configured on the server.");

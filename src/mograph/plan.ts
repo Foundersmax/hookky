@@ -7,9 +7,10 @@ import type { KitId } from "./icons";
 import { voiceSlots, type VoiceIn } from "../soundTemplates";
 import { keywords } from "../footage/plan";
 import { emSpoken, fill, type Brief } from "../copy";
+import { placesIn } from "./places";
 
-export type MotionTemplate = "icon-hero" | "icon-list" | "metric-ring" | "process-flow" | "bar-compare" | "icon-orbit" | "cta-end";
-export const MOTION_TEMPLATES: MotionTemplate[] = ["icon-hero", "icon-list", "metric-ring", "process-flow", "bar-compare", "icon-orbit", "cta-end"];
+export type MotionTemplate = "icon-hero" | "icon-list" | "metric-ring" | "process-flow" | "bar-compare" | "icon-orbit" | "line-chart" | "column-chart" | "donut-chart" | "kpi-grid" | "world-map" | "route-map" | "cta-end";
+export const MOTION_TEMPLATES: MotionTemplate[] = ["icon-hero", "icon-list", "metric-ring", "process-flow", "bar-compare", "icon-orbit", "line-chart", "column-chart", "donut-chart", "kpi-grid", "world-map", "route-map", "cta-end"];
 
 /** One beat of the script, timed to a stretch of the voice-over. */
 export interface MotionBeat {
@@ -55,14 +56,19 @@ export const motionStyle = (id: string) => MOTION_STYLES.find((m) => m.id === id
 const NUM_WORDS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, twenty: 20, thirty: 30, forty: 40, fifty: 50, hundred: 100, twice: 2, double: 2, half: 50 };
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const clean = (s: string) => s.replace(/\s+/g, " ").replace(/[.!?]+$/, "").trim();
-const shortWords = (s: string, n: number) => clean(s).split(" ").slice(0, n).join(" ");
+/** The first `n` words, never ending on a word that leaves the thought hanging ("…Lagos and", "…door in"). */
+const shortWords = (s: string, n: number) => {
+  const w = clean(s).replace(/[,;:]+$/, "").split(" ").slice(0, n);
+  while (w.length > 2 && /^(and|or|to|in|on|at|of|for|the|a|an|with|from|your|our|by|is|are|than|across|into|over|via|around|throughout|worldwide)$/i.test(w[w.length - 1].replace(/[,;:]$/, ""))) w.pop();
+  return w.join(" ").replace(/[,;:]+$/, "");
+};
 
 /** Numbers said in a line: digits ("87%", "$19") or words ("ten days", "fifty percent"). */
 export function numbersIn(line: string): { value: number; suffix: string; prefix: string; at: number }[] {
   const out: { value: number; suffix: string; prefix: string; at: number }[] = [];
   for (const m of line.matchAll(/([$€£])?\s?(\d+(?:[.,]\d+)?)\s?(%|percent|x|times|days?|hours?|minutes?|k|m)?/gi)) {
     const unit = (m[3] ?? "").toLowerCase();
-    out.push({ value: parseFloat(m[2].replace(",", ".")), prefix: m[1] ?? "", suffix: unit === "percent" || unit === "%" ? "%" : unit ? ` ${unit}` : "", at: m.index ?? 0 });
+    out.push({ value: parseFloat(/^\d{1,3}(,\d{3})+$/.test(m[2]) ? m[2].replace(/,/g, "") : m[2].replace(",", ".")), prefix: m[1] ?? "", suffix: unit === "percent" || unit === "%" ? "%" : unit ? ` ${unit}` : "", at: m.index ?? 0 });
   }
   for (const m of line.matchAll(/\b(one|two|three|four|five|six|seven|eight|nine|ten|twenty|thirty|forty|fifty|hundred|twice|double|half)\b\s?(percent|days?|hours?|times|x)?/gi)) {
     const unit = (m[2] ?? "").toLowerCase();
@@ -96,6 +102,16 @@ export function ideasIn(line: string, brand?: string): string[] {
   return keywords(line, brand ? [brand] : []).filter((w) => !IDEA_SKIP.has(w)).slice(0, 4);
 }
 
+/** What a number in a line counts: the words after it ("120k happy users" → "Happy users"). */
+export function labelAfter(line: string, at: number): string {
+  const rest = line.slice(at).replace(/^[$€£]?\s?[\d.,]*\d\s?(%|percent\b|x\b|k\b|m\b)?/i, "").split(/[,.;:!?]|\band\b/)[0].replace(/^\s*(of|in|for|more|less|faster|happy)?\s*/i, (m) => (/(more|less|faster|happy)/i.test(m) ? m : ""));
+  const words = rest.split(/[\s,.;:!?]+/).filter((w) => w && !/^(and|or|the|a|an|our|your|with|to|in|on|at|by)$/i.test(w)).slice(0, 2);
+  return cap(words.join(" ").toLowerCase());
+}
+const GROWTH = /\b(grew|grow|grown|growth|from\b.+\bto|rose|up from|doubled|tripled|increase[ds]?|jumped|climbed|went from)\b/i;
+const ROUTE = /\b(deliver(?:y|ed|s)?|door|doorstep|arrives?|arriving|pick[- ]?up|courier|ride|rides|driver|on (?:its|the) way|minutes away)\b/i;
+const fmtNum = (n: { value: number; prefix: string; suffix: string }) => `${n.prefix}${n.value}${n.suffix.trim() === "%" ? "%" : n.suffix.trim().length === 1 ? n.suffix.trim() : n.suffix ? ` ${n.suffix.trim()}` : ""}`;
+
 // ---------------------------------------------------------------- the local planner
 /**
  * Plan a motion-graphics edit for a voice-over: one beat per spoken phrase (cut in its pauses),
@@ -114,6 +130,48 @@ export function planMotion(v: VoiceIn & { insight?: { stressedWords?: string[] }
     const last = i === slots.length - 1 && slots.length > 2;
     if (last) return { ...base, template: "cta-end", headline: emSpoken(`${b.product}`, stressed), ideas: [] };
     const nums = numbersIn(line);
+    const places = placesIn(line);
+    // A delivery, a ride, an arrival: the route across town, the minutes counting down.
+    if (ROUTE.test(line) && !/\b(what|why)\b/i.test(line)) {
+      const mins = nums.find((n) => /min|hour/.test(n.suffix) || n.value <= 90);
+      const vehicle = /\b(ride|driver|car)\b/i.test(line) ? "car" : /\b(truck|freight|ship)\b/i.test(line) ? "truck" : "bike";
+      return { ...base, template: "route-map", headline: emSpoken(shortWords(line, 5), stressed), items: [places[0] ?? "Pickup", places[1] ?? "Your door"], ...(mins && { stat: { value: mins.value, suffix: /hour/.test(mins.suffix) ? "h" : "min", label: "Arriving in" } }), ideas: [vehicle] };
+    }
+    // Places said: the world map, pins in the order they're said.
+    if (places.length) {
+      // the pins name the places; the headline says the rest ("Now shipping to London and Lagos" → "Now shipping")
+      let rest = line;
+      for (const p of places) rest = rest.replace(new RegExp(`\\b${p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i"), "");
+      rest = rest.replace(/\s*,\s*(,\s*|and\s*)*/g, " ").replace(/\s+/g, " ");
+      const head = shortWords(rest, 6);
+      return { ...base, template: "world-map", headline: emSpoken(head.split(" ").length >= 2 ? head : shortWords(line, 6), stressed), items: places, ideas: [] };
+    }
+    // From one number to another: a line that climbs (or falls) between them.
+    const plain = nums.filter((n) => !(n.value >= 1900 && n.value <= 2100 && !n.suffix));
+    if (plain.length >= 2 && GROWTH.test(line)) {
+      const [a, z] = [plain[0], plain[1]];
+      const pts = Array.from({ length: 6 }, (_, k) => {
+        const f = k / 5;
+        const v = a.value * Math.pow(Math.max(z.value, 0.01) / Math.max(a.value, 0.01), f) + Math.sin(k * 2.1) * 0.04 * (z.value - a.value) * (k > 0 && k < 5 ? 1 : 0);
+        return `${k === 0 ? "Then" : k === 5 ? "Now" : ""} | ${a.prefix}${+v.toFixed(a.value % 1 || z.value % 1 ? 1 : 0)}${(z.suffix || a.suffix).trim()}`;
+      });
+      return { ...base, template: "line-chart", headline: emSpoken(shortWords(line, 6), stressed), items: pts, ideas: [] };
+    }
+    // Shares of a whole: a donut.
+    const pcts = nums.filter((n) => n.suffix === "%");
+    if (pcts.length >= 2 && pcts.reduce((x, n) => x + n.value, 0) <= 100.5) {
+      return { ...base, template: "donut-chart", headline: undefined, items: pcts.slice(0, 4).map((n) => `${labelAfter(line, n.at) || "Share"} | ${n.value}%`), ideas: [] };
+    }
+    // Years with numbers: columns by year.
+    const years = nums.filter((n) => n.value >= 1900 && n.value <= 2100 && !n.suffix);
+    if (years.length >= 2 && plain.length >= years.length) {
+      return { ...base, template: "column-chart", headline: emSpoken(shortWords(line, 5), stressed), items: years.slice(0, 6).map((y, k) => `${y.value} | ${fmtNum(plain[k])}`), ideas: [] };
+    }
+    // Three or more numbers: a KPI grid, each counting up as it's said.
+    if (plain.length >= 3) {
+      const items = plain.slice(0, 4).map((n) => `${labelAfter(line, n.at) || "Total"} | ${fmtNum(n)}`);
+      return { ...base, template: "kpi-grid", items, ideas: items.map((it) => it.split("|")[0].trim()) };
+    }
     if (nums.length >= 2 && /\b(than|vs|versus|instead|compared|while|others|most)\b/i.test(line)) {
       return { ...base, template: "bar-compare", headline: emSpoken(shortWords(line.split(/\b(?:than|vs|versus|compared)\b/i)[0], 5), stressed), items: [`Others | ${Math.min(nums[0].value, nums[1].value)}${nums[0].suffix}`, `${b.product} | ${Math.max(nums[0].value, nums[1].value)}${nums[1].suffix || nums[0].suffix}`], ideas: [] };
     }

@@ -70,6 +70,12 @@ const STARTER_CONTENT: Partial<Record<Scene["template"], Partial<Scene>>> = {
   "process-flow": { headline: "How it *works*", items: ["Sign up", "Connect", "Launch"], icons: ["lucide:user", "lucide:link", "lucide:rocket"] },
   "bar-compare": { headline: "Battery *life*", items: ["Others | 2 days", "Orbit | 10 days"] },
   "icon-orbit": { headline: "Everything, *connected*", icons: ["lucide:watch", "lucide:smartphone", "lucide:heart-pulse", "lucide:moon", "lucide:activity", "lucide:music"] },
+  "line-chart": { headline: "Revenue, *up and to the right*", items: ["Jan | $12k", "Feb | $18k", "Mar | $16k", "Apr | $27k", "May | $34k", "Jun | $48k"] },
+  "column-chart": { headline: "Customers by *year*", items: ["2022 | 1.2k", "2023 | 2.9k", "2024 | 5.4k", "2025 | 9.8k"] },
+  "donut-chart": { headline: "Where they *shop*", items: ["Mobile | 64%", "Desktop | 28%", "Tablet | 8%"] },
+  "kpi-grid": { headline: "By the *numbers*", items: ["Users | 120k", "Countries | 40", "Rating | 4.9", "Uptime | 99.9%"], icons: ["lucide:users", "lucide:globe", "lucide:star", "lucide:zap"] },
+  "world-map": { headline: "Now in *five cities*", items: ["London", "Lagos", "New York", "Dubai", "Singapore"] },
+  "route-map": { headline: "At your door, *fast*", items: ["Kitchen", "Your door"], stat: { value: 18, suffix: "min", label: "Arriving in" }, icons: ["lucide:bike"] },
 };
 /** Starting lengths that give each template's starter copy time to read. */
 const START_DURATION: Partial<Record<Scene["template"], number>> = {
@@ -81,7 +87,7 @@ const TEMPLATE_NAMES: Record<string, string> = {
   "device-mockup": "Device mockup", countdown: "Countdown", "price-card": "Price card", testimonials: "Testimonials", "before-after": "Before / after", "logo-reveal": "Logo reveal", audiogram: "Audiogram",
   "text-mask": "Text mask", chat: "Chat thread", notification: "Notifications", "pov-caption": "POV caption", versus: "Versus", rating: "Star rating", spotlight: "Spotlight", "word-stack": "Word stack",
   "word-slam": "Word slam", scramble: "Scramble", "zoom-through": "Zoom through", "letter-wave": "Letter wave", "outline-fill": "Outline fill", "flip-words": "Flip words", typewriter: "Typewriter", "echo-stack": "Echo stack",
-  "icon-hero": "Icon hero", "icon-list": "Icon list", "metric-ring": "Metric ring", "process-flow": "Process flow", "bar-compare": "Bar compare", "icon-orbit": "Icon orbit",
+  "icon-hero": "Icon hero", "icon-list": "Icon list", "metric-ring": "Metric ring", "process-flow": "Process flow", "bar-compare": "Bar compare", "icon-orbit": "Icon orbit", "line-chart": "Line chart", "column-chart": "Column chart", "donut-chart": "Donut chart", "kpi-grid": "KPI grid", "world-map": "World map", "route-map": "Route map",
 };
 
 export function CommandPalette({ host }: { host: PaletteHost }) {

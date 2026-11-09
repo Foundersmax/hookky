@@ -45,6 +45,12 @@ export const TEMPLATES = [
   "process-flow",
   "bar-compare",
   "icon-orbit",
+  "line-chart",
+  "column-chart",
+  "donut-chart",
+  "kpi-grid",
+  "world-map",
+  "route-map",
 ] as const;
 export type TemplateId = (typeof TEMPLATES)[number];
 

@@ -72,7 +72,7 @@ export function sanitizeScene(input: unknown, keepId?: string): Scene {
     kicker: str(s.kicker, 60),
     headline: str(s.headline, 160),
     subline: str(s.subline, 200),
-    items: list(s.items, 6, (x) => str(x, 80)),
+    items: list(s.items, 12, (x) => str(x, 80)),
     stat: stat(s.stat),
     image: ref(s.image),
     images: list(s.images, 8, ref),

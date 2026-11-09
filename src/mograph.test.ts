@@ -61,3 +61,33 @@ test("mograph: scenes come out clean, as long as the voice-over, and pass the no
     assert.deepEqual(notes.filter((n) => n.level === "warn").map((n) => n.message), [], st.id);
   }
 });
+
+test("motion plan: charts and maps come from what's said", async () => {
+  const { planMotion, labelAfter } = await import("./mograph/plan");
+  const { placesIn } = await import("./mograph/places");
+  const lines = ["Revenue grew from 12k to 48k in six months.", "Now shipping to London, Lagos and New York.", "Hot meals delivered to your door in 18 minutes.", "64% shop on mobile and 28% on desktop.", "120k users, 40 countries and a 4.9 rating.", "We had 1,200 customers in 2023 and 9,800 in 2025.", "Sleep better, run further.", "Orbit. Pre-order today."];
+  const words: { w: string; s: number; e: number }[] = [], pauses: { s: number; e: number }[] = [];
+  let t = 0.3;
+  lines.forEach((l) => {
+    for (const w of l.split(" ")) words.push({ w, s: t, e: t + 0.3 }), (t += 0.36);
+    pauses.push({ s: t, e: t + 0.6 });
+    t += 0.6;
+  });
+  const beats = planMotion({ duration: t, pauses, words }, { product: "Orbit" });
+  assert.deepEqual(beats.slice(0, 6).map((b) => b.template), ["line-chart", "world-map", "route-map", "donut-chart", "kpi-grid", "column-chart"]);
+  assert.equal(beats[0].items![5], "Now | 48k");
+  assert.deepEqual(beats[1].items, ["London", "Lagos", "New York"]);
+  assert.equal(beats[2].stat?.value, 18);
+  assert.deepEqual(beats[4].items, ["Users | 120k", "Countries | 40", "Rating | 4.9"]);
+  assert.deepEqual(beats[5].items, ["2023 | 1200", "2025 | 9800"]);
+  assert.equal(labelAfter("64% shop on mobile", 0), "Shop mobile");
+  assert.deepEqual(placesIn("We cooked a turkey for us"), []);
+});
+
+test("world mask: land where land is", async () => {
+  const { landAt, placeAt } = await import("./mograph/places");
+  const { WORLD } = await import("./mograph/world");
+  const cell = (lon: number, lat: number) => landAt(Math.floor((lon + 180) / WORLD.step), Math.floor((WORLD.lat0 - lat) / WORLD.step));
+  for (const p of ["lagos", "paris", "brazil", "japan", "australia", "kenya"]) assert.ok(cell(...placeAt(p)!), p);
+  for (const [lon, lat] of [[-30, 30], [-150, 10], [80, -20], [-150, 71]]) assert.ok(!cell(lon, lat), `${lon},${lat} is sea`);
+});

@@ -86,7 +86,7 @@ export function drawIcon(ctx: CanvasRenderingContext2D, spec: IconSpec | undefin
 const STOP = new Set("a an and are as at be but by for from has have i in is it its of on or our so that the their this to was we with you your".split(" "));
 const plain = (w: string) => w.toLowerCase().replace(/[^\p{L}\p{N}%]/gu, "");
 /** Scene time at which `text` is first spoken (a little before its first meaningful word), else `fallback`. */
-function cue(g: G, text: string | undefined, fallback: number): number {
+export function cue(g: G, text: string | undefined, fallback: number): number {
   if (!g.words?.length || !text) return fallback;
   const want = stripMarks(text).split(/\s+/).map(plain).filter((w) => w.length > 2 && !STOP.has(w));
   for (const w of g.words) {
@@ -96,13 +96,13 @@ function cue(g: G, text: string | undefined, fallback: number): number {
   return fallback;
 }
 /** Items, icons and their cue times: evenly across the scene unless the voice says them. */
-function staged(g: G, items: string[], from = 0.35, span = 0.6) {
+export function staged(g: G, items: string[], from = 0.35, span = 0.6) {
   const step = (g.dur * span) / Math.max(1, items.length);
   let last = 0;
   return items.map((it, i) => (last = Math.max(last, cue(g, it, from + i * step))));
 }
-const weightFor = (g: G, size: number) => Math.max(2 * g.u, size * 0.05);
-const splitItem = (it: string) => {
+export const weightFor = (g: G, size: number) => Math.max(2 * g.u, size * 0.05);
+export const splitItem = (it: string) => {
   const [label, value] = it.split("|").map((x) => x.trim());
   return { label, value };
 };
