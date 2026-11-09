@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useStudio, updateProject, getState, setState, readField, writeField, assignImage, addAssets } from "../store";
+import { useStudio, updateProject, getState, setState, readField, writeField, assignImage, addAssets, deleteField, nudgeTextScale, textKind } from "../store";
 import { Renderer, timeline, totalDuration, type HitRegion } from "../engine/render";
 import { ASPECT_SIZE } from "../types";
 import { clock, useClock } from "../clock";
@@ -152,6 +152,27 @@ export function Stage() {
       return null;
     });
   };
+  // Size and delete from the editor's toolbar. The scene re-lays out, so the editor follows its text.
+  const followHit = (field: string) =>
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        const h = renderer.current?.hits.find((x) => x.field === field);
+        if (h) setEdit((cur) => (cur && cur.hit.field === field ? { ...cur, hit: h } : cur));
+      }),
+    );
+  const resize = (step: number) => {
+    if (!edit) return;
+    const pct = Math.round(nudgeTextScale(edit.scene, textKind(edit.hit.field), step) * 100);
+    setState({ notice: `${textKind(edit.hit.field) === "display" ? "Headline text" : "Label text"} ${pct}% in this scene.` });
+    followHit(edit.hit.field);
+  };
+  const removeText = () => {
+    if (!edit) return;
+    const what = edit.hit.field.startsWith("items.") ? "Line" : edit.hit.field === "stat.value" ? "Number" : "Text";
+    const cur = edit;
+    setEdit(null);
+    if (deleteField(cur.scene, cur.hit.field)) setState({ notice: `${what} deleted. Undo with Ctrl+Z.` });
+  };
   const sceneOnScreen = () => {
     const t = timeline(getState().project.scenes);
     return Math.max(0, t.findIndex((x) => clock.time >= x.start && clock.time < x.end));
@@ -219,6 +240,22 @@ export function Stage() {
         {dropping && <div className="drop-hint" style={{ width: box.w, height: box.h }}>Drop to use this image in the scene</div>}
         {edit && (
           <div className="text-editor" style={editorStyle(edit.hit)}>
+            {/* Buttons act without taking focus, so the text being edited stays open. */}
+            <div className="text-tools" role="toolbar" aria-label="Text" onMouseDown={(e) => e.preventDefault()}>
+              <button className="tt-btn" onClick={() => resize(-0.1)} title="Smaller (Ctrl+Shift+<)" aria-label="Smaller text" disabled={(project.scenes[edit.scene]?.textScale?.[textKind(edit.hit.field)] ?? 1) <= 0.5}>
+                A<small>−</small>
+              </button>
+              <span className="tt-size" aria-live="polite" title={textKind(edit.hit.field) === "display" ? "Headline text in this scene" : "Label text in this scene"}>
+                {Math.round((project.scenes[edit.scene]?.textScale?.[textKind(edit.hit.field)] ?? 1) * 100)}%
+              </span>
+              <button className="tt-btn big" onClick={() => resize(0.1)} title="Bigger (Ctrl+Shift+>)" aria-label="Bigger text" disabled={(project.scenes[edit.scene]?.textScale?.[textKind(edit.hit.field)] ?? 1) >= 2}>
+                A<small>+</small>
+              </button>
+              <span className="tt-sep" />
+              <button className="tt-btn danger" onClick={removeText} title="Delete this text" aria-label="Delete this text">
+                <Icon name="trash" size={14} />
+              </button>
+            </div>
             <textarea
               autoFocus
               value={edit.value}
@@ -230,6 +267,10 @@ export function Stage() {
               onKeyDown={(e) => {
                 e.stopPropagation();
                 if (e.key === "Escape") setEdit(null);
+                else if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === ">" || e.key === "." || e.key === "<" || e.key === ",")) {
+                  e.preventDefault();
+                  resize(e.key === ">" || e.key === "." ? 0.1 : -0.1);
+                }
                 else if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   commitEdit();

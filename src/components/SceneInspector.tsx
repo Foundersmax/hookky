@@ -1,4 +1,5 @@
 import { useStudio, updateProject, setState, normalizeScene, editedScene, addScene } from "../store";
+import { cleanTextScale } from "../sanitize";
 import { TEMPLATES, TRANSITIONS, MOTIONS, type Scene } from "../types";
 import { timeline } from "../engine/render";
 import { stripMarks } from "../engine/text";
@@ -180,6 +181,25 @@ export function SceneInspector() {
           )}
           <p className="section-title">Text</p>
           <FontPicker value={scene.font} onChange={(font) => edit({ font })} label="Font for this scene" />
+          <div className="field">
+            <label>Text size</label>
+            <div className="text-size-rows">
+              {(["display", "body"] as const).map((kind) => {
+                const v = scene.textScale?.[kind] ?? 1;
+                const set = (x: number) => edit({ textScale: cleanTextScale({ ...scene.textScale, [kind]: x }) });
+                return (
+                  <div className="text-size-row" key={kind}>
+                    <span>{kind === "display" ? "Headlines & numbers" : "Labels & small text"}</span>
+                    <div className="text-tools">
+                      <button className="tt-btn" aria-label={`Smaller ${kind === "display" ? "headlines" : "labels"}`} disabled={v <= 0.5} onClick={() => set(v - 0.1)}>A<small>−</small></button>
+                      <button className="tt-size tt-reset" title="Back to the template's size" onClick={() => set(1)} disabled={v === 1}>{Math.round(v * 100)}%</button>
+                      <button className="tt-btn big" aria-label={`Bigger ${kind === "display" ? "headlines" : "labels"}`} disabled={v >= 2} onClick={() => set(v + 0.1)}>A<small>+</small></button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
           {uses.includes("kicker") && <Text label="Kicker" v={scene.kicker} on={(kicker) => edit({ kicker })} />}
           {uses.includes("headline") && <Text label={scene.template === "quote" ? "Quote" : "Headline · *accent*"} v={scene.headline} on={(headline) => edit({ headline })} area />}
           {uses.includes("subline") && <Text label="Subline" v={scene.subline} on={(subline) => edit({ subline })} />}

@@ -62,6 +62,20 @@ function focusOf(v: unknown): { x: number; y: number } | undefined {
 }
 
 /** Clean one scene. Unknown fields are dropped; bad values fall back to safe defaults. */
+/** Text size multiples, 0.5–2 in 5% steps; 1 (the template's own size) is left out. */
+export function cleanTextScale(v: unknown): { display?: number; body?: number } | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  const o = v as Record<string, unknown>;
+  const one = (x: unknown) => {
+    const n = Number(x);
+    if (!Number.isFinite(n)) return undefined;
+    const r = Math.round(Math.min(2, Math.max(0.5, n)) * 20) / 20;
+    return r === 1 ? undefined : r;
+  };
+  const display = one(o.display), body = one(o.body);
+  return display || body ? { ...(display && { display }), ...(body && { body }) } : undefined;
+}
+
 export function sanitizeScene(input: unknown, keepId?: string): Scene {
   const s = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   const scene: Scene = {
@@ -91,6 +105,7 @@ export function sanitizeScene(input: unknown, keepId?: string): Scene {
     grade: ((g) => (g && g !== "none" ? g : undefined))(oneOf(s.grade, GRADES)),
     effects: ((list) => (list.length ? list : undefined))([...new Set((Array.isArray(s.effects) ? s.effects : []).filter((e: unknown) => (EFFECTS as readonly unknown[]).includes(e)))].slice(0, 4) as Scene["effects"] & {}),
     fxAmount: ((v) => (v === undefined ? undefined : +v.toFixed(2)))(num(s.fxAmount, 0, 1)),
+    textScale: cleanTextScale(s.textScale),
     backdrop: Array.isArray(s.backdrop) ? list(s.backdrop, 8, ref) : undefined,
     font: ((f) => (f && /^[\w .'-]+$/.test(f) ? f : undefined))(str(s.font, 60)),
     notes: str(s.notes, 400),

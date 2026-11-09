@@ -5,7 +5,7 @@ import { cleanMusic } from "./audio/mix";
 import { TEMPLATES, TRANSITIONS, BACKGROUNDS } from "./types";
 import { presetById } from "./presets";
 import { uid, clamp } from "./engine/util";
-import { sanitizeScene, sanitizeProject } from "./sanitize";
+import { sanitizeScene, sanitizeProject, cleanTextScale } from "./sanitize";
 import { buildScenes, patchScenes, brandWithStyle } from "./storyboard";
 import * as db from "./persist";
 import type { ProjectMeta, Version } from "./persist";
@@ -466,6 +466,36 @@ export function readField(s: Scene, field: string): string {
   if (field === "stat.label") return s.stat?.label ?? "";
   const v = (s as unknown as Record<string, unknown>)[field];
   return typeof v === "string" ? v : "";
+}
+
+/** Which size a field follows: headline type or labels. */
+export const textKind = (field: string): "display" | "body" => (/^(headline|stat\.value|cta)$/.test(field) ? "display" : "body");
+
+/** Make a scene's headline type or labels bigger or smaller by `step` (undoable); returns the new multiple. */
+export function nudgeTextScale(index: number, kind: "display" | "body", step: number): number {
+  const s = state.project.scenes[index];
+  if (!s) return 1;
+  const cur = s.textScale?.[kind] ?? 1;
+  const next = Math.round(Math.min(2, Math.max(0.5, cur + step)) * 20) / 20;
+  if (next !== cur) setTextScale(index, kind, next);
+  return next;
+}
+export function setTextScale(index: number, kind: "display" | "body", value: number) {
+  updateProject((p) => ({
+    ...p,
+    scenes: p.scenes.map((x, i) => (i === index ? editedScene({ ...x, textScale: cleanTextScale({ ...x.textScale, [kind]: value }) }) : x)),
+  }));
+}
+
+/** Remove a piece of text from a scene (undoable): a line of a list, the number with its label, or a field. */
+export function deleteField(index: number, field: string): boolean {
+  const s = state.project.scenes[index];
+  if (!s) return false;
+  if (field === "stat.value") {
+    updateProject((p) => ({ ...p, scenes: p.scenes.map((x, i) => (i === index ? editedScene({ ...x, stat: undefined }) : x)) }));
+    return true;
+  }
+  return writeField(index, field, "");
 }
 
 /** Write an edited field back into a scene (undoable). Returns false if the value was rejected. */

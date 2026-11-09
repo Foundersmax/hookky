@@ -3,7 +3,7 @@
 // *Marked* words are the accent.
 import type { G, Tpl } from "./render";
 import type { Word } from "../types";
-import { F, chunkPhrases, rr } from "./render";
+import { F, ts, chunkPhrases, rr } from "./render";
 import { clamp, ease, lerp, win, rgba, mix, hash } from "./util";
 import { drawLabel, measure, stripMarks, displayWeight, fontString } from "./text";
 
@@ -297,7 +297,7 @@ export const TEXT_TEMPLATES: Record<string, Tpl> = {
     const text = ws.map((w) => w.w).join(" ");
     // As big as lets the whole line fit in about four rows.
     const size = Math.max(40 * u, Math.min((g.portrait ? 110 : 120) * u, Math.sqrt(((W - pad * 2) * H * 0.6) / Math.max(1, text.length * 0.55 * 1.22))));
-    const f = { family: g.brand.fontDisplay, weight: displayWeight(g.brand.fontDisplay), size, tracking: -0.01 };
+    const f = { family: g.brand.fontDisplay, weight: displayWeight(g.brand.fontDisplay), size: size * ts(g, "display"), tracking: -0.01 };
     font(g, size);
     // lay out words into lines
     const maxW = W - pad * 2;

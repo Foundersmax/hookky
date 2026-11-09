@@ -546,9 +546,11 @@ export function placeholder(g: G, x: number, y: number, w: number, h: number, la
 }
 
 // ---------------------------------------------------------------- shared bits
-export const F = (g: G, size: number): FontSpec => ({ family: g.brand.fontDisplay, weight: displayWeight(g.brand.fontDisplay), size, tracking: displayTracking(g.brand.fontDisplay) });
-export const B = (g: G, size: number, weight = 450): FontSpec => ({ family: g.brand.fontBody, weight, size, tracking: -0.005 });
-export const K = (g: G, size: number): FontSpec => ({ family: g.brand.fontBody, weight: 600, size, tracking: 0.14 });
+/** The scene's text size: "display" for headline type, "body" for labels (1 = the template's own). */
+export const ts = (g: G, kind: "display" | "body") => g.scene.textScale?.[kind] ?? 1;
+export const F = (g: G, size: number): FontSpec => ({ family: g.brand.fontDisplay, weight: displayWeight(g.brand.fontDisplay), size: size * ts(g, "display"), tracking: displayTracking(g.brand.fontDisplay) });
+export const B = (g: G, size: number, weight = 450): FontSpec => ({ family: g.brand.fontBody, weight, size: size * ts(g, "body"), tracking: -0.005 });
+export const K = (g: G, size: number): FontSpec => ({ family: g.brand.fontBody, weight: 600, size: size * ts(g, "body"), tracking: 0.14 });
 
 /** Record a laid-out text block as editable. */
 export function hitLayout(g: G, field: string, L: Layout, x: number, y: number, align: "left" | "center" | "right") {

@@ -452,3 +452,12 @@ test("scene fonts: valid names kept, single-weight faces never asked for bold", 
   for (const f of ["Bebas Neue", "Anton", "Archivo Black", "DM Serif Display"]) assert.equal(displayWeight(f), 400, f);
   assert.equal(new Set(FONT_CHOICES).size, FONT_CHOICES.length, "no duplicate fonts");
 });
+
+test("text size: cleaned to 50–200% in 5% steps; 100% is left out", async () => {
+  const { cleanTextScale, sanitizeScene } = await import("./sanitize");
+  assert.deepEqual(cleanTextScale({ display: 1.234, body: 9 }), { display: 1.25, body: 2 });
+  assert.deepEqual(cleanTextScale({ display: 1, body: "x" }), undefined);
+  assert.deepEqual(cleanTextScale({ display: 0.1 }), { display: 0.5 });
+  assert.equal(cleanTextScale("big"), undefined);
+  assert.deepEqual(sanitizeScene({ template: "title-reveal", headline: "Hi", textScale: { display: 1.4 } }).textScale, { display: 1.4 });
+});

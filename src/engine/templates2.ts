@@ -2,7 +2,7 @@
 // a lock screen filling with notifications, a POV caption, them-vs-us, a star rating, a spotlight
 // reveal and a kinetic word stack. Same contract as the other templates: draw scene `g` at g.t.
 import type { G, Tpl } from "./render";
-import { F, B, K, rr, placeholder, hitLayout, hitText, kicker, headlineSize, containRect, drawCover } from "./render";
+import { F, B, K, ts, rr, placeholder, hitLayout, hitText, kicker, headlineSize, containRect, drawCover } from "./render";
 import { clamp, ease, lerp, win, rgba, mix, contrast } from "./util";
 import { layoutText, drawLayout, drawLabel, measure, stripMarks, displayWeight } from "./text";
 
@@ -216,7 +216,7 @@ export const EXTRA_TEMPLATES: Record<string, Tpl> = {
     const tp = g.E(win(g.t, 0, 0.6));
     ctx.save();
     ctx.globalAlpha = tp;
-    drawLabel(ctx, scene.kicker || "9:41", { family: brand.fontDisplay, weight: 600, size: (g.portrait ? 150 : 120) * u, tracking: -0.02 }, W / 2, timeY + (g.portrait ? 75 : 60) * u, "center", fg);
+    drawLabel(ctx, scene.kicker || "9:41", { family: brand.fontDisplay, weight: 600, size: (g.portrait ? 150 : 120) * u * ts(g, "display"), tracking: -0.02 }, W / 2, timeY + (g.portrait ? 75 : 60) * u, "center", fg);
     ctx.restore();
     hitText(g, "kicker", scene.kicker || "9:41", F(g, 120 * u), W / 2, timeY + 60 * u, "center");
     const raw = (scene.items?.length ? scene.items : [`${brand.name || "Orbit"}: Your order has shipped 📦`, "Messages: wait, where did you get that?", `${brand.name || "Orbit"}: 2 left in your size`]).slice(0, 5);
@@ -287,7 +287,7 @@ export const EXTRA_TEMPLATES: Record<string, Tpl> = {
     const text = `${scene.kicker ? `${stripMarks(scene.kicker)} ` : ""}${stripMarks(scene.headline || "POV: you finally found the one")}`;
     const words = text.split(/\s+/).filter(Boolean);
     const size = (g.portrait ? 58 : 50) * u;
-    const font = { family: g.brand.fontBody, weight: 800, size, tracking: -0.01 };
+    const font = { family: g.brand.fontBody, weight: 800, size: size * ts(g, "body"), tracking: -0.01 };
     const maxW = W * (g.portrait ? 0.82 : 0.6);
     const space = measure(ctx, " ", font);
     const lines: string[][] = [[]];
@@ -298,7 +298,7 @@ export const EXTRA_TEMPLATES: Record<string, Tpl> = {
       lines[lines.length - 1].push(w);
       lw += ww + space;
     }
-    const lh = size * 1.32;
+    const lh = font.size * 1.32;
     const y0 = H * (g.portrait ? 0.3 : 0.26) - (lines.length * lh) / 2;
     const per = Math.min(0.16, (g.dur * 0.55) / words.length);
     let k = 0;
@@ -554,7 +554,7 @@ export const EXTRA_TEMPLATES: Record<string, Tpl> = {
       ctx.translate(W / 2 + (1 - p) * (i % 2 ? 1 : -1) * W * 0.6, y + size * 0.45);
       ctx.rotate((1 - p) * (i % 2 ? 0.12 : -0.12));
       ctx.scale(1, lerp(0.2, 1, p));
-      drawLabel(ctx, l, { family: brand.fontDisplay, weight: displayWeight(brand.fontDisplay), size, tracking: -0.02 }, 0, 0, "center", fill, clamp(p * 2));
+      drawLabel(ctx, l, { family: brand.fontDisplay, weight: displayWeight(brand.fontDisplay), size: size * ts(g, "display"), tracking: -0.02 }, 0, 0, "center", fill, clamp(p * 2));
       ctx.restore();
       y += size * 0.9;
     });

@@ -116,6 +116,8 @@ export interface Scene {
   effects?: Effect[];
   /** Strength of the grade and effects, 0–1 (default 0.7). */
   fxAmount?: number;
+  /** Text size for this scene, as a multiple of the template's own: headline type (headlines, big numbers, buttons) and labels (everything else). */
+  textScale?: { display?: number; body?: number };
   /** Display font for this scene only (a built-in family or an uploaded brand font); the brand's otherwise. */
   font?: string;
   /** Banners shown full-bleed behind the scene's text, crossfading in turn (asset refs, up to 8). */

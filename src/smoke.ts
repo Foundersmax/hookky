@@ -75,7 +75,7 @@ async function run() {
       BACKGROUNDS.forEach((background, bi) => {
         const motion = MOTIONS[(ti + bi) % 3];
         const transition = TRANSITIONS[(ti + bi) % TRANSITIONS.length];
-        const a: Scene = { id: "a", template, duration: 3, background, motion, transition: "cut", ...content(template) };
+        const a: Scene = { id: "a", template, duration: 3, background, motion, transition: "cut", ...content(template), ...(bi % 3 === 1 && { textScale: { display: 2, body: 2 } }), ...(bi % 3 === 2 && { textScale: { display: 0.5, body: 0.5 } }) };
         const b: Scene = { id: "b", template: TEMPLATES[(ti + 5) % TEMPLATES.length], duration: 3, background: BACKGROUNDS[(bi + 3) % BACKGROUNDS.length], transition, ...content(TEMPLATES[(ti + 5) % TEMPLATES.length]) };
         const p: Project = { id: "p", title: "t", aspect, style: "noir", brand, captions: bi % 2 === 0, grain: bi % 3 === 0, scenes: [a, b] };
         for (const t of [0, 0.35, 1.5, 2.95, 3.2, 5.9]) {
