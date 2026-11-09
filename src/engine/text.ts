@@ -104,6 +104,13 @@ export function layoutText(
     }
     if (cur.length) lines.push({ tokens: cur, width: curW });
     if ((lines.length <= maxLines && !tooWide) || size <= minSize) {
+      // Still too many lines at the smallest size: keep what fits and end on an ellipsis.
+      if (lines.length > maxLines) {
+        lines.length = maxLines;
+        const last = lines[maxLines - 1];
+        const t = last.tokens[last.tokens.length - 1];
+        if (t) last.tokens[last.tokens.length - 1] = { ...t, text: t.text.replace(/[.,;:!?]*$/, "") + "…" };
+      }
       const lineHeight = size * lineHeightRatio;
       return { lines, font, lineHeight, height: lines.length * lineHeight, width: Math.max(0, ...lines.map((l) => l.width)), spaceW };
     }

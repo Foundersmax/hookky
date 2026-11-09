@@ -461,3 +461,12 @@ test("text size: cleaned to 50–200% in 5% steps; 100% is left out", async () =
   assert.equal(cleanTextScale("big"), undefined);
   assert.deepEqual(sanitizeScene({ template: "title-reveal", headline: "Hi", textScale: { display: 1.4 } }).textScale, { display: 1.4 });
 });
+
+test("content zoom: wide frames magnify UI-like templates; square and tall frames are untouched", async () => {
+  const { contentZoom } = await import("./engine/render");
+  assert.equal(contentZoom("feature-list", 1080, 1920), 1);
+  assert.equal(contentZoom("feature-list", 1080, 1080), 1);
+  assert.equal(contentZoom("feature-list", 1080, 1350), 1);
+  assert.ok(Math.abs(contentZoom("feature-list", 1920, 1080) - 1.4) < 1e-6);
+  assert.equal(contentZoom("word-slam", 1920, 1080), 1);
+});

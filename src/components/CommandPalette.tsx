@@ -27,7 +27,7 @@ interface Command {
 }
 
 /** Sensible starting content for a scene added from the palette. */
-const STARTER_CONTENT: Partial<Record<Scene["template"], Partial<Scene>>> = {
+export const STARTER_CONTENT: Partial<Record<Scene["template"], Partial<Scene>>> = {
   "title-reveal": { kicker: "Introducing", headline: "New *headline*" },
   "kinetic-words": { headline: "Say it in *motion*." },
   "product-hero": { headline: "Meet the *product*" },
@@ -81,7 +81,7 @@ const STARTER_CONTENT: Partial<Record<Scene["template"], Partial<Scene>>> = {
   "route-map": { headline: "At your door, *fast*", items: ["Kitchen", "Your door"], stat: { value: 18, suffix: "min", label: "Arriving in" }, icons: ["lucide:bike"] },
 };
 /** Starting lengths that give each template's starter copy time to read. */
-const START_DURATION: Partial<Record<Scene["template"], number>> = {
+export const START_DURATION: Partial<Record<Scene["template"], number>> = {
   "feature-list": 5, quote: 4.5, "price-card": 7, testimonials: 6.5, "device-mockup": 4.5, countdown: 4.5, "before-after": 5, "logo-reveal": 3, "shape-burst": 2, "stat-counter": 3.5,
 };
 const TEMPLATE_NAMES: Record<string, string> = {

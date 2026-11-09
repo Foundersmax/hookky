@@ -299,7 +299,7 @@ function dashboard(g: G, R: Rect, t: number, kpiCues: number[], kpis: Kpi[]): Re
 function head(g: G, align: "left" | "center", scale = 0.38) {
   const { ctx, W, u, c, scene, pad } = g;
   if (!scene.headline) return pad;
-  const size = headlineSize(g, scale);
+  const size = headlineSize(g, scale * (g.portrait ? 1 : 1.35));
   const L = layoutText(ctx, scene.headline, F(g, size), W - pad * 2, 2);
   drawLayout(ctx, L, { x: align === "center" ? W / 2 : pad, y: pad, align, color: c.fg, emColor: c.accent, t: g.t, delay: 0, dur: 0.7 * g.sp, mode: "mask", easing: g.E });
   g.hit?.({ field: "headline", x: pad, y: pad, w: W - pad * 2, h: L.height, size, align, lines: L.lines.length });
@@ -395,7 +395,7 @@ export const DASH_TEMPLATES: Record<string, Tpl> = {
     } else if (scene.headline) {
       // before the tour: the headline over the whole dashboard
       const a = 1 - win(g.t, cues[0] - 0.3, 0.3);
-      const size = headlineSize(g, 0.5);
+      const size = headlineSize(g, 0.5 * (g.portrait ? 1 : 1.35));
       const L = layoutText(ctx, scene.headline, F(g, size), W - pad * 2, 2);
       ctx.save();
       ctx.globalAlpha *= a;

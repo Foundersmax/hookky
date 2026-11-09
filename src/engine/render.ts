@@ -255,7 +255,17 @@ export class Renderer {
     ctx.clip();
     try {
       drawBackground(g);
-      (TEMPLATES[scene.template] ?? TEMPLATES["title-reveal"])(g);
+      // Wide frames: lay the content out in a smaller frame and magnify it, so type and UI read
+      // at ad size instead of phone size (sizes come from the short edge).
+      const z = contentZoom(scene.template, W, H);
+      if (z > 1.001) {
+        ctx.scale(z, z);
+        const hit = g.hit;
+        (TEMPLATES[scene.template] ?? TEMPLATES["title-reveal"])({
+          ...g, W: W / z, H: H / z,
+          ...(hit && { hit: (r: HitRegion) => hit({ ...r, x: r.x * z, y: r.y * z, w: r.w * z, h: r.h * z, size: r.size * z }) }),
+        });
+      } else (TEMPLATES[scene.template] ?? TEMPLATES["title-reveal"])(g);
     } catch (err) {
       // One broken scene must never stop the preview or an export: draw a quiet placeholder.
       // A template that threw may have left saves/clips unbalanced, so clear all state where supported.
@@ -271,6 +281,21 @@ export class Renderer {
     }
     ctx.restore();
   }
+}
+
+/** How much a template's content is magnified at 16:9 (1 = as laid out); eases to 1 by 5:4. */
+const ZOOM: Record<string, number> = {
+  // already sized to the frame: big type, full-bleed pictures, camera moves
+  "kinetic-words": 1, marquee: 1, "shape-burst": 1, "image-mosaic": 1, fullbleed: 1, "before-after": 1, "text-mask": 1, spotlight: 1, "split-feature": 1, "device-mockup": 1,
+  "word-stack": 1, "word-slam": 1, scramble: 1, "zoom-through": 1, "letter-wave": 1, "outline-fill": 1, "flip-words": 1, "echo-stack": 1, "dashboard-focus": 1, "pov-caption": 1,
+  // UI-like and list-like scenes need the most
+  chat: 1.3, versus: 1.5, typewriter: 1.5, notification: 1.4, "feature-list": 1.4, testimonials: 1.4, rating: 1.4, "logo-reveal": 1.4, "logo-sting": 1.4,
+  "icon-hero": 1.35, "metric-ring": 1.35, "icon-orbit": 1.3, "kpi-grid": 1.35, "donut-chart": 1.35, "column-chart": 1.35, "line-chart": 1.3, "world-map": 1.3, "route-map": 1.3, "live-metrics": 1.3,
+  audiogram: 1.35, "icon-list": 1.35, "process-flow": 1.35, "price-card": 1.3, quote: 1.3, "cta-end": 1.3, "bar-compare": 1.3,
+};
+export function contentZoom(template: string, W: number, H: number): number {
+  const Z = ZOOM[template] ?? 1.22;
+  return 1 + (Z - 1) * clamp((W / H - 1.25) / (16 / 9 - 1.25));
 }
 
 const reported = new WeakSet<Scene>();
@@ -572,7 +597,8 @@ export function kicker(g: G, text: string | undefined, x: number, y: number, ali
   const p = g.E(win(g.t, delay, 0.7 * g.sp));
   const size = 22 * u;
   const label = stripMarks(text).toUpperCase();
-  const w = measure(ctx, label, K(g, size));
+  const room = (align === "center" ? 2 * Math.min(x, g.W - x) : g.W - x) - g.pad * 0.6 - 24 * u;
+  const w = Math.min(room, measure(ctx, label, K(g, size)));
   const dot = 10 * u;
   const total = w + dot + 14 * u;
   const x0 = align === "center" ? x - total / 2 : x;
@@ -583,8 +609,15 @@ export function kicker(g: G, text: string | undefined, x: number, y: number, ali
   ctx.arc(x0 + dot / 2, y, (dot / 2) * p, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
-  drawLabel(ctx, label, K(g, size), x0 + dot + 14 * u + (1 - p) * 20 * u, y, "left", c.muted, p);
+  drawLabel(ctx, label, K(g, size), x0 + dot + 14 * u + (1 - p) * 20 * u, y, "left", c.muted, p, room);
   g.hit?.({ field: "kicker", x: x0, y: y - size * 0.8, w: total, h: size * 1.6, size, align: "left", lines: 1 });
+}
+
+/** layoutText, shrunk further until the block is no taller than maxH. */
+export function fitLayout(ctx: CanvasRenderingContext2D, text: string, font: FontSpec, maxW: number, maxLines: number, maxH: number, lh = 1.02): Layout {
+  let L = layoutText(ctx, text, font, maxW, maxLines, lh);
+  for (let i = 0; i < 12 && L.height > maxH; i++) L = layoutText(ctx, text, { ...font, size: L.font.size * 0.88 }, maxW, maxLines, lh);
+  return L;
 }
 
 export function headlineSize(g: G, scale = 1) {
@@ -592,14 +625,29 @@ export function headlineSize(g: G, scale = 1) {
 }
 
 /** headline + subline stack; returns bottom y */
-export function textStack(g: G, opts: { x: number; y: number; maxW: number; align: "left" | "center"; size?: number; maxLines?: number; delay?: number; vcenter?: boolean; color?: string; mode?: "mask" | "words" | "rise" }) {
+export function textStack(g: G, opts: { x: number; y: number; maxW: number; align: "left" | "center"; size?: number; maxLines?: number; delay?: number; vcenter?: boolean; color?: string; mode?: "mask" | "words" | "rise"; maxH?: number }) {
   const { ctx, c, u, scene } = g;
   const align = opts.align;
-  const H1 = scene.headline ? layoutText(ctx, scene.headline, F(g, opts.size ?? headlineSize(g)), opts.maxW, opts.maxLines ?? 3, /Serif|Fraunces|Playfair/.test(g.brand.fontDisplay) ? 1.0 : 0.98) : null;
-  const S = scene.subline ? layoutText(ctx, stripMarks(scene.subline), B(g, 30 * u), Math.min(opts.maxW, 900 * u), 3, 1.35) : null;
   const gap = 34 * u;
   const kh = scene.kicker ? 60 * u : 0;
-  const total = kh + (H1?.height ?? 0) + (S ? gap + S.height : 0);
+  // The stack must fit the frame: the room around its anchor (or below it), shrinking the type until it does.
+  const room = Math.max(60 * u, opts.maxH ?? (opts.vcenter ? 2 * Math.min(opts.y, g.H - opts.y) : g.H - opts.y) - g.pad * 0.5);
+  let H1: Layout | null = null, S: Layout | null = null, total = 0;
+  for (let k = 1, i = 0; i < 12; i++, k *= 0.88) {
+    H1 = scene.headline ? layoutText(ctx, scene.headline, ((f) => ({ ...f, size: f.size * k }))(F(g, opts.size ?? headlineSize(g))), opts.maxW, opts.maxLines ?? 3, /Serif|Fraunces|Playfair/.test(g.brand.fontDisplay) ? 1.0 : 0.98) : null;
+    S = scene.subline ? layoutText(ctx, stripMarks(scene.subline), ((f) => ({ ...f, size: f.size * Math.max(0.6, k) }))(B(g, 30 * u)), Math.min(opts.maxW, 900 * u), 3, 1.35) : null;
+    total = kh + (H1?.height ?? 0) + (S ? gap + S.height : 0);
+    if (total <= room) break;
+  }
+  // Still too tall: the headline matters more than the subline.
+  if (total > room && S && H1) {
+    S = null;
+    for (let k = 1, i = 0; i < 12; i++, k *= 0.88) {
+      H1 = layoutText(ctx, scene.headline!, ((f) => ({ ...f, size: f.size * k }))(F(g, opts.size ?? headlineSize(g))), opts.maxW, opts.maxLines ?? 3, 0.98);
+      total = kh + H1.height;
+      if (total <= room) break;
+    }
+  }
   let y = opts.vcenter ? opts.y - total / 2 : opts.y;
   const d = opts.delay ?? 0;
   if (scene.kicker) {
@@ -745,12 +793,12 @@ const TEMPLATES: Record<string, Tpl> = {
     const labelY = g.portrait ? H * 0.8 : H - pad * 1.25;
     if (scene.kicker) kicker(g, scene.kicker, g.portrait ? W / 2 : pad, g.portrait ? pad * 1.6 : pad, g.portrait ? "center" : "left", 0.4);
     if (scene.headline) {
-      const L = layoutText(ctx, scene.headline, F(g, headlineSize(g, 0.55)), W - pad * 2, 2);
+      const L = fitLayout(ctx, scene.headline, F(g, headlineSize(g, 0.55)), W - pad * 2, 2, H * (g.portrait ? 0.16 : 0.2));
       drawLayout(ctx, L, { x: W / 2, y: labelY - L.height, align: "center", color: c.fg, emColor: c.accent, t: g.t, delay: 0.6, dur: 0.8 * g.sp, mode: "mask", easing: g.E });
       hitLayout(g, "headline", L, W / 2, labelY - L.height, "center");
     }
     if (scene.subline) {
-      drawLabel(ctx, stripMarks(scene.subline), B(g, 26 * u), W / 2, labelY + 34 * u, "center", rgba(c.fg, 0.65), g.E(win(g.t, 0.9, 0.6)));
+      drawLabel(ctx, stripMarks(scene.subline), B(g, 26 * u), W / 2, labelY + 34 * u, "center", rgba(c.fg, 0.65), g.E(win(g.t, 0.9, 0.6)), W - pad * 2);
       hitText(g, "subline", stripMarks(scene.subline), B(g, 26 * u), W / 2, labelY + 34 * u, "center");
     }
   },
@@ -892,8 +940,8 @@ const TEMPLATES: Record<string, Tpl> = {
     const save = g.c;
     g.c = { ...g.c, fg: "#FFFFFF", muted: "rgba(255,255,255,0.7)" as any };
     const align = scene.align ?? "left";
-    const L = scene.headline ? layoutText(ctx, scene.headline, F(g, headlineSize(g, 0.8)), W - pad * 2, 3) : null;
-    const y = H - pad - (L?.height ?? 0) - (scene.subline ? 60 * u : 0);
+    const L = scene.headline ? fitLayout(ctx, scene.headline, F(g, headlineSize(g, 0.8)), W - pad * 2, 3, H * 0.55) : null;
+    const y = Math.max(pad + (scene.kicker ? 60 * u : 0), H - pad - (L?.height ?? 0) - (scene.subline ? 60 * u : 0));
     textStack(g, { x: align === "center" ? W / 2 : pad, y: y - (scene.kicker ? 60 * u : 0), maxW: W - pad * 2, align, size: headlineSize(g, 0.8), color: "#FFFFFF", delay: 0.25 });
     g.c = save;
   },
@@ -1021,9 +1069,10 @@ const TEMPLATES: Record<string, Tpl> = {
     }
     ctx.restore();
     const name = stripMarks(scene.headline || brand.name || "Brand");
-    const f = F(g, 64 * u);
+    let f = F(g, 64 * u);
     const letters = [...name];
-    const tw = measure(ctx, name, f);
+    let tw = measure(ctx, name, f);
+    if (tw > W - g.pad * 2) (f = { ...f, size: (f.size * (W - g.pad * 2)) / tw }), (tw = measure(ctx, name, f));
     g.hit?.({ field: "headline", x: cx - tw / 2, y: cy + 200 * u - f.size * 0.7, w: tw, h: f.size * 1.4, size: f.size, align: "center", lines: 1 });
     let x = cx - tw / 2;
     letters.forEach((ch, i) => {
@@ -1033,7 +1082,7 @@ const TEMPLATES: Record<string, Tpl> = {
       x += w;
     });
     if (scene.subline) {
-      drawLabel(ctx, stripMarks(scene.subline).toUpperCase(), K(g, 20 * u), cx, cy + 270 * u, "center", c.muted, win(g.t, 1.1, 0.6));
+      drawLabel(ctx, stripMarks(scene.subline).toUpperCase(), K(g, 20 * u), cx, cy + 270 * u, "center", c.muted, win(g.t, 1.1, 0.6), W - g.pad * 2);
       hitText(g, "subline", stripMarks(scene.subline).toUpperCase(), K(g, 20 * u), cx, cy + 270 * u, "center");
     }
   },
@@ -1169,7 +1218,8 @@ const TEMPLATES: Record<string, Tpl> = {
     }
     ctx.restore();
     const p = ease.outBack(win(lt, 0, 0.35));
-    const out = ease.inCubic(win(lt, slot - 0.18, 0.18));
+    // each number ducks out for the next; the reveal stays to the end of the scene
+    const out = num > 0 ? ease.inCubic(win(lt, slot - 0.18, 0.18)) : 0;
     ctx.save();
     ctx.translate(W / 2, H * 0.53);
     const sc = lerp(0.7, 1, p) * (1 - out * 0.25);
@@ -1253,7 +1303,7 @@ const TEMPLATES: Record<string, Tpl> = {
       ctx.stroke();
       ctx.restore();
       const t = stripMarks(it);
-      drawLabel(ctx, t, B(g, 28 * u, 500), ix + 44 * u + (1 - ip) * 14 * u, y, "left", c.fg, ip);
+      drawLabel(ctx, t, B(g, 28 * u, 500), ix + 44 * u + (1 - ip) * 14 * u, y, "left", c.fg, ip, cx + cw - (ix + 44 * u) - 36 * u);
       hitText(g, `items.${i}`, t, B(g, 28 * u, 500), ix + 44 * u, y, "left");
       y += 54 * u;
     });
@@ -1324,7 +1374,7 @@ const TEMPLATES: Record<string, Tpl> = {
       const qL = qLayouts[i];
       drawLayout(ctx, qL, { x: x + 32 * u, y: y + 100 * u, align: "left", color: c.fg, emColor: c.accent, t: g.t, delay: d + 0.15, dur: 0.6, mode: "rise", stagger: 0.04 });
       hitLayout(g, `items.${i}`, qL, x + 32 * u, y + 100 * u, "left");
-      if (q.who) drawLabel(ctx, q.who, B(g, 22 * u, 600), x + 32 * u, y + ch - 40 * u, "left", c.muted, win(g.t, d + 0.4, 0.5));
+      if (q.who) drawLabel(ctx, q.who, B(g, 22 * u, 600), x + 32 * u, y + ch - 40 * u, "left", c.muted, win(g.t, d + 0.4, 0.5), cw - 64 * u);
     });
   },
 
@@ -1426,7 +1476,7 @@ const TEMPLATES: Record<string, Tpl> = {
       y += 56 * u;
     }
     if (scene.headline) {
-      const L = layoutText(ctx, scene.headline, F(g, (land ? 64 : 70) * u), colW, 2, 1.02);
+      const L = fitLayout(ctx, scene.headline, F(g, (land ? 64 : 70) * u), colW, 2, H * 0.16, 1.02);
       hitLayout(g, "headline", L, tx, y, align);
       y = drawLayout(ctx, L, { x: tx, y, align, color: c.fg, emColor: c.accent, t: g.t, delay: 0.25, dur: 0.8 * g.sp, stagger: 0.08, mode: "mask", easing: g.E });
     }
@@ -1448,7 +1498,7 @@ const TEMPLATES: Record<string, Tpl> = {
     }
 
     // Live caption: the phrase being spoken, word by word; else the subline.
-    const cy = wy + maxH * 0.5 + (land ? 90 : 110) * u;
+    const cy = Math.min(wy + maxH * 0.5 + (land ? 90 : 110) * u, H - pad * 0.9);
     const words = g.words;
     const size = (land ? 46 : 54) * u;
     const fnt = F(g, size);
@@ -1460,7 +1510,7 @@ const TEMPLATES: Record<string, Tpl> = {
         const widths = ph.map((w) => measure(ctx, w.w, fnt));
         const total = widths.reduce((a, b) => a + b, 0) + space * (ph.length - 1);
         const k = total > colW ? colW / total : 1;
-        const f2 = { ...fnt, size: size * k };
+        const f2 = { ...fnt, size: fnt.size * k };
         let cx = align === "center" ? W / 2 - (total * k) / 2 : x0;
         ph.forEach((w, i) => {
           const said = now >= w.s;
@@ -1472,8 +1522,9 @@ const TEMPLATES: Record<string, Tpl> = {
       }
     } else if (scene.subline) {
       const L = layoutText(ctx, stripMarks(scene.subline), B(g, 34 * u, 500), colW, 2, 1.3);
-      hitLayout(g, "subline", L, tx, cy - 20 * u, align);
-      drawLayout(ctx, L, { x: tx, y: cy - 20 * u, align, color: rgba(c.fg, 0.8), emColor: c.accent, t: g.t, delay: 0.5, dur: 0.8, mode: "rise", stagger: 0.05, easing: ease.outCubic });
+      const sy = Math.min(cy - 20 * u, H - pad * 0.7 - L.height);
+      hitLayout(g, "subline", L, tx, sy, align);
+      drawLayout(ctx, L, { x: tx, y: sy, align, color: rgba(c.fg, 0.8), emColor: c.accent, t: g.t, delay: 0.5, dur: 0.8, mode: "rise", stagger: 0.05, easing: ease.outCubic });
     }
   },
 
@@ -1499,13 +1550,13 @@ const TEMPLATES: Record<string, Tpl> = {
       ctx.drawImage(logo, r.x, r.y, r.w, r.h);
     } else {
       const f = F(g, Math.min(150 * u, (half * 1.7) / Math.max(1, name.length * 0.55)));
-      drawLabel(ctx, name, f, cx, cy, "center", c.fg);
+      drawLabel(ctx, name, f, cx, cy, "center", c.fg, 1, W - g.pad * 2);
       g.hit?.({ field: "headline", x: cx - half, y: cy - 90 * u, w: half * 2, h: 180 * u, size: f.size, align: "center", lines: 1 });
     }
     ctx.restore();
     if (scene.subline) {
       const sub = stripMarks(scene.subline).toUpperCase();
-      drawLabel(ctx, sub, K(g, 22 * u), cx, cy + 170 * u, "center", c.muted, win(g.t, 1.1, 0.6));
+      drawLabel(ctx, sub, K(g, 22 * u), cx, cy + 170 * u, "center", c.muted, win(g.t, 1.1, 0.6), W - g.pad * 2);
       hitText(g, "subline", sub, K(g, 22 * u), cx, cy + 170 * u, "center");
     }
   },

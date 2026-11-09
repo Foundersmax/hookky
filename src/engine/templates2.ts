@@ -216,7 +216,7 @@ export const EXTRA_TEMPLATES: Record<string, Tpl> = {
     const tp = g.E(win(g.t, 0, 0.6));
     ctx.save();
     ctx.globalAlpha = tp;
-    drawLabel(ctx, scene.kicker || "9:41", { family: brand.fontDisplay, weight: 600, size: (g.portrait ? 150 : 120) * u * ts(g, "display"), tracking: -0.02 }, W / 2, timeY + (g.portrait ? 75 : 60) * u, "center", fg);
+    drawLabel(ctx, scene.kicker || "9:41", { family: brand.fontDisplay, weight: 600, size: (g.portrait ? 150 : 120) * u * ts(g, "display"), tracking: -0.02 }, W / 2, timeY + (g.portrait ? 75 : 60) * u, "center", fg, 1, W - pad * 2);
     ctx.restore();
     hitText(g, "kicker", scene.kicker || "9:41", F(g, 120 * u), W / 2, timeY + 60 * u, "center");
     const raw = (scene.items?.length ? scene.items : [`${brand.name || "Orbit"}: Your order has shipped 📦`, "Messages: wait, where did you get that?", `${brand.name || "Orbit"}: 2 left in your size`]).slice(0, 5);
@@ -249,7 +249,7 @@ export const EXTRA_TEMPLATES: Record<string, Tpl> = {
       ctx.fill();
       drawLabel(ctx, nte.app[0]?.toUpperCase() ?? "•", F(g, 34 * u), x + 56 * u, y + 58 * u, "center", on(g, c.accent));
       const ink = im ? "#111111" : c.fg;
-      drawLabel(ctx, nte.app.toUpperCase(), K(g, 19 * u), x + 108 * u, y + 38 * u, "left", rgba(ink, 0.6));
+      drawLabel(ctx, nte.app.toUpperCase(), K(g, 19 * u), x + 108 * u, y + 38 * u, "left", rgba(ink, 0.6), 1, cardW - 220 * u);
       drawLabel(ctx, "now", B(g, 20 * u, 500), x + cardW - 26 * u, y + 38 * u, "right", rgba(ink, 0.5));
       drawLayout(ctx, L, { x: x + 108 * u, y: y + 54 * u, align: "left", color: ink, emColor: c.accent, t: 99, delay: 0, dur: 0.01, mode: "rise" });
       ctx.restore();
@@ -376,8 +376,8 @@ export const EXTRA_TEMPLATES: Record<string, Tpl> = {
     ctx.restore();
     const themName = stripMarks(scene.kicker || "Others");
     const usName = stripMarks(scene.cta || brand.name || "Us");
-    drawLabel(ctx, themName.toUpperCase(), K(g, 20 * u), x0 + labW + colW / 2, top + headH / 2, "center", c.muted, hp);
-    drawLabel(ctx, usName.toUpperCase(), K(g, 22 * u), usX + colW / 2, top + headH / 2, "center", c.accent, hp);
+    drawLabel(ctx, themName.toUpperCase(), K(g, 20 * u), x0 + labW + colW / 2, top + headH / 2, "center", c.muted, hp, colW * 0.92);
+    drawLabel(ctx, usName.toUpperCase(), K(g, 22 * u), usX + colW / 2, top + headH / 2, "center", c.accent, hp, colW * 0.92);
     hitText(g, "kicker", themName.toUpperCase(), K(g, 20 * u), x0 + labW + colW / 2, top + headH / 2, "center");
     hitText(g, "cta", usName.toUpperCase(), K(g, 22 * u), usX + colW / 2, top + headH / 2, "center");
     const step = Math.min(0.55, (g.dur - 1.2) / rows.length);
@@ -388,11 +388,11 @@ export const EXTRA_TEMPLATES: Record<string, Tpl> = {
       ctx.fillStyle = rgba(c.fg, 0.08);
       ctx.fillRect(x0, y, tw, 1.5 * u);
       const f = B(g, Math.min(36 * u, rowH * 0.36), 550);
-      drawLabel(ctx, r.label, f, x0 + 8 * u + (1 - p) * 20 * u, y + rowH / 2, "left", c.fg, p);
+      drawLabel(ctx, r.label, f, x0 + 8 * u + (1 - p) * 20 * u, y + rowH / 2, "left", c.fg, p, labW - 20 * u);
       hitText(g, `items.${i}`, r.label, f, x0 + 8 * u, y + rowH / 2, "left");
       const cx1 = x0 + labW + colW / 2, cx2 = usX + colW / 2, cy = y + rowH / 2;
       const r1 = g.E(win(g.t, t0 + 0.12, 0.35)), r2 = ease.outBack(win(g.t, t0 + 0.3, 0.4));
-      if (r.them) drawLabel(ctx, r.them, B(g, 24 * u, 500), cx1, cy, "center", c.muted, r1);
+      if (r.them) drawLabel(ctx, r.them, B(g, 24 * u, 500), cx1, cy, "center", c.muted, r1, colW * 0.92);
       else if (r1 > 0) {
         ctx.save();
         ctx.globalAlpha = r1;
@@ -408,7 +408,7 @@ export const EXTRA_TEMPLATES: Record<string, Tpl> = {
         ctx.stroke();
         ctx.restore();
       }
-      if (r.us) drawLabel(ctx, r.us, B(g, 26 * u, 700), cx2, cy, "center", c.accent, clamp(r2));
+      if (r.us) drawLabel(ctx, r.us, B(g, 26 * u, 700), cx2, cy, "center", c.accent, clamp(r2), colW * 0.92);
       else if (r2 > 0) {
         ctx.save();
         ctx.translate(cx2, cy);

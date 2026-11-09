@@ -129,6 +129,8 @@ export function cameraFor(f: FxFrame, W: number, H: number): Camera {
   const u = Math.min(W, H) / 1080;
   let scale = 1, dx = 0, dy = 0;
   if (fx.has("push-in")) scale *= 1 + 0.07 * amt * Math.min(1, f.t / Math.max(0.5, f.dur));
+  // Nothing on screen is ever fully still: every scene eases forward a touch while it holds.
+  else scale *= 1 + 0.018 * Math.min(1, f.t / Math.max(0.5, f.dur));
   if (fx.has("pulse") || fx.has("beat-flash")) {
     const beats = beatsIn(f.project, f.start, f.dur);
     let since = Infinity;

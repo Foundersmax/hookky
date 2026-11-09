@@ -155,7 +155,7 @@ export const MOGRAPH_TEMPLATES: Record<string, Tpl> = {
     const p = win(g.t, Math.min(t0, 0.4), 1.2 * g.sp);
     const float = Math.sin(g.t * 1.4) * 4 * u;
     drawIcon(ctx, g.icon(scene.icons?.[0]), cx, cy + float, size, p, c.fg, weightFor(g, size));
-    if (scene.headline || scene.kicker) textStack(g, { x: W / 2, y: cy + R + 70 * u, maxW: W - pad * 2, align: "center", size: fitBelow(g, cy + R + 70 * u, headlineSize(g, 0.52)), delay: 0.45, maxLines: 2 });
+    if (scene.headline || scene.kicker) textStack(g, { x: W / 2, y: cy + R + 70 * u, maxW: W - pad * 2, align: "center", size: fitBelow(g, cy + R + 70 * u, headlineSize(g, 0.52 * (g.portrait ? 1 : 1.35))), delay: 0.45, maxLines: 2 });
   },
 
   /** Two to four ideas, each an icon that draws on as it's said, joined by a hairline. */
@@ -166,9 +166,9 @@ export const MOGRAPH_TEMPLATES: Record<string, Tpl> = {
     const cues = staged(g, items);
     let top = pad;
     if (scene.headline) {
-      const L = layoutText(ctx, scene.headline, F(g, headlineSize(g, 0.42)), W - pad * 2, 2);
+      const L = layoutText(ctx, scene.headline, F(g, headlineSize(g, 0.42 * (g.portrait ? 1 : 1.35))), W - pad * 2, 2);
       drawLayout(ctx, L, { x: W / 2, y: top, align: "center", color: c.fg, emColor: c.accent, t: g.t, delay: 0, dur: 0.7 * g.sp, mode: "mask", easing: g.E });
-      g.hit?.({ field: "headline", x: pad, y: top, w: W - pad * 2, h: L.height, size: headlineSize(g, 0.42), align: "center", lines: L.lines.length });
+      g.hit?.({ field: "headline", x: pad, y: top, w: W - pad * 2, h: L.height, size: headlineSize(g, 0.42 * (g.portrait ? 1 : 1.35)), align: "center", lines: L.lines.length });
       top += L.height + 40 * u;
     }
     const vertical = g.portrait;
@@ -265,9 +265,9 @@ export const MOGRAPH_TEMPLATES: Record<string, Tpl> = {
       y += L.height + 20 * u;
     }
     if (scene.headline) {
-      const L = layoutText(ctx, scene.headline, F(g, headlineSize(g, 0.36)), W - pad * 2, 2);
+      const L = layoutText(ctx, scene.headline, F(g, headlineSize(g, 0.36 * (g.portrait ? 1 : 1.35))), W - pad * 2, 2);
       drawLayout(ctx, L, { x: W / 2, y: pad, align: "center", color: c.fg, emColor: c.accent, t: g.t, delay: 0, dur: 0.7, mode: "mask", easing: g.E });
-      g.hit?.({ field: "headline", x: pad, y: pad, w: W - pad * 2, h: L.height, size: headlineSize(g, 0.36), align: "center", lines: L.lines.length });
+      g.hit?.({ field: "headline", x: pad, y: pad, w: W - pad * 2, h: L.height, size: headlineSize(g, 0.36 * (g.portrait ? 1 : 1.35)), align: "center", lines: L.lines.length });
     }
   },
 
@@ -279,9 +279,9 @@ export const MOGRAPH_TEMPLATES: Record<string, Tpl> = {
     const cues = staged(g, items, 0.4, 0.62);
     let top = pad;
     if (scene.headline) {
-      const L = layoutText(ctx, scene.headline, F(g, headlineSize(g, 0.42)), W - pad * 2, 2);
+      const L = layoutText(ctx, scene.headline, F(g, headlineSize(g, 0.42 * (g.portrait ? 1 : 1.35))), W - pad * 2, 2);
       drawLayout(ctx, L, { x: W / 2, y: top, align: "center", color: c.fg, emColor: c.accent, t: g.t, delay: 0, dur: 0.7, mode: "mask", easing: g.E });
-      g.hit?.({ field: "headline", x: pad, y: top, w: W - pad * 2, h: L.height, size: headlineSize(g, 0.42), align: "center", lines: L.lines.length });
+      g.hit?.({ field: "headline", x: pad, y: top, w: W - pad * 2, h: L.height, size: headlineSize(g, 0.42 * (g.portrait ? 1 : 1.35)), align: "center", lines: L.lines.length });
       top += L.height + 50 * u;
     }
     const vertical = g.portrait;
@@ -359,9 +359,9 @@ export const MOGRAPH_TEMPLATES: Record<string, Tpl> = {
     const cues = staged(g, rows.map((r) => r.label), 0.35, 0.55);
     let top = pad;
     if (scene.headline) {
-      const L = layoutText(ctx, scene.headline, F(g, headlineSize(g, 0.44)), W - pad * 2, 2);
+      const L = layoutText(ctx, scene.headline, F(g, headlineSize(g, 0.44 * (g.portrait ? 1 : 1.35))), W - pad * 2, 2);
       drawLayout(ctx, L, { x: pad, y: top, align: "left", color: c.fg, emColor: c.accent, t: g.t, delay: 0, dur: 0.7, mode: "mask", easing: g.E });
-      g.hit?.({ field: "headline", x: pad, y: top, w: W - pad * 2, h: L.height, size: headlineSize(g, 0.44), align: "left", lines: L.lines.length });
+      g.hit?.({ field: "headline", x: pad, y: top, w: W - pad * 2, h: L.height, size: headlineSize(g, 0.44 * (g.portrait ? 1 : 1.35)), align: "left", lines: L.lines.length });
       top += L.height + 60 * u;
     }
     const n = rows.length;
@@ -451,7 +451,7 @@ export const MOGRAPH_TEMPLATES: Record<string, Tpl> = {
     const ink = mix(c.accent, "#000000", 0.78);
     if (icons[0]) drawIcon(ctx, g.icon(icons[0]), cx, cy, core * 1.1, win(g.t, 0.15, 0.8), ink, weightFor(g, core * 1.1));
     else drawLabel(ctx, (stripMarks(brand.name || "•")[0] ?? "•").toUpperCase(), F(g, core * 1.1), cx, cy + core * 0.04, "center", ink, appear);
-    if (scene.headline || scene.kicker) textStack(g, { x: W / 2, y: cy + R + R * 0.28 + 30 * u, maxW: W - pad * 2, align: "center", size: fitBelow(g, cy + R + R * 0.28 + 30 * u, headlineSize(g, 0.48)), delay: 0.5, maxLines: 2 });
+    if (scene.headline || scene.kicker) textStack(g, { x: W / 2, y: cy + R + R * 0.28 + 30 * u, maxW: W - pad * 2, align: "center", size: fitBelow(g, cy + R + R * 0.28 + 30 * u, headlineSize(g, 0.48 * (g.portrait ? 1 : 1.35))), delay: 0.5, maxLines: 2 });
     void kicker;
   },
 };

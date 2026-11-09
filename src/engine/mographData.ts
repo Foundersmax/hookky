@@ -19,7 +19,7 @@ function header(g: G, align: "left" | "center" = "center", scale = 0.42): number
     top += 44 * u;
   }
   if (!scene.headline) return top;
-  const size = headlineSize(g, scale);
+  const size = headlineSize(g, scale * (g.portrait ? 1 : 1.35));
   const L = layoutText(ctx, scene.headline, F(g, size), W - pad * 2, 2);
   drawLayout(ctx, L, { x: align === "center" ? W / 2 : pad, y: top, align, color: c.fg, emColor: c.accent, t: g.t, delay: 0, dur: 0.7 * g.sp, mode: "mask", easing: g.E });
   g.hit?.({ field: "headline", x: pad, y: top, w: W - pad * 2, h: L.height, size, align, lines: L.lines.length });
