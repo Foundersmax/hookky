@@ -1,5 +1,5 @@
 import { useStudio, updateProject, setState, normalizeScene, editedScene, addScene } from "../store";
-import { TEMPLATES, TRANSITIONS, BACKGROUNDS, MOTIONS, type Scene } from "../types";
+import { TEMPLATES, TRANSITIONS, MOTIONS, type Scene } from "../types";
 import { timeline } from "../engine/render";
 import { stripMarks } from "../engine/text";
 import { clock } from "../clock";
@@ -13,6 +13,7 @@ import { EffectsControls } from "./EffectsControls";
 import { BackdropControls } from "./BackdropControls";
 import { FontPicker } from "./FontPicker";
 import { ShotControls } from "./ShotControls";
+import { BackgroundPicker } from "./BackgroundPicker";
 
 const USES: Record<string, (keyof Scene)[]> = {
   "title-reveal": ["kicker", "headline", "subline", "align"],
@@ -43,6 +44,14 @@ const USES: Record<string, (keyof Scene)[]> = {
   rating: ["stat", "headline", "author"],
   spotlight: ["image", "headline", "subline"],
   "word-stack": ["headline"],
+  "word-slam": ["headline"],
+  scramble: ["headline"],
+  "zoom-through": ["headline"],
+  "letter-wave": ["headline"],
+  "outline-fill": ["headline"],
+  "flip-words": ["headline"],
+  typewriter: ["headline"],
+  "echo-stack": ["headline"],
 };
 const ITEMS_LABEL: Record<string, string> = {
   testimonials: "Quotes, one per line: quote — name, role",
@@ -126,14 +135,7 @@ export function SceneInspector() {
                 {MOTIONS.map((m) => <option key={m}>{m}</option>)}
               </select>
             </div>
-            {!scene.backdrop?.length && (
-              <div className="field">
-                <label>Background</label>
-                <select value={scene.background ?? "solid"} onChange={(e) => edit({ background: e.target.value as Scene["background"] })}>
-                  {BACKGROUNDS.map((t) => <option key={t}>{t}</option>)}
-                </select>
-              </div>
-            )}
+
             {uses.includes("align") && (
               <div className="field">
                 <label>Align</label>
@@ -143,6 +145,12 @@ export function SceneInspector() {
               </div>
             )}
           </div>
+          {!scene.backdrop?.length && (
+            <div className="field">
+              <label>Background</label>
+              <BackgroundPicker value={scene.background ?? "solid"} onChange={(b) => b !== "auto" && edit({ background: b })} brand={project.brand} image={uses.includes("image") || scene.background === "image"} />
+            </div>
+          )}
           <p className="section-title">Text</p>
           <FontPicker value={scene.font} onChange={(font) => edit({ font })} label="Font for this scene" />
           {uses.includes("kicker") && <Text label="Kicker" v={scene.kicker} on={(kicker) => edit({ kicker })} />}

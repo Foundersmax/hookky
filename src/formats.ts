@@ -116,6 +116,48 @@ const img = (images: string[], i: number) => (images.length ? images[i % images.
 const shot = (images: string[], i: number, withImg: Beat, without: Beat): Beat => (img(images, i) ? { ...withImg, image: img(images, i) } : without);
 const end = (b: Brief, extra: Partial<Beat> = {}): Beat => ({ template: "cta-end", duration: 3.4, headline: em(b.offer ? words(b.offer, 5) : `Meet ${b.product}`), cta: b.cta, url: b.url || undefined, background: "gradient", ...T("zoom"), ...extra });
 
+// ---------------------------------------------------------------- energetic text formats
+type Anim = Scene["template"];
+type Bg = Scene["background"];
+/**
+ * A Pattern Interrupt cousin built around one text animation: a glitchy hook, the product, two
+ * benefits and a punchy close, each on its own animated background. Every beat follows the
+ * voice-over word by word when there is one.
+ */
+function energetic(o: { id: string; name: string; category: Category; hook: string; blurb: string; aspect: Aspect; style: string; swatch: [string, string]; anim: Anim; bgs: [Bg, Bg, Bg]; open: (b: Brief) => string; punch?: Anim; transitions?: [TransitionId, TransitionId, TransitionId] }): Format {
+  const tr = o.transitions ?? ["glitch", "whip", "spin"];
+  return {
+    id: o.id, section: "text", name: o.name, category: o.category, hook: o.hook, blurb: o.blurb, aspect: o.aspect, style: o.style, swatch: o.swatch,
+    beats: `1 ${o.anim} hook with glitch and zoom-punch · 2 ${o.anim} naming the product · 3-4 ${o.anim} benefits on animated backgrounds · 5 ${o.punch ?? "word-slam"} punch line · 6 end card`,
+    build: (b) => [
+      { template: o.anim, duration: 2.6, headline: em(o.open(b)), background: o.bgs[0], ...T("cut"), ...fx("vivid", ["zoom-punch", "glitch"], 0.7) },
+      { template: o.anim, duration: 2.6, headline: em(`${b.product}: ${words(b.what, 5)}`), background: o.bgs[1], ...T(tr[0]), ...fx("none", ["zoom-punch"], 0.6) },
+      ...b.benefits.slice(0, 2).map((x, i): Beat => ({ template: o.anim, duration: 2.4, headline: em(words(x, 6)), background: i ? o.bgs[0] : o.bgs[2], ...T(i ? tr[2] : tr[1]), ...fx("none", i ? ["pulse"] : ["zoom-punch"], 0.6) })),
+      { template: o.punch ?? "word-slam", duration: 2.2, headline: em(b.offer ? words(b.offer, 5) : `Only ${b.product}`), background: "accent", ...T("whip"), ...fx("vivid", ["zoom-punch", "flash"], 0.75) },
+      end(b, { background: o.bgs[1], ...fx("vivid", ["sparkle"], 0.5) }),
+    ],
+  };
+}
+
+const ENERGETIC: Format[] = [
+  energetic({ id: "slam", name: "Word Slam", category: "Social hooks", hook: "One giant word at a time", aspect: "9:16", style: "noir", swatch: ["#0B0B0C", "#C8FF3D"], anim: "word-slam", bgs: ["rays", "stripes", "solid"],
+    blurb: "Every word hits the screen alone, huge, with an impact shake. Brutal with a voice-over.", open: (b) => `${cap(b.audience)}. Stop. Look. This.` }),
+  energetic({ id: "decode", name: "Decode", category: "Apps & SaaS", hook: "Text scrambles into place", aspect: "9:16", style: "noir", swatch: ["#0B0B0C", "#2CF5C1"], anim: "scramble", bgs: ["synthwave", "checker", "solid"],
+    blurb: "Letters decode from noise as each word is said, techy and addictive to watch.", open: () => "You've never seen this before", punch: "scramble" }),
+  energetic({ id: "zoom-tunnel", name: "Zoom Tunnel", category: "Social hooks", hook: "Words fly at the camera", aspect: "9:16", style: "aurora", swatch: ["#0C0D19", "#8B6CFF"], anim: "zoom-through", bgs: ["starfield", "rings", "solid"],
+    blurb: "Each word rushes out of the depth and blows past, through a starfield.", open: () => "Faster than you think", transitions: ["spin", "whip", "zoom"] }),
+  energetic({ id: "wave-pop", name: "Wave Pop", category: "E-commerce", hook: "Bouncy letter waves", aspect: "4:5", style: "blush", swatch: ["#F6E9E4", "#FF5FA2"], anim: "letter-wave", bgs: ["mesh", "waves", "split"],
+    blurb: "Letters bounce in one by one and keep riding a wave. Playful, bright, made for products people love.", open: (b) => `Okay ${b.audience}, you need this`, punch: "letter-wave", transitions: ["whip", "push-up", "spin"] }),
+  energetic({ id: "karaoke", name: "Karaoke Fill", category: "Brand & story", hook: "Words fill as they're said", aspect: "9:16", style: "noir", swatch: ["#0B0B0C", "#FF4D1A"], anim: "outline-fill", bgs: ["rings", "waves", "solid"],
+    blurb: "The line waits in outline and fills word by word with the voice. Made for voice-overs.", open: () => "Listen to this for a second", punch: "outline-fill", transitions: ["fade", "whip", "glitch"] }),
+  energetic({ id: "flip-deck", name: "Flip Deck", category: "Promos & offers", hook: "Cube-flipping words", aspect: "1:1", style: "swiss", swatch: ["#F3F0E9", "#FF4D1A"], anim: "flip-words", bgs: ["split", "stripes", "checker"],
+    blurb: "Words flip in like a turning cube; the important ones land on a colour slab.", open: () => "Three words. Zero excuses.", transitions: ["whip", "glitch", "whip"] }),
+  energetic({ id: "type-rush", name: "Type Rush", category: "Apps & SaaS", hook: "Rapid-fire typing", aspect: "16:9", style: "mono", swatch: ["#E9E7E1", "#0D0D0D"], anim: "typewriter", bgs: ["checker", "grid", "solid"],
+    blurb: "Fast typing with a blinking caret and marker sweeps under the words that matter.", open: (b) => `Dear ${b.audience}, we fixed it.`, transitions: ["cut", "whip", "glitch"] }),
+  energetic({ id: "echo-chamber", name: "Echo Chamber", category: "Social hooks", hook: "Echoing outlined words", aspect: "9:16", style: "aurora", swatch: ["#0C0D19", "#2CF5C1"], anim: "echo-stack", bgs: ["aurora", "rays", "solid"],
+    blurb: "Each word echoes in outlines above and below. Hypnotic, loud, very social.", open: () => "Louder for the people in the back", punch: "zoom-through", transitions: ["glitch", "spin", "whip"] }),
+];
+
 // ---------------------------------------------------------------- the formats
 export const FORMATS: Format[] = [
   // ---- social hooks
@@ -480,10 +522,11 @@ const FOOTAGE: Format[] = [
   },
 ];
 FORMATS.push(...FOOTAGE);
+FORMATS.unshift(...ENERGETIC);
 
 // ---------------------------------------------------------------- voice-over
 /** Templates whose headline can carry the spoken words, and how many words each holds. */
-const CARRY: Partial<Record<Scene["template"], number>> = { "title-reveal": 6, "kinetic-words": 10, "word-stack": 6, "pov-caption": 10, fullbleed: 6, spotlight: 4, quote: 16, "split-feature": 6, "product-hero": 4, "device-mockup": 5, marquee: 4 };
+const CARRY: Partial<Record<Scene["template"], number>> = { "word-slam": 12, scramble: 12, "zoom-through": 12, "letter-wave": 12, "outline-fill": 14, "flip-words": 12, typewriter: 16, "echo-stack": 12, "title-reveal": 6, "kinetic-words": 10, "word-stack": 6, "pov-caption": 10, fullbleed: 6, spotlight: 4, quote: 16, "split-feature": 6, "product-hero": 4, "device-mockup": 5, marquee: 4 };
 
 /**
  * Build a format around a voice-over: one beat per spoken phrase (cut in the pauses), the
@@ -625,7 +668,7 @@ export function buildFormat(f: Format, brief: Partial<Brief>, images: string[]):
   const n = (t?: string) => (t ? t.replace(/\*/g, "").trim().split(/\s+/).filter(Boolean).length : 0);
   const scenes = f.build(b, images).map((s) => {
     // These reveal their text over time (words, messages, alerts), so their designed pace stands.
-    if (s.template === "kinetic-words" || s.template === "audiogram" || s.template === "chat" || s.template === "notification") return s;
+    if (["kinetic-words", "audiogram", "chat", "notification", "word-slam", "scramble", "zoom-through", "letter-wave", "outline-fill", "flip-words", "typewriter", "echo-stack"].includes(s.template)) return s;
     const wordsOn = n(s.headline) + n(s.subline) + (s.items ?? []).reduce((a, it) => a + n(it), 0) + n(s.stat?.label);
     return { ...s, duration: +Math.min(15, Math.max(s.duration, wordsOn / 3.2 + 0.85)).toFixed(2) };
   });

@@ -20,8 +20,10 @@ export interface LintInput {
 
 const words = (s?: string) => (s ? s.replace(/\*/g, "").trim().split(/\s+/).filter(Boolean).length : 0);
 const IMAGE_TEMPLATES = new Set(["product-hero", "split-feature", "fullbleed", "device-mockup", "spotlight"]);
-const HEADLINE_MAX: Record<string, number> = { "text-mask": 3, "word-stack": 8, "pov-caption": 12, rating: 22, quote: 22, "kinetic-words": 10, "feature-list": 5, "image-mosaic": 6, testimonials: 5, "before-after": 5 };
-const READ_WPS = 3.2; // comfortable on-screen reading speed, words per second
+const HEADLINE_MAX: Record<string, number> = { "word-slam": 10, scramble: 10, "zoom-through": 10, "letter-wave": 10, "outline-fill": 12, "flip-words": 10, typewriter: 14, "echo-stack": 8, "text-mask": 3, "word-stack": 8, "pov-caption": 12, rating: 22, quote: 22, "kinetic-words": 10, "feature-list": 5, "image-mosaic": 6, testimonials: 5, "before-after": 5 };
+const READ_WPS = 3.2;
+/** Text animations that carry a voice-over word by word: a run of one style is the design, not repetition. */
+const VOICE_TYPE = new Set(["word-slam", "scramble", "zoom-through", "letter-wave", "outline-fill", "flip-words", "typewriter", "echo-stack"]); // comfortable on-screen reading speed, words per second
 
 export function lintStoryboard({ scenes, brand, assetIds, audio }: LintInput): Note[] {
   const notes: Note[] = [];
@@ -107,14 +109,14 @@ export function lintStoryboard({ scenes, brand, assetIds, audio }: LintInput): N
     // Chats and notifications reveal one line at a time: each needs about a second to land.
     const staged = s.template === "chat" || s.template === "notification";
     const needed = staged ? 0.6 + (s.items?.length ?? 0) * 1.1 + hw / READ_WPS : textWords / READ_WPS + 0.8;
-    if (s.template !== "kinetic-words" && textWords && s.duration < needed) {
+    if (!["kinetic-words", "word-slam", "scramble", "zoom-through", "letter-wave", "outline-fill", "flip-words", "typewriter", "echo-stack"].includes(s.template) && textWords && s.duration < needed) {
       const short = s.duration < needed * 0.8;
       add(i, short ? "warn" : "tip", "too-fast", `Scene ${n}: ${textWords} words in ${s.duration.toFixed(1)}s ${short ? "is too quick to read" : "is a little quick"}. Give it about ${needed.toFixed(1)}s or trim the copy.`);
     }
     if (s.duration > 7 && s.template !== "kinetic-words") add(i, "tip", "too-slow", `Scene ${n} holds for ${s.duration.toFixed(1)}s. Consider splitting it.`);
 
     // Footage cut back to back is an edit, not repetition; the rule is for designed scenes.
-    if (i >= 2 && scenes[i - 1].template === s.template && scenes[i - 2].template === s.template && !(s.shot && scenes[i - 1].shot && scenes[i - 2].shot))
+    if (i >= 2 && scenes[i - 1].template === s.template && scenes[i - 2].template === s.template && !(s.shot && scenes[i - 1].shot && scenes[i - 2].shot) && !VOICE_TYPE.has(s.template))
       add(i, "tip", "repeat", `Scenes ${n - 2}–${n} all use ${s.template}. Vary the template to keep the rhythm.`);
   });
 

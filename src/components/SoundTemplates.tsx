@@ -63,7 +63,8 @@ export function LoopPreview({ project, height, live, clockRef }: { project: Proj
     const r = new Renderer(c, W, H, scale);
     // The still frame: just after the drop (or a third in), where the template shows itself.
     let t2 = 0;
-    const drop = project.scenes.findIndex((s) => s.effects?.includes("flash") || s.template === "logo-reveal" || s.template === "audiogram");
+    // A reveal if there is one (not a punch on an accent background), else a third of the way in.
+    const drop = project.scenes.findIndex((s, i) => i > 0 && (s.template === "logo-reveal" || s.template === "audiogram" || (s.effects?.includes("flash") && s.background !== "accent")));
     const still = drop >= 0 ? project.scenes.slice(0, drop).reduce((a, s) => a + s.duration, 0) + Math.min(1.2, project.scenes[drop].duration * 0.6) : total * 0.33;
     const draw = (t: number) => {
       try {

@@ -32,6 +32,8 @@ export interface CreateInput {
   /** fill shots the library can't with stock footage */
   useStock: boolean;
   withClaude: boolean;
+  /** one background for every scene, or "auto" for each format's own */
+  background?: Scene["background"] | "auto";
   onStep?: (label: string) => void;
 }
 
@@ -95,6 +97,9 @@ export async function createFormat(input: CreateInput): Promise<string> {
       notes.push(`couldn't reach Claude (${e.message})`);
     }
   }
+
+  // The chosen background on every scene (scenes over footage still show their footage).
+  if (input.background && input.background !== "auto") scenes = withBackground(scenes, input.background);
 
   // 5. Music: start on a bar; without a voice-over the cuts land on its beats.
   let musicStart: number | undefined;
@@ -209,3 +214,8 @@ export async function writeScript(f: Format, brief: Partial<Brief>, seconds = 20
 
 /** Leave the current audio alone but make sure music is cleared when asked. */
 export const clearMusic = () => updateProject((p) => ({ ...p, music: undefined }));
+
+/** Give every scene one background; the end card keeps its accent if it had one. */
+export function withBackground<S extends { background?: Scene["background"]; template: Scene["template"] }>(scenes: S[], bg: Scene["background"]): S[] {
+  return scenes.map((s) => (s.background === "accent" && s.template !== "cta-end" ? s : { ...s, background: bg }));
+}

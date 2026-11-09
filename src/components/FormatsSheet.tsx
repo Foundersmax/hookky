@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Aspect, AudioTrack, MusicTrack, Project } from "../types";
+import type { Aspect, AudioTrack, MusicTrack, Project, Scene } from "../types";
 import { useStudio, setState, getState } from "../store";
 import { sanitizeScene } from "../sanitize";
 import { brandWithStyle } from "../storyboard";
 import { CATEGORIES, FORMATS, SECTIONS, buildFormat, buildWithVoice, scriptFor, type Brief, type Category, type Format, type Section } from "../formats";
 import { pickImages } from "../soundApply";
-import { createFormat, generateVoice, writeScript } from "../formatsDirect";
+import { createFormat, generateVoice, writeScript, withBackground } from "../formatsDirect";
+import { BackgroundPicker } from "./BackgroundPicker";
 import { prepareVoice, prepareMusic, type Stage } from "../audio/prepare";
 import { understand } from "../audio/understand";
 import { StageList, VoiceReport, MusicReport } from "./AudioLab";
@@ -38,9 +39,10 @@ function loadBrief(p: Project): Partial<Brief> {
 }
 
 /** A project that previews a format: around the voice-over if there is one, in the brand or the format's look. */
-function preview(f: Format, base: Project, brief: Partial<Brief>, imgs: string[], aspect: Aspect, keepBrand: boolean, voice?: AudioTrack): Project {
+function preview(f: Format, base: Project, brief: Partial<Brief>, imgs: string[], aspect: Aspect, keepBrand: boolean, voice?: AudioTrack, bg: Scene["background"] | "auto" = "auto"): Project {
   const pics = f.section === "text" ? [] : imgs;
-  const scenes = voice ? buildWithVoice(f, brief, voice, pics).scenes : buildFormat(f, brief, pics);
+  const built = voice ? buildWithVoice(f, brief, voice, pics).scenes : buildFormat(f, brief, pics);
+  const scenes = bg === "auto" ? built : withBackground(built, bg);
   return {
     ...base,
     aspect,
@@ -70,6 +72,7 @@ export function FormatsSheet() {
   const [aspectTouched, setAspectTouched] = useState(false);
   const [keepBrand, setKeepBrand] = useState(() => !!getState().kits.find((k) => k.isDefault));
   const [useStock, setUseStock] = useState(true);
+  const [bg, setBg] = useState<Scene["background"] | "auto">("auto");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // sound
@@ -117,8 +120,8 @@ export function FormatsSheet() {
   const inSection = FORMATS.filter((f) => f.section === section);
   const cats = CATEGORIES.filter((c) => inSection.some((f) => f.category === c));
   const shown = inSection.filter((f) => cat === "All" || f.category === cat);
-  const big = useMemo(() => preview(pick, project, brief, imgs, aspect, keepBrand, currentVoice), [pick, project.brand, project.style, brief, imgs, aspect, keepBrand, currentVoice]);
-  const cards = useMemo(() => shown.map((f) => ({ f, p: preview(f, project, brief, imgs, f.aspect, keepBrand) })), [section, cat, project.brand, project.style, brief.product, brief.what, imgs, keepBrand]);
+  const big = useMemo(() => preview(pick, project, brief, imgs, aspect, keepBrand, currentVoice, bg), [pick, project.brand, project.style, brief, imgs, aspect, keepBrand, currentVoice, bg]);
+  const cards = useMemo(() => shown.map((f) => ({ f, p: preview(f, project, brief, imgs, f.aspect, keepBrand, undefined, bg) })), [section, cat, project.brand, project.style, brief.product, brief.what, imgs, keepBrand, bg]);
 
   const choose = (f: Format) => {
     setPick(f);
@@ -244,6 +247,7 @@ export function FormatsSheet() {
         dropMusic,
         useStock: useStock && pick.section !== "text",
         withClaude: withClaude && claudeOk,
+        background: bg,
         onStep: setBusy,
       });
       setBusy(null);
@@ -406,6 +410,10 @@ export function FormatsSheet() {
               {field("cta", "Button", "Pre-order")}
             </div>
             {field("url", "Link", "orbit.watch")}
+            <div className="field">
+              <span className="label">Background{bg !== "auto" ? `: ${bg}` : ""}</span>
+              <BackgroundPicker value={bg} onChange={setBg} brand={big.brand} auto />
+            </div>
             <div className="opt-row">
               <span className="opt-label">Format</span>
               <div className="seg" role="group" aria-label="Format">

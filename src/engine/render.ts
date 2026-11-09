@@ -4,6 +4,8 @@ import { clamp, ease, lerp, win, rgba, mix, contrast, hash } from "./util";
 import { layoutText, drawLayout, drawLabel, displayWeight, displayTracking, stripMarks, measure, type FontSpec, type Layout } from "./text";
 import { hasFx, applyFx } from "./fx";
 import { EXTRA_TEMPLATES } from "./templates2";
+import { TEXT_TEMPLATES } from "./textfx";
+import { EXTRA_BACKGROUNDS } from "./backgrounds";
 
 /** Looks up a drawable by asset ref; `t` is the scene-local time (video clips use it). */
 export type ImageGetter = (ref?: string, t?: number, rate?: number) => HTMLImageElement | undefined;
@@ -484,6 +486,8 @@ function drawBackground(g: G) {
       ctx.fillRect(0, 0, W, H);
     });
     ctx.restore();
+  } else if (EXTRA_BACKGROUNDS[kind]) {
+    EXTRA_BACKGROUNDS[kind](g);
   } else if (kind === "image") {
     const im = g.img(g.scene.image);
     if (im) {
@@ -608,6 +612,7 @@ export type Tpl = (g: G) => void;
 
 const TEMPLATES: Record<string, Tpl> = {
   ...EXTRA_TEMPLATES,
+  ...TEXT_TEMPLATES,
   "title-reveal"(g) {
     const { W, H, pad, ctx, c, u } = g;
     const align = g.scene.align ?? "center";

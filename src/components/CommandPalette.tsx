@@ -56,6 +56,14 @@ const STARTER_CONTENT: Partial<Record<Scene["template"], Partial<Scene>>> = {
   rating: { stat: { value: 4.9, label: "from 2,000+ reviews" }, headline: "Best purchase this year", author: "Maya R." },
   spotlight: { headline: "Meet *Orbit*", subline: "Drop a product shot." },
   "word-stack": { headline: "Stop *scrolling* start moving" },
+  "word-slam": { headline: "This changes *everything*" },
+  scramble: { headline: "Decode the *future*" },
+  "zoom-through": { headline: "Faster than *ever*" },
+  "letter-wave": { headline: "Feel the *rhythm*" },
+  "outline-fill": { headline: "Every word *lands*" },
+  "flip-words": { headline: "Bold *moves* only" },
+  typewriter: { headline: "Write it. Ship it. *Win*." },
+  "echo-stack": { headline: "*Louder*" },
 };
 /** Starting lengths that give each template's starter copy time to read. */
 const START_DURATION: Partial<Record<Scene["template"], number>> = {
@@ -66,6 +74,7 @@ const TEMPLATE_NAMES: Record<string, string> = {
   "stat-counter": "Stat counter", "image-mosaic": "Image mosaic", fullbleed: "Full-bleed image", quote: "Quote", marquee: "Marquee", "shape-burst": "Shape burst", "logo-sting": "Logo sting", "cta-end": "End card",
   "device-mockup": "Device mockup", countdown: "Countdown", "price-card": "Price card", testimonials: "Testimonials", "before-after": "Before / after", "logo-reveal": "Logo reveal", audiogram: "Audiogram",
   "text-mask": "Text mask", chat: "Chat thread", notification: "Notifications", "pov-caption": "POV caption", versus: "Versus", rating: "Star rating", spotlight: "Spotlight", "word-stack": "Word stack",
+  "word-slam": "Word slam", scramble: "Scramble", "zoom-through": "Zoom through", "letter-wave": "Letter wave", "outline-fill": "Outline fill", "flip-words": "Flip words", typewriter: "Typewriter", "echo-stack": "Echo stack",
 };
 
 export function CommandPalette({ host }: { host: PaletteHost }) {

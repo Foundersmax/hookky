@@ -31,13 +31,21 @@ export const TEMPLATES = [
   "rating",
   "spotlight",
   "word-stack",
+  "word-slam",
+  "scramble",
+  "zoom-through",
+  "letter-wave",
+  "outline-fill",
+  "flip-words",
+  "typewriter",
+  "echo-stack",
 ] as const;
 export type TemplateId = (typeof TEMPLATES)[number];
 
 export const TRANSITIONS = ["cut", "fade", "slide", "push-up", "wipe", "zoom", "circle", "blur", "whip", "spin", "glitch"] as const;
 export type TransitionId = (typeof TRANSITIONS)[number];
 
-export const BACKGROUNDS = ["solid", "gradient", "grid", "dots", "grain", "blobs", "invert", "accent", "image"] as const;
+export const BACKGROUNDS = ["solid", "gradient", "grid", "dots", "grain", "blobs", "invert", "accent", "image", "mesh", "rays", "stripes", "waves", "checker", "rings", "aurora", "starfield", "synthwave", "split"] as const;
 export type BackgroundId = (typeof BACKGROUNDS)[number];
 
 export const MOTIONS = ["snappy", "calm", "bouncy", "smooth", "dramatic"] as const;

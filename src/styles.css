@@ -904,3 +904,12 @@ input[type="range"] { accent-color: var(--text); }
 .lab-recs .lab-chips button small { color: var(--text-3); margin-left: 4px; }
 .sound-card .fits { position: absolute; top: 8px; left: 8px; font-size: 10.5px; font-weight: 600; padding: 2px 7px; border-radius: 99px; background: var(--accent); color: var(--accent-ink); }
 .sound-card { position: relative; }
+
+/* ---------- background picker */
+.bg-picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: 6px; }
+.bg-swatch { display: flex; flex-direction: column; gap: 3px; padding: 0; border: 0; background: none; cursor: pointer; color: var(--text-2); text-align: left; }
+.bg-thumb { display: grid; place-items: center; aspect-ratio: 16 / 10; border-radius: 7px; border: 1px solid var(--line); background-size: cover; background-position: center; font-size: 11px; font-weight: 600; color: var(--text); background-color: var(--panel-2); }
+.bg-swatch small { font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bg-swatch.on .bg-thumb { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.bg-swatch.on small { color: var(--text); }
+.bg-swatch:hover .bg-thumb { border-color: var(--line-2); }
