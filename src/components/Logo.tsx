@@ -1,5 +1,5 @@
-// rookker logo: the hook mark and the "rookker" wordmark (Inter Display SemiBold, outlined, -51.2 units tracking).
-const HOOK = "M8.5 6.5V25.5M8.5 15.2a4.6 4.6 0 0 1 9.2 0V21a3.3 3.3 0 0 0 6.6 0v-1.6";
+// rookker logo: an "r" whose arm curls into a hook, and the "rookker" wordmark (Inter Display SemiBold, outlined, -51.2 units tracking).
+const MARK = "M10.75 8V24M10.75 14.5a6.5 6.5 0 0 1 6.5-6.5a4 4 0 0 1 4 4v1.6";
 const WORD = "M112 0H364V-598C364 -763 457 -846 577 -846C627 -846 677 -841 696 -838V-1062C676 -1064 648 -1066 614 -1066C478 -1066 397 -1002 358 -881H355V-1056H112ZM1261.8 24C1572.8 24 1782.8 -199 1782.8 -527C1782.8 -855 1572.8 -1080 1261.8 -1080C950.8 -1080 740.8 -855 740.8 -527C740.8 -199 950.8 24 1261.8 24ZM1261.8 -187C1098.8 -187 995.8 -316 995.8 -527C995.8 -739 1099.8 -869 1261.8 -869C1422.8 -869 1526.8 -738 1526.8 -527C1526.8 -317 1423.8 -187 1261.8 -187ZM2377.6 24C2688.6 24 2898.6 -199 2898.6 -527C2898.6 -855 2688.6 -1080 2377.6 -1080C2066.6 -1080 1856.6 -855 1856.6 -527C1856.6 -199 2066.6 24 2377.6 24ZM2377.6 -187C2214.6 -187 2111.6 -316 2111.6 -527C2111.6 -739 2215.6 -869 2377.6 -869C2538.6 -869 2642.6 -738 2642.6 -527C2642.6 -317 2539.6 -187 2377.6 -187ZM3021.4 0H3273.4V-353L3369.4 -452L3715.4 0H4016.4L3561.4 -600L3990.4 -1056H3687.4L3276.4 -628H3273.4V-1490H3021.4ZM4068.2 0H4320.2V-353L4416.2 -452L4762.2 0H5063.2L4608.2 -600L5037.2 -1056H4734.2L4323.2 -628H4320.2V-1490H4068.2ZM5581 24C5828 24 6024 -119 6064 -326H5828C5799 -236 5714 -175 5587 -175C5417 -175 5319 -290 5313 -462H6077V-531C6077 -855 5875 -1080 5571 -1080C5275 -1080 5066 -848 5066 -527C5066 -207 5264 24 5581 24ZM5315 -636C5332 -787 5429 -880 5575 -880C5721 -880 5819 -787 5835 -636ZM6196.8 0H6448.8V-598C6448.8 -763 6541.8 -846 6661.8 -846C6711.8 -846 6761.8 -841 6780.8 -838V-1062C6760.8 -1064 6732.8 -1066 6698.8 -1066C6562.8 -1066 6481.8 -1002 6442.8 -881H6439.8V-1056H6196.8Z";
 
 export function LogoMark({ size = 24 }: { size?: number }) {
@@ -7,7 +7,7 @@ export function LogoMark({ size = 24 }: { size?: number }) {
     <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden className="logo-mark">
       <rect width="32" height="32" rx="8" fill="#0B0B0C" />
       <rect x=".5" y=".5" width="31" height="31" rx="7.5" fill="none" stroke="var(--logo-edge)" />
-      <path d={HOOK} fill="none" stroke="#C8FF3D" strokeWidth={3.2} strokeLinecap="round" strokeLinejoin="round" />
+      <path d={MARK} fill="none" stroke="#C8FF3D" strokeWidth={3.2} strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -17,7 +17,7 @@ export function Logo({ height = 24 }: { height?: number }) {
     <svg height={height} viewBox="0 0 131.5 32" role="img" aria-label="rookker" className="logo">
       <rect width="32" height="32" rx="8" fill="#0B0B0C" />
       <rect x=".5" y=".5" width="31" height="31" rx="7.5" fill="none" stroke="var(--logo-edge)" />
-      <path d={HOOK} fill="none" stroke="#C8FF3D" strokeWidth={3.2} strokeLinecap="round" strokeLinejoin="round" />
+      <path d={MARK} fill="none" stroke="#C8FF3D" strokeWidth={3.2} strokeLinecap="round" strokeLinejoin="round" />
       <path transform="translate(39.497 26) scale(0.013423)" d={WORD} fill="currentColor" />
     </svg>
   );
