@@ -68,6 +68,14 @@ const USES: Record<string, (keyof Scene)[]> = {
   dashboard: ["kicker", "headline", "items", "stat"],
   "dashboard-focus": ["headline", "items"],
   "live-metrics": ["headline", "items", "stat"],
+  "hero-type": ["kicker", "headline", "subline"],
+  "stat-hero": ["kicker", "headline", "stat", "items"],
+  bento: ["kicker", "headline", "items"],
+  "card-stack": ["kicker", "headline", "items"],
+  "cursor-demo": ["kicker", "headline", "items", "cta"],
+  "phone-screens": ["kicker", "headline", "items"],
+  integrations: ["kicker", "headline", "items"],
+  checklist: ["kicker", "headline", "items"],
 };
 const ITEMS_LABEL: Record<string, string> = {
   testimonials: "Quotes, one per line: quote — name, role",
@@ -88,6 +96,13 @@ const ITEMS_LABEL: Record<string, string> = {
   dashboard: "KPI cards: label | value | change (value optional)",
   "dashboard-focus": "Features to tour, one per line (up to 4)",
   "live-metrics": "Events: label | detail, one per line",
+  "stat-hero": "A change note under the number (optional), e.g. +12% this year",
+  bento: "Tiles: label | detail (first is the hero), up to 5",
+  "card-stack": "Cards: title | detail, up to 4",
+  "cursor-demo": "What's typed, then the result, then the toast",
+  "phone-screens": "App rows: label | detail, up to 4",
+  integrations: "Names of the tools around the product (up to 6)",
+  checklist: "Tasks: label | note, up to 5",
 };
 
 export function SceneInspector() {

@@ -7,6 +7,7 @@ import { F, B, K, headlineSize } from "./render";
 import { clamp, ease, lerp, win, rgba, mix, hash } from "./util";
 import { drawLabel, measure, layoutText, drawLayout } from "./text";
 import { drawIcon, cue, staged, weightFor } from "./mograph";
+import { surface } from "./kit";
 
 type Rect = { x: number; y: number; w: number; h: number };
 interface Kpi { label: string; value?: string; delta?: string }
@@ -33,18 +34,7 @@ const seeded = (g: G, salt: number) => (i: number) => hash((g.scene.headline?.le
 const series = (rnd: (i: number) => number, n: number, rise = 0.55) => Array.from({ length: n }, (_, i) => clamp(0.18 + (i / (n - 1)) * rise + (rnd(i) - 0.5) * 0.22, 0.05, 0.98));
 
 function card(g: G, r: Rect, a: number, lift = 0) {
-  const { ctx, u, c } = g;
-  if (a <= 0) return;
-  ctx.save();
-  ctx.globalAlpha *= a;
-  ctx.fillStyle = mix(c.bg, c.fg, 0.045);
-  ctx.strokeStyle = rgba(c.fg, 0.09);
-  ctx.lineWidth = 1.5 * u;
-  ctx.beginPath();
-  ctx.roundRect(r.x, r.y + (1 - a) * 18 * u - lift, r.w, r.h, 16 * u);
-  ctx.fill();
-  ctx.stroke();
-  ctx.restore();
+  surface(g, { ...r, y: r.y - lift }, { a, radius: 16 * g.u, flat: true });
 }
 
 function spark(g: G, r: Rect, vals: number[], p: number, color: string, fill = true, width = 3) {

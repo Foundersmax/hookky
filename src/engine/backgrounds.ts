@@ -1,12 +1,108 @@
 // Animated backgrounds behind type. Each one is drawn in the scene's own colours at a level that
 // keeps the text readable; rays, rings and waves also move with the soundtrack (g.level).
 import type { G } from "./render";
-import { rgba, mix, clamp, ease, win } from "./util";
+import { rgba, mix, clamp, ease, win, hash } from "./util";
+import { accent2, hueShift, isDark } from "./kit";
 
 type Bg = (g: G) => void;
 const soundAt = (g: G) => g.level(g.abs + g.t);
 
 export const EXTRA_BACKGROUNDS: Record<string, Bg> = {
+  /** Three soft orbs of light in the accent's family, drifting; the stage for glass cards. */
+  orbs(g) {
+    const { ctx, W, H, c, t } = g;
+    const k = isDark(g) ? 1 : 0.6;
+    const cols = [c.accent, accent2(g), hueShift(c.accent, -55)];
+    const at = [[0.18, 0.2], [0.85, 0.3], [0.55, 0.95]];
+    cols.forEach((col, i) => {
+      const x = W * (at[i][0] + 0.06 * Math.sin(t * 0.25 + i * 2.1)), y = H * (at[i][1] + 0.06 * Math.cos(t * 0.21 + i * 1.3));
+      const R = Math.max(W, H) * (0.5 + 0.05 * Math.sin(t * 0.3 + i));
+      const gr = ctx.createRadialGradient(x, y, 0, x, y, R);
+      gr.addColorStop(0, rgba(col, 0.34 * k));
+      gr.addColorStop(0.5, rgba(col, 0.1 * k));
+      gr.addColorStop(1, rgba(col, 0));
+      ctx.fillStyle = gr;
+      ctx.fillRect(0, 0, W, H);
+    });
+  },
+
+  /** A fine grid lit by a spotlight from above, fading to dark at the edges. */
+  spotlight(g) {
+    const { ctx, W, H, c, u, t } = g;
+    const step = 64 * u;
+    ctx.save();
+    ctx.strokeStyle = rgba(c.fg, 0.07);
+    ctx.lineWidth = 1 * u;
+    ctx.beginPath();
+    for (let x = (W / 2) % step; x < W; x += step) (ctx.moveTo(x, 0), ctx.lineTo(x, H));
+    for (let y = (t * 6 * u) % step; y < H; y += step) (ctx.moveTo(0, y), ctx.lineTo(W, y));
+    ctx.stroke();
+    // the grid only shows inside the light
+    const m = ctx.createRadialGradient(W / 2, H * 0.1, 0, W / 2, H * 0.1, Math.max(W, H) * 0.85);
+    m.addColorStop(0, rgba(c.bg, 0));
+    m.addColorStop(1, rgba(c.bg, 1));
+    ctx.fillStyle = m;
+    ctx.fillRect(0, 0, W, H);
+    const sp = ctx.createRadialGradient(W / 2, -H * 0.15, 0, W / 2, -H * 0.15, Math.max(W, H) * 0.95);
+    sp.addColorStop(0, rgba(c.accent, 0.3));
+    sp.addColorStop(0.45, rgba(accent2(g), 0.08));
+    sp.addColorStop(1, rgba(c.accent, 0));
+    ctx.fillStyle = sp;
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  },
+
+  /** Slow diagonal beams of light crossing the frame. */
+  beams(g) {
+    const { ctx, W, H, c, t } = g;
+    const D = Math.hypot(W, H);
+    ctx.save();
+    ctx.translate(W / 2, H / 2);
+    ctx.rotate(-0.6);
+    const cols = [c.accent, accent2(g), c.accent, hueShift(c.accent, -40), accent2(g)];
+    cols.forEach((col, i) => {
+      const x = (((i / cols.length + t * 0.012 * (i % 2 ? 1 : 0.6)) % 1) - 0.5) * D * 1.4;
+      const w = D * (0.07 + 0.05 * hash(i * 5.3));
+      const gr = ctx.createLinearGradient(x - w, 0, x + w, 0);
+      gr.addColorStop(0, rgba(col, 0));
+      gr.addColorStop(0.5, rgba(col, 0.16 + 0.06 * Math.sin(t * 0.7 + i)));
+      gr.addColorStop(1, rgba(col, 0));
+      ctx.fillStyle = gr;
+      ctx.fillRect(x - w, -D, w * 2, D * 2);
+    });
+    ctx.restore();
+  },
+
+  /** A glowing horizon: the lit edge of a planet rising from the bottom, faint stars above. */
+  horizon(g) {
+    const { ctx, W, H, c, u, t } = g;
+    for (let i = 0; i < 46; i++) {
+      const x = hash(i * 9.1) * W, y = hash(i * 4.7) * H * 0.7;
+      ctx.fillStyle = rgba(c.fg, 0.1 + 0.2 * (0.5 + 0.5 * Math.sin(t * 1.3 + i * 2.2)) * hash(i * 1.9));
+      ctx.fillRect(x, y, 2 * u, 2 * u);
+    }
+    const R = Math.max(W * 0.95, H * 0.9), cx = W / 2, cy = H * 0.82 + R + Math.sin(t * 0.3) * 6 * u;
+    const gl = ctx.createRadialGradient(cx, cy, R * 0.92, cx, cy, R * 1.28);
+    gl.addColorStop(0, rgba(c.accent, 0.5));
+    gl.addColorStop(0.25, rgba(accent2(g), 0.2));
+    gl.addColorStop(1, rgba(c.accent, 0));
+    ctx.fillStyle = gl;
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = mix(c.bg, "#000000", 0.35);
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, 0, Math.PI * 2);
+    ctx.fill();
+    const rim = ctx.createLinearGradient(cx - W * 0.45, 0, cx + W * 0.45, 0);
+    rim.addColorStop(0, rgba(c.accent, 0));
+    rim.addColorStop(0.5, rgba(mix(c.accent, "#FFFFFF", 0.6), 0.95));
+    rim.addColorStop(1, rgba(accent2(g), 0));
+    ctx.strokeStyle = rim;
+    ctx.lineWidth = 3 * u;
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, Math.PI * 1.2, Math.PI * 1.8);
+    ctx.stroke();
+  },
+
   /** A slow mesh of colour pools drifting across each other. */
   mesh(g) {
     const { ctx, W, H, c, t } = g;

@@ -6,7 +6,7 @@ import { sanitizeScene } from "../sanitize";
 
 type Bg = NonNullable<Scene["background"]>;
 const LABEL: Partial<Record<Bg, string>> = { synthwave: "Synth", starfield: "Stars", checker: "Check" };
-const ANIMATED = new Set<Bg>(["gradient", "blobs", "mesh", "rays", "stripes", "waves", "checker", "rings", "aurora", "starfield", "synthwave", "split", "dots"]);
+const ANIMATED = new Set<Bg>(["gradient", "blobs", "mesh", "rays", "stripes", "waves", "checker", "rings", "aurora", "starfield", "synthwave", "split", "dots", "orbs", "spotlight", "beams", "horizon"]);
 const cache = new Map<string, string>();
 let renderer: Renderer | null = null;
 

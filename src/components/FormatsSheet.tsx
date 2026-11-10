@@ -3,7 +3,7 @@ import type { Aspect, AudioTrack, MusicTrack, Project, Scene } from "../types";
 import { useStudio, setState, getState } from "../store";
 import { sanitizeScene } from "../sanitize";
 import { brandWithStyle } from "../storyboard";
-import { CATEGORIES, FORMATS, SECTIONS, buildFormat, buildWithVoice, scriptFor, type Brief, type Category, type Format, type Section } from "../formats";
+import { CATEGORIES, FORMATS, SECTIONS, formatsIntent, buildFormat, buildWithVoice, scriptFor, type Brief, type Category, type Format, type Section } from "../formats";
 import { pickImages } from "../soundApply";
 import { createFormat, generateVoice, writeScript, withBackground } from "../formatsDirect";
 import { BackgroundPicker } from "./BackgroundPicker";
@@ -63,9 +63,15 @@ export function FormatsSheet() {
   const project = useStudio((s) => s.project);
   const assets = useStudio((s) => s.assets);
   const health = useStudio((s) => s.health);
-  const [section, setSection] = useState<Section>("text");
+  // Opened from "Voice-over → motion graphics": land on that section, ready for the upload.
+  const [intent] = useState(() => {
+    const s = formatsIntent.section;
+    formatsIntent.section = undefined;
+    return s;
+  });
+  const [section, setSection] = useState<Section>(intent ?? "text");
   const [cat, setCat] = useState<Category | "All">("All");
-  const [pick, setPick] = useState<Format>(() => FORMATS.find((f) => f.section === "text")!);
+  const [pick, setPick] = useState<Format>(() => FORMATS.find((f) => f.section === (intent ?? "text"))!);
   const [hover, setHover] = useState<string | null>(null);
   const [brief, setBrief] = useState<Partial<Brief>>(() => loadBrief(getState().project));
   const [aspect, setAspect] = useState<Aspect>(pick.aspect);
@@ -76,7 +82,7 @@ export function FormatsSheet() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // sound
-  const [voiceMode, setVoiceMode] = useState<VoiceMode>(() => (getState().project.audio ? "keep" : "none"));
+  const [voiceMode, setVoiceMode] = useState<VoiceMode>(() => (getState().project.audio ? "keep" : intent === "mograph" ? "upload" : "none"));
   const [voiceFile, setVoiceFile] = useState<File>();
   const [voiceTrack, setVoiceTrack] = useState<AudioTrack>();
   const [script, setScript] = useState("");

@@ -75,6 +75,14 @@ export const STARTER_CONTENT: Partial<Record<Scene["template"], Partial<Scene>>>
   "donut-chart": { headline: "Where they *shop*", items: ["Mobile | 64%", "Desktop | 28%", "Tablet | 8%"] },
   "kpi-grid": { headline: "By the *numbers*", items: ["Users | 120k", "Countries | 40", "Rating | 4.9", "Uptime | 99.9%"], icons: ["lucide:users", "lucide:globe", "lucide:star", "lucide:zap"] },
   "world-map": { headline: "Now in *five cities*", items: ["London", "Lagos", "New York", "Dubai", "Singapore"] },
+  "hero-type": { kicker: "New", headline: "Ship ads that *move*", icons: ["lucide:zap", "lucide:sparkles", "lucide:rocket", "lucide:heart"] },
+  "stat-hero": { stat: { value: 87, suffix: "%", label: "of customers feel the difference" }, items: ["+12% this year"] },
+  bento: { headline: "Everything you *need*", items: ["Live analytics | Every number, as it happens", "One-click setup", "Built for teams", "99.9% uptime"], icons: ["lucide:chart-line", "lucide:zap", "lucide:users", "lucide:shield-check"] },
+  "card-stack": { headline: "Three steps to *launch*", items: ["Plan | Map the launch in minutes", "Build | Ship it together", "Grow | Watch it land"], icons: ["lucide:map", "lucide:rocket", "lucide:trending-up"] },
+  "cursor-demo": { headline: "One prompt. *Done.*", items: ["Launch ad for our new smartwatch", "Your ad is ready", "Done in 4 seconds"], cta: "Generate" },
+  "phone-screens": { headline: "All in your *pocket*", items: ["Track every order | Live, to the door", "Instant alerts | The moment it ships", "Pay in one tap | Cards and wallets"], icons: ["lucide:package", "lucide:bell", "lucide:credit-card"] },
+  integrations: { headline: "Works with your *stack*", items: ["Store", "Payments", "Email", "Analytics", "Chat", "Cloud"], icons: ["lucide:sparkles", "lucide:shopping-bag", "lucide:credit-card", "lucide:mail", "lucide:chart-bar", "lucide:message-circle", "lucide:cloud"] },
+  checklist: { headline: "Getting started", items: ["Connect your store", "Import products", "Launch your first ad", "Watch sales land"] },
   dashboard: { headline: "Everything in *one view*", kicker: "Overview", items: ["Revenue | $48.2k | +12%", "Active users | 8,940 | +8%", "Conversion | 3.8% | +0.6%"], stat: { value: 48200, prefix: "$", label: "Revenue this month" } },
   "dashboard-focus": { headline: "A *tour* of the product", items: ["Live revenue", "Trends at a glance", "Where it comes from", "Every order, tracked"] },
   "live-metrics": { headline: "Happening *right now*", items: ["New order | $49 · Lagos", "New sign-up | from Instagram", "Payment received | $129"], stat: { value: 1284, label: "orders today" }, icons: ["lucide:shopping-bag", "lucide:user", "lucide:credit-card"] },
@@ -90,7 +98,7 @@ const TEMPLATE_NAMES: Record<string, string> = {
   "device-mockup": "Device mockup", countdown: "Countdown", "price-card": "Price card", testimonials: "Testimonials", "before-after": "Before / after", "logo-reveal": "Logo reveal", audiogram: "Audiogram",
   "text-mask": "Text mask", chat: "Chat thread", notification: "Notifications", "pov-caption": "POV caption", versus: "Versus", rating: "Star rating", spotlight: "Spotlight", "word-stack": "Word stack",
   "word-slam": "Word slam", scramble: "Scramble", "zoom-through": "Zoom through", "letter-wave": "Letter wave", "outline-fill": "Outline fill", "flip-words": "Flip words", typewriter: "Typewriter", "echo-stack": "Echo stack",
-  "icon-hero": "Icon hero", "icon-list": "Icon list", "metric-ring": "Metric ring", "process-flow": "Process flow", "bar-compare": "Bar compare", "icon-orbit": "Icon orbit", "line-chart": "Line chart", "column-chart": "Column chart", "donut-chart": "Donut chart", "kpi-grid": "KPI grid", "world-map": "World map", "route-map": "Route map", dashboard: "Dashboard", "dashboard-focus": "Dashboard tour", "live-metrics": "Live metrics",
+  "icon-hero": "Icon hero", "icon-list": "Icon list", "metric-ring": "Metric ring", "process-flow": "Process flow", "bar-compare": "Bar compare", "icon-orbit": "Icon orbit", "line-chart": "Line chart", "column-chart": "Column chart", "donut-chart": "Donut chart", "kpi-grid": "KPI grid", "world-map": "World map", "route-map": "Route map", "hero-type": "Hero type", "stat-hero": "Big number", bento: "Bento grid", "card-stack": "Card stack", "cursor-demo": "Cursor demo", "phone-screens": "Phone app", integrations: "Integrations hub", checklist: "Checklist", dashboard: "Dashboard", "dashboard-focus": "Dashboard tour", "live-metrics": "Live metrics",
 };
 
 export function CommandPalette({ host }: { host: PaletteHost }) {

@@ -20,7 +20,7 @@ export interface LintInput {
 
 const words = (s?: string) => (s ? s.replace(/\*/g, "").trim().split(/\s+/).filter(Boolean).length : 0);
 const IMAGE_TEMPLATES = new Set(["product-hero", "split-feature", "fullbleed", "device-mockup", "spotlight"]);
-const HEADLINE_MAX: Record<string, number> = { "word-slam": 10, scramble: 10, "zoom-through": 10, "letter-wave": 10, "outline-fill": 12, "flip-words": 10, typewriter: 14, "echo-stack": 8, "text-mask": 3, "word-stack": 8, "pov-caption": 12, rating: 22, quote: 22, "kinetic-words": 10, "feature-list": 5, "image-mosaic": 6, testimonials: 5, "before-after": 5 };
+const HEADLINE_MAX: Record<string, number> = { "hero-type": 9, "word-slam": 10, scramble: 10, "zoom-through": 10, "letter-wave": 10, "outline-fill": 12, "flip-words": 10, typewriter: 14, "echo-stack": 8, "text-mask": 3, "word-stack": 8, "pov-caption": 12, rating: 22, quote: 22, "kinetic-words": 10, "feature-list": 5, "image-mosaic": 6, testimonials: 5, "before-after": 5 };
 const READ_WPS = 3.2;
 /** Text animations that carry a voice-over word by word: a run of one style is the design, not repetition. */
 const VOICE_TYPE = new Set(["word-slam", "scramble", "zoom-through", "letter-wave", "outline-fill", "flip-words", "typewriter", "echo-stack"]); // comfortable on-screen reading speed, words per second

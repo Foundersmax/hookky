@@ -6,6 +6,7 @@ import type { IconSpec } from "../mograph/icons";
 import { F, B, K, kicker, headlineSize, textStack } from "./render";
 import { clamp, ease, lerp, win, rgba, mix } from "./util";
 import { drawLabel, measure, stripMarks, layoutText, drawLayout } from "./text";
+import { tile } from "./kit";
 
 // ---------------------------------------------------------------- drawing icons
 const lengths = new Map<string, number>();
@@ -202,14 +203,9 @@ export const MOGRAPH_TEMPLATES: Record<string, Tpl> = {
       const p = win(g.t, cues[i], 0.9 * g.sp);
       const pop = ease.outBack(clamp(p * 1.6));
       if (p <= 0) return;
-      ctx.save();
-      ctx.strokeStyle = rgba(c.accent, 0.9);
-      ctx.lineWidth = 2 * u;
-      ctx.beginPath();
-      ctx.arc(x, y, ring * pop, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
-      drawIcon(ctx, g.icon(scene.icons?.[i]), x, y, iconSize, p, c.fg, weightFor(g, iconSize));
+      void pop;
+      // a gradient tile for the idea being said, glass for the rest
+      tile(g, x, y, ring * 1.75, g.icon(scene.icons?.[i]), p, { quiet: i !== cues.filter((q) => g.t >= q).length - 1 });
       const f = B(g, (vertical ? 40 : 34) * u, 600);
       const lp = ease.outCubic(win(g.t, cues[i] + 0.25, 0.5));
       if (vertical) drawLabel(ctx, label, f, x + ring + 36 * u + (1 - lp) * 20 * u, y, "left", c.fg, lp, W - pad - (x + ring + 36 * u));
@@ -326,17 +322,8 @@ export const MOGRAPH_TEMPLATES: Record<string, Tpl> = {
       const { x, y } = pos[i];
       const on = g.t >= cues[i];
       const p = ease.outBack(clamp(win(g.t, cues[i] - 0.1, 0.45)));
-      ctx.save();
-      ctx.fillStyle = on ? c.accent : c.bg;
-      ctx.strokeStyle = on ? c.accent : rgba(c.fg, 0.3);
-      ctx.lineWidth = 2 * u;
-      ctx.beginPath();
-      ctx.arc(x, y, r * Math.max(0.85, p), 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      ctx.restore();
-      const ink = on ? (mix(c.accent, "#000000", 0.75)) : rgba(c.fg, 0.55);
-      drawIcon(ctx, g.icon(scene.icons?.[i]), x, y, r * 1.05, on ? win(g.t, cues[i], 0.8) : 1, ink, weightFor(g, r * 1.05));
+      void p;
+      tile(g, x, y, r * 2, g.icon(scene.icons?.[i]), on ? 0.45 + 0.55 * win(g.t, cues[i], 0.7) : 1, { quiet: !on });
       const lp = ease.outCubic(win(g.t, cues[i] + 0.1, 0.5));
       const num = String(i + 1).padStart(2, "0");
       if (vertical) {

@@ -54,13 +54,21 @@ export const TEMPLATES = [
   "dashboard",
   "dashboard-focus",
   "live-metrics",
+  "hero-type",
+  "stat-hero",
+  "bento",
+  "card-stack",
+  "cursor-demo",
+  "phone-screens",
+  "integrations",
+  "checklist",
 ] as const;
 export type TemplateId = (typeof TEMPLATES)[number];
 
 export const TRANSITIONS = ["cut", "fade", "slide", "push-up", "wipe", "zoom", "circle", "blur", "whip", "spin", "glitch"] as const;
 export type TransitionId = (typeof TRANSITIONS)[number];
 
-export const BACKGROUNDS = ["solid", "gradient", "grid", "dots", "grain", "blobs", "invert", "accent", "image", "mesh", "rays", "stripes", "waves", "checker", "rings", "aurora", "starfield", "synthwave", "split"] as const;
+export const BACKGROUNDS = ["solid", "gradient", "grid", "dots", "grain", "blobs", "invert", "accent", "image", "mesh", "rays", "stripes", "waves", "checker", "rings", "aurora", "starfield", "synthwave", "split", "orbs", "spotlight", "beams", "horizon"] as const;
 export type BackgroundId = (typeof BACKGROUNDS)[number];
 
 export const MOTIONS = ["snappy", "calm", "bouncy", "smooth", "dramatic"] as const;

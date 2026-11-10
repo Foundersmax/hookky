@@ -19,9 +19,11 @@ export const SECTIONS = [
   { id: "text", label: "Text animations", note: "Kinetic type, no footage needed" },
   { id: "mixed", label: "Footage + text", note: "Your images and clips, with animated copy" },
   { id: "footage", label: "Footage", note: "Image and video edits; words only where they count" },
-  { id: "mograph", label: "Motion graphics", note: "Line icons that draw on, rings, flows; one kit" },
+  { id: "mograph", label: "Motion graphics", note: "Glass UI, bento grids, cursor demos, charts, maps" },
 ] as const;
 export type Section = (typeof SECTIONS)[number]["id"];
+/** Set before opening the formats sheet to land on a section (read once, then cleared). */
+export const formatsIntent: { section?: Section } = {};
 export type Category = (typeof CATEGORIES)[number];
 
 type Beat = Omit<Scene, "id">;
@@ -487,11 +489,11 @@ export function motionBuild(st: MotionStyle, raw: Partial<Brief>, voice: VoiceIn
   }));
   return motionScenes(beats, icons, st, raw);
 }
-const MOTION_CATEGORY: Record<string, Category> = { "line-explainer": "Apps & SaaS", "clean-product": "Apps & SaaS", "data-story": "Promos & offers", "swiss-mono": "Brand & story", "soft-light": "E-commerce", "vertical-explainer": "Social hooks", "editorial-line": "Brand & story", "terminal-mono": "Apps & SaaS", "midnight-dashboard": "Apps & SaaS", "product-tour": "Apps & SaaS", "live-ops": "Apps & SaaS", "sunset-glow": "E-commerce", "pastel-pop": "Social hooks", "field-notes": "Brand & story", "fintech-night": "Apps & SaaS" };
+const MOTION_CATEGORY: Record<string, Category> = { "line-explainer": "Apps & SaaS", "clean-product": "Apps & SaaS", "data-story": "Promos & offers", "swiss-mono": "Brand & story", "soft-light": "E-commerce", "vertical-explainer": "Social hooks", "editorial-line": "Brand & story", "terminal-mono": "Apps & SaaS", "midnight-dashboard": "Apps & SaaS", "product-tour": "Apps & SaaS", "live-ops": "Apps & SaaS", "sunset-glow": "E-commerce", "pastel-pop": "Social hooks", "field-notes": "Brand & story", "fintech-night": "Apps & SaaS", "aurora-glass": "Apps & SaaS", spotlight: "Apps & SaaS", horizon: "Apps & SaaS", "light-studio": "Apps & SaaS", "sunset-beams": "Social hooks", "glass-reel": "Social hooks" };
 FORMATS.push(
   ...MOTION_STYLES.map((st): Format => ({
     id: `mg-${st.id}`, section: "mograph", name: st.name, category: MOTION_CATEGORY[st.id] ?? "Brand & story", hook: `${st.kit === "ph" ? "Phosphor" : st.kit[0].toUpperCase() + st.kit.slice(1)} icons`, blurb: st.blurb, aspect: st.aspect, style: st.style, swatch: st.swatch, motion: st,
-    beats: "One beat per spoken line: icon hero, icon list, metric ring, process flow, bar compare or icon orbit, chosen by what the line says; end card.",
+    beats: "One beat per spoken line: a kinetic hero line, a giant number, a bento grid, card stack, checklist, cursor demo, phone, integrations hub, chart, map or dashboard, chosen by what the line says; end card.",
     build: (b) => motionBuild(st, b, pseudoVoice(b)),
   })),
 );

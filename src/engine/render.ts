@@ -9,6 +9,7 @@ import { EXTRA_BACKGROUNDS } from "./backgrounds";
 import { MOGRAPH_TEMPLATES } from "./mograph";
 import { DATA_TEMPLATES } from "./mographData";
 import { DASH_TEMPLATES } from "./mographDash";
+import { PRO_TEMPLATES } from "./mographPro";
 import { BUILTIN_ICONS } from "../mograph/builtin";
 
 /** Looks up a drawable by asset ref; `t` is the scene-local time (video clips use it). */
@@ -287,6 +288,7 @@ export class Renderer {
 const ZOOM: Record<string, number> = {
   // already sized to the frame: big type, full-bleed pictures, camera moves
   "kinetic-words": 1, marquee: 1, "shape-burst": 1, "image-mosaic": 1, fullbleed: 1, "before-after": 1, "text-mask": 1, spotlight: 1, "split-feature": 1, "device-mockup": 1,
+  "hero-type": 1.3, "stat-hero": 1.3, "card-stack": 1.15, "cursor-demo": 1, "phone-screens": 1.25, bento: 1.2, integrations: 1.2, checklist: 1.25,
   "word-stack": 1, "word-slam": 1, scramble: 1, "zoom-through": 1, "letter-wave": 1, "outline-fill": 1, "flip-words": 1, "echo-stack": 1, "dashboard-focus": 1, "pov-caption": 1,
   // UI-like and list-like scenes need the most
   chat: 1.3, versus: 1.5, typewriter: 1.5, notification: 1.4, "feature-list": 1.4, testimonials: 1.4, rating: 1.4, "logo-reveal": 1.4, "logo-sting": 1.4,
@@ -673,6 +675,7 @@ const TEMPLATES: Record<string, Tpl> = {
   ...MOGRAPH_TEMPLATES,
   ...DATA_TEMPLATES,
   ...DASH_TEMPLATES,
+  ...PRO_TEMPLATES,
   "title-reveal"(g) {
     const { W, H, pad, ctx, c, u } = g;
     const align = g.scene.align ?? "center";

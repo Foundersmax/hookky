@@ -52,7 +52,7 @@ function previewProject(t: SoundTemplate, base: Project, copy: Copy, imgs: strin
 }
 
 /** A canvas that plays a project in a loop (only while `live`), or holds one telling frame. */
-const SIGNATURE = new Set(["dashboard", "dashboard-focus", "live-metrics", "icon-orbit", "world-map", "route-map", "line-chart", "column-chart", "donut-chart", "kpi-grid", "metric-ring", "process-flow", "icon-list"]);
+const SIGNATURE = new Set(["bento", "card-stack", "cursor-demo", "phone-screens", "integrations", "checklist", "stat-hero", "dashboard", "dashboard-focus", "live-metrics", "icon-orbit", "world-map", "route-map", "line-chart", "column-chart", "donut-chart", "kpi-grid", "metric-ring", "process-flow", "icon-list"]);
 
 export function LoopPreview({ project, height, live, clockRef }: { project: Project; height: number; live: boolean; clockRef?: { current: (() => number) | null } }) {
   const canvas = useRef<HTMLCanvasElement>(null);

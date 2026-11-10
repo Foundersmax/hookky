@@ -17,7 +17,7 @@ const brief = { product: "Orbit", what: "a smartwatch that coaches your sleep", 
 
 test("mograph: reading lines — numbers, lists, steps, ideas", () => {
   assert.deepEqual(numbersIn("87% of runners sleep better").map((n) => [n.value, n.suffix]), [[87, "%"]]);
-  assert.deepEqual(numbersIn("ten days on one charge").map((n) => n.value), [10, 1]);
+  assert.deepEqual(numbersIn("ten days on one charge").map((n) => n.value), [10]);
   assert.deepEqual(listIn("It's fast, simple and secure."), ["Fast", "Simple", "Secure"]);
   assert.equal(listIn("The watch that knows you when you sleep at night"), null);
   assert.deepEqual(stepsIn("First you wear it, then you sleep, finally you wake up rested."), ["You wear it", "You sleep", "You wake up rested"]);
@@ -36,15 +36,15 @@ test("mograph: a voice-over becomes a varied motion script, cut in its pauses", 
   ]);
   const beats = planMotion(v, brief);
   const t = beats.map((b) => b.template);
-  assert.equal(t[0], "icon-hero");
-  assert.ok(t.includes("icon-orbit"), t.join());
-  assert.ok(t.includes("icon-list"), t.join());
+  assert.equal(t[0], "hero-type");
+  assert.ok(t.includes("integrations"), t.join());
+  assert.ok((t.includes("bento") || t.includes("card-stack") || t.includes("checklist")), t.join());
   assert.ok(t.includes("process-flow"), t.join());
-  assert.ok(t.includes("metric-ring") || t.includes("bar-compare"), t.join());
+  assert.ok(t.includes("stat-hero") || t.includes("bar-compare"), t.join());
   assert.equal(t.at(-1), "cta-end");
   for (let i = 0; i < beats.length - 1; i++) assert.ok(v.pauses.some((p) => beats[i].e >= p.s - 0.02 && beats[i].e <= p.e + 0.02), `cut ${beats[i].e} in a pause`);
   for (const b of beats.filter((x) => x.template !== "cta-end")) assert.ok(b.ideas.length || b.template === "bar-compare", `${b.template} has icon ideas`);
-  const metric = beats.find((b) => b.template === "metric-ring");
+  const metric = beats.find((b) => b.template === "stat-hero");
   if (metric) assert.ok(metric.stat!.value > 0);
 });
 
@@ -104,9 +104,9 @@ test("motion plan: dashboards where the line calls for them, and where a dashboa
   });
   const brief = { product: "Orbit", benefits: ["Live revenue tracking", "Smart inventory alerts", "One-click reports"] };
   const beats = planMotion({ duration: t, pauses, words }, brief, { prefer: "dashboard" });
-  assert.deepEqual(beats.map((b) => b.template), ["icon-hero", "dashboard-focus", "live-metrics", "dashboard", "cta-end"]);
+  assert.deepEqual(beats.map((b) => b.template), ["hero-type", "dashboard-focus", "live-metrics", "dashboard", "cta-end"]);
   assert.ok(beats[3].items!.every((x) => !x.includes("|")), "no invented KPI values");
-  assert.equal(planMotion({ duration: t, pauses, words }, brief)[3].template, "icon-orbit");
+  assert.equal(planMotion({ duration: t, pauses, words }, brief)[3].template, "integrations");
   assert.ok(MOTION_STYLES.length >= 15 && MOTION_STYLES.filter((s) => s.prefer).length >= 3);
 });
 

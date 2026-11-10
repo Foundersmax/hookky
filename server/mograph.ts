@@ -35,7 +35,15 @@ const TOOL = {
 
 const SYSTEM = `You are a senior motion designer making a minimal, top-grade motion-graphics explainer (think Apple, Stripe, Linear product films) over a client's voice-over. Every line of the voice-over gets one beat, timed to it. The studio animates a single icon kit (line icons that draw on), one accent colour, generous space.
 
-Templates:
+Templates (prefer the first eight; the rest are for data, places and dashboards):
+- hero-type: the hook or any single strong idea: a big headline whose words resolve out of blur, one *accent* word in a gradient, up to 4 icon tiles drifting at the corners (ideas). kicker: 1-2 words in a pill.
+- stat-hero: one giant gradient number counting up (stat: value, prefix, suffix, label); items[0] an optional change note ("+12% this year"). Only for a number that is said.
+- bento: 3-5 features as a bento grid of glass tiles, "label | detail"; the first is the hero tile. ideas: one icon per tile.
+- card-stack: 2-4 ideas as cards, "title | detail"; the one being said springs to the front. Good for steps, plans, pillars.
+- checklist: 3-5 short tasks or promises ticking off as they're said, "label | note"; headline is the list's title.
+- cursor-demo: the product in use: items[0] is typed into a field, a pointer clicks the button (cta), it loads, items[1] lands as the result, items[2] is the success toast. For "one click", "just ask", "does it for you".
+- phone-screens: a phone showing the app; items are 2-4 rows "label | detail" lighting up as said, with callouts. For mobile apps.
+- integrations: the product at the centre (ideas[0]) wired to up to 6 tools around it (ideas[1..6], items = their names), light running down the wires. For "works with", ecosystems, or where the product is named.
 - icon-hero: one icon drawing on inside a sweeping ring, a short headline below. For a single strong idea or the hook.
 - icon-list: 2-4 short ideas, each with an icon, drawn on as they are said.
 - metric-ring: a number counting up as a ring fills (stat: value, prefix, suffix like "%", label). Only for a number that is actually said.

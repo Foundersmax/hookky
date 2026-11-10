@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { formatsIntent } from "../formats";
 import { useStudio, setState, openProject, createProject, duplicateProject, renameProject, deleteProject, defaultProject } from "../store";
 import { STARTERS } from "../starters";
 import { posterFor } from "./thumbs";
@@ -237,7 +238,10 @@ export function Home() {
           <div className="home-head">
             <h2 id="start-title">Start something new</h2>
             <span className="row" style={{ flex: "none" }}>
-              <button className="btn primary" onClick={() => void createProject("blank").then(() => setState({ sheet: "formats" }))}>
+              <button className="btn primary" onClick={() => void createProject("blank").then(() => ((formatsIntent.section = "mograph"), setState({ sheet: "formats" })))}>
+                <Icon name="mic" /> Voice-over → motion graphics
+              </button>
+              <button className="btn" onClick={() => void createProject("blank").then(() => setState({ sheet: "formats" }))}>
                 <Icon name="sparkle" /> Creative formats
               </button>
               <button className="btn" onClick={() => void createProject("blank").then(() => setState({ sheet: "footage" }))}>

@@ -8,6 +8,7 @@ import { drawLabel, measure, layoutText, drawLayout } from "./text";
 import { drawIcon, cue, staged, splitItem, weightFor } from "./mograph";
 import { WORLD } from "../mograph/world";
 import { placeAt, landAt } from "../mograph/places";
+import { surface } from "./kit";
 
 // ---------------------------------------------------------------- shared
 /** The headline across the top (if any); returns the y below it. */
@@ -306,13 +307,7 @@ export const DATA_TEMPLATES: Record<string, Tpl> = {
       ctx.save();
       ctx.globalAlpha *= p;
       ctx.translate(0, (1 - p) * 30 * u);
-      ctx.fillStyle = rgba(c.fg, 0.04);
-      ctx.strokeStyle = rgba(c.fg, 0.12);
-      ctx.lineWidth = 1.5 * u;
-      ctx.beginPath();
-      ctx.roundRect(x, y, tw, th, 22 * u);
-      ctx.fill();
-      ctx.stroke();
+      surface(g, { x, y, w: tw, h: th }, { radius: 24 * u, hot: 0.6 * Math.exp(-((g.t - cues[i] - 0.4) ** 2) * 6) });
       // accent tick drawing along the top edge
       ctx.strokeStyle = c.accent;
       ctx.lineWidth = 4 * u;

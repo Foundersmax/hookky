@@ -9,8 +9,8 @@ import { keywords } from "../footage/plan";
 import { emSpoken, fill, type Brief } from "../copy";
 import { placesIn } from "./places";
 
-export type MotionTemplate = "icon-hero" | "icon-list" | "metric-ring" | "process-flow" | "bar-compare" | "icon-orbit" | "line-chart" | "column-chart" | "donut-chart" | "kpi-grid" | "world-map" | "route-map" | "dashboard" | "dashboard-focus" | "live-metrics" | "cta-end";
-export const MOTION_TEMPLATES: MotionTemplate[] = ["icon-hero", "icon-list", "metric-ring", "process-flow", "bar-compare", "icon-orbit", "line-chart", "column-chart", "donut-chart", "kpi-grid", "world-map", "route-map", "dashboard", "dashboard-focus", "live-metrics", "cta-end"];
+export type MotionTemplate = "icon-hero" | "icon-list" | "metric-ring" | "process-flow" | "bar-compare" | "icon-orbit" | "line-chart" | "column-chart" | "donut-chart" | "kpi-grid" | "world-map" | "route-map" | "dashboard" | "dashboard-focus" | "live-metrics" | "hero-type" | "stat-hero" | "bento" | "card-stack" | "cursor-demo" | "phone-screens" | "integrations" | "checklist" | "cta-end";
+export const MOTION_TEMPLATES: MotionTemplate[] = ["icon-hero", "icon-list", "metric-ring", "process-flow", "bar-compare", "icon-orbit", "line-chart", "column-chart", "donut-chart", "kpi-grid", "world-map", "route-map", "dashboard", "dashboard-focus", "live-metrics", "hero-type", "stat-hero", "bento", "card-stack", "cursor-demo", "phone-screens", "integrations", "checklist", "cta-end"];
 
 /** One beat of the script, timed to a stretch of the voice-over. */
 export interface MotionBeat {
@@ -43,21 +43,27 @@ export interface MotionStyle {
 }
 
 export const MOTION_STYLES: MotionStyle[] = [
+  { id: "aurora-glass", name: "Aurora Glass", blurb: "Glass cards over drifting violet light: bento grids, card stacks, a kinetic hero line. The product-film look.", kit: "lucide", style: "aurora", background: "orbs", aspect: "16:9", motion: "smooth", swatch: ["#0C0D19", "#8B6CFF"] },
+  { id: "spotlight", name: "Spotlight", blurb: "Near-black, a lit grid from above, electric lime. Sharp, technical, launch-day.", kit: "lucide", style: "noir", background: "spotlight", aspect: "16:9", motion: "snappy", swatch: ["#0B0B0C", "#C8FF3D"] },
+  { id: "horizon", name: "Horizon", blurb: "A glowing planet edge on midnight blue; UI floating above it. Big, calm, cinematic.", kit: "tabler", style: "midnight", background: "horizon", aspect: "16:9", motion: "smooth", swatch: ["#070B14", "#38BDF8"], prefer: "dashboard" },
+  { id: "light-studio", name: "Light Studio", blurb: "White studio, soft blue light, crisp glass cards. Clean and premium for SaaS.", kit: "lucide", style: "clean", background: "orbs", aspect: "16:9", motion: "smooth", swatch: ["#FFFFFF", "#0A66FF"] },
+  { id: "sunset-beams", name: "Sunset Beams", blurb: "Warm beams of light across plum; friendly, vertical, made for Reels.", kit: "ph", style: "sunset", background: "beams", aspect: "9:16", motion: "bouncy", swatch: ["#1A0F1F", "#FF7A45"] },
+  { id: "glass-reel", name: "Glass Reel", blurb: "The glass look, vertical: one idea per screen, cards and phone demos.", kit: "lucide", style: "aurora", background: "orbs", aspect: "9:16", motion: "smooth", swatch: ["#0C0D19", "#8B6CFF"] },
   { id: "line-explainer", name: "Line Explainer", blurb: "Lime line icons drawing on over a fine grid on near-black. The classic product explainer.", kit: "lucide", style: "noir", background: "grid", aspect: "16:9", motion: "smooth", swatch: ["#0B0B0C", "#C8FF3D"] },
   { id: "clean-product", name: "Clean Product", blurb: "White space, crisp blue, even geometric icons. Calm, premium, SaaS-ready.", kit: "tabler", style: "clean", background: "solid", aspect: "16:9", motion: "smooth", swatch: ["#FFFFFF", "#0A66FF"] },
-  { id: "data-story", name: "Data Story", blurb: "Numbers lead: rings, bars and counters on deep navy, glowing violet.", kit: "lucide", style: "aurora", background: "dots", aspect: "1:1", motion: "smooth", swatch: ["#0C0D19", "#8B6CFF"] },
+  { id: "data-story", name: "Data Story", blurb: "Numbers lead: rings, bars and counters on deep navy, glowing violet.", kit: "lucide", style: "aurora", background: "beams", aspect: "1:1", motion: "smooth", swatch: ["#0C0D19", "#8B6CFF"] },
   { id: "swiss-mono", name: "Swiss Mono", blurb: "Fine 1.5 px icons on warm paper, signal orange, strict grid.", kit: "iconoir", style: "swiss", background: "grid", aspect: "4:5", motion: "snappy", swatch: ["#F3F0E9", "#FF4D1A"] },
   { id: "soft-light", name: "Soft Light", blurb: "Light outlined icons, rosy neutrals and a gentle gradient. Beauty and lifestyle.", kit: "ph", style: "blush", background: "gradient", aspect: "9:16", motion: "calm", swatch: ["#F6E9E4", "#C8553D"] },
   { id: "editorial-line", name: "Editorial Line", blurb: "Serif headlines, cobalt line icons on stone. Considered, magazine-quiet.", kit: "iconoir", style: "editorial", background: "solid", aspect: "4:5", motion: "calm", swatch: ["#EEEAE3", "#2F55FF"] },
   { id: "terminal-mono", name: "Terminal Mono", blurb: "Monospace, ink-black icons on paper, dotted grid. For dev tools and fintech.", kit: "tabler", style: "mono", background: "dots", aspect: "1:1", motion: "snappy", swatch: ["#E9E7E1", "#0D0D0D"] },
-  { id: "midnight-dashboard", name: "Midnight Dashboard", blurb: "Your product's dashboard assembling itself on deep blue: KPI cards, a live chart, breakdowns.", kit: "tabler", style: "midnight", background: "grid", aspect: "16:9", motion: "smooth", swatch: ["#070B14", "#38BDF8"], prefer: "dashboard" },
+  { id: "midnight-dashboard", name: "Midnight Dashboard", blurb: "Your product's dashboard assembling itself on deep blue: KPI cards, a live chart, breakdowns.", kit: "tabler", style: "midnight", background: "spotlight", aspect: "16:9", motion: "smooth", swatch: ["#070B14", "#38BDF8"], prefer: "dashboard" },
   { id: "product-tour", name: "Product Tour", blurb: "A clean dashboard, then the camera flies to each feature as it's said. SaaS walkthroughs.", kit: "lucide", style: "clean", background: "solid", aspect: "16:9", motion: "smooth", swatch: ["#FFFFFF", "#0A66FF"], prefer: "dashboard-focus" },
   { id: "live-ops", name: "Live Ops", blurb: "Phosphor green on black: live counters, a streaming chart and an event feed.", kit: "lucide", style: "terminal", background: "grid", aspect: "16:9", motion: "snappy", swatch: ["#050805", "#39FF88"], prefer: "live-metrics" },
   { id: "sunset-glow", name: "Sunset Glow", blurb: "Warm plum and tangerine, soft gradient, friendly type. Consumer apps and DTC.", kit: "ph", style: "sunset", background: "gradient", aspect: "9:16", motion: "smooth", swatch: ["#1A0F1F", "#FF7A45"] },
-  { id: "pastel-pop", name: "Pastel Pop", blurb: "Lilac, violet and bouncy timing; rounded and playful. Lifestyle and creator tools.", kit: "lucide", style: "pastel", background: "blobs", aspect: "1:1", motion: "bouncy", swatch: ["#F4F1FF", "#7C5CFF"] },
+  { id: "pastel-pop", name: "Pastel Pop", blurb: "Lilac, violet and bouncy timing; rounded and playful. Lifestyle and creator tools.", kit: "lucide", style: "pastel", background: "orbs", aspect: "1:1", motion: "bouncy", swatch: ["#F4F1FF", "#7C5CFF"] },
   { id: "field-notes", name: "Field Notes", blurb: "Deep green, amber icons, a considered serif. Sustainability, food, outdoors.", kit: "iconoir", style: "forest", background: "dots", aspect: "4:5", motion: "calm", swatch: ["#0E1A14", "#F2B544"] },
   { id: "fintech-night", name: "Fintech Night", blurb: "Midnight blue with a live-metrics lead: money moving, in real time. Vertical.", kit: "tabler", style: "midnight", background: "solid", aspect: "9:16", motion: "snappy", swatch: ["#070B14", "#38BDF8"], prefer: "live-metrics" },
-  { id: "vertical-explainer", name: "Vertical Explainer", blurb: "The line-icon explainer built for Reels and Shorts: one idea per screen.", kit: "lucide", style: "noir", background: "solid", aspect: "9:16", motion: "smooth", swatch: ["#0B0B0C", "#2CF5C1"] },
+  { id: "vertical-explainer", name: "Vertical Explainer", blurb: "The line-icon explainer built for Reels and Shorts: one idea per screen.", kit: "lucide", style: "noir", background: "spotlight", aspect: "9:16", motion: "smooth", swatch: ["#0B0B0C", "#2CF5C1"] },
 ];
 export const motionStyle = (id: string) => MOTION_STYLES.find((m) => m.id === id) ?? MOTION_STYLES[0];
 
@@ -81,6 +87,8 @@ export function numbersIn(line: string): { value: number; suffix: string; prefix
   }
   for (const m of line.matchAll(/\b(one|two|three|four|five|six|seven|eight|nine|ten|twenty|thirty|forty|fifty|hundred|twice|double|half)\b\s?(percent|days?|hours?|times|x)?/gi)) {
     const unit = (m[2] ?? "").toLowerCase();
+    // a bare number word is usually just a word ("ten tools", "one place"); it counts with a unit
+    if (!unit && !/^(twice|double|half)$/i.test(m[1])) continue;
     out.push({ value: NUM_WORDS[m[1].toLowerCase()], prefix: "", suffix: unit === "percent" ? "%" : unit ? ` ${unit}` : "", at: m.index ?? 0 });
   }
   return out.sort((a, b) => a.at - b.at);
@@ -221,7 +229,44 @@ export function planMotion(v: VoiceIn & { insight?: { stressedWords?: string[] }
     }
     return { ...base, template: "icon-hero", kicker: i === 0 ? b.product : undefined, headline, ideas: ideas.slice(0, 1).length ? ideas.slice(0, 1) : [b.what] };
   });
-  return varied(beats);
+  return upgrade(varied(beats), b);
+}
+
+const USES = /\b(click|clicks|tap|taps|type|prompt|just ask|generate[sd]?|automatic(?:ally)?|autopilot|in seconds|does it for you)\b/i;
+const PHONE = /\b(app|phone|mobile|pocket|iphone|android)\b/i;
+/**
+ * The plan in the product-film templates: hooks become kinetic hero lines, numbers a giant
+ * gradient figure, lists a bento grid, a card stack or a checklist (in turn), the product's world
+ * an integrations hub; "one click" lines show the pointer doing it, app lines a phone.
+ */
+function upgrade(beats: MotionBeat[], b: ReturnType<typeof fill>): MotionBeat[] {
+  let lists = 0;
+  // A hero line shows the whole thought when it's short (up to 9 words), keeping its accent word.
+  const heroLine = (bt: MotionBeat) => {
+    const full = clean(bt.line);
+    if (!bt.headline || !full || full.split(" ").length > 9) return bt.headline;
+    const acc = bt.headline.match(/\*([^*]+)\*/)?.[1];
+    return acc && full.includes(acc) ? full.replace(acc, `*${acc}*`) : full;
+  };
+  return beats.map((bt, i): MotionBeat => {
+    if (bt.template === "icon-hero" || bt.template === "icon-orbit") {
+      if (i > 0 && USES.test(bt.line)) return { ...bt, template: "cursor-demo", kicker: undefined, items: [cap(shortWords(b.what, 7)), "Ready", "Done in seconds"], ideas: [] };
+      if (i > 0 && PHONE.test(bt.line) && b.benefits.length >= 2) {
+        const rows = b.benefits.slice(0, 3).map((x) => cap(shortWords(x, 4)));
+        return { ...bt, template: "phone-screens", kicker: undefined, items: rows, ideas: rows.map((r) => ideasIn(r, b.product)[0] ?? r) };
+      }
+      // the product's world needs at least three things around it; otherwise the line itself is the picture
+      if (bt.template === "icon-orbit" && bt.ideas.length >= 4) return { ...bt, template: "integrations", items: bt.ideas.slice(1, 7).map((x) => cap(x)) };
+      return { ...bt, template: "hero-type", headline: heroLine(bt), kicker: bt.kicker ?? (bt.template === "icon-orbit" ? undefined : bt.kicker), ideas: ideasIn(bt.line, b.product).slice(0, i === 0 ? 4 : 2) };
+    }
+    if (bt.template === "metric-ring") return { ...bt, template: "stat-hero" };
+    if (bt.template === "icon-list") {
+      const n = bt.items?.length ?? 0;
+      const template = n <= 2 ? "card-stack" : (["bento", "card-stack", "checklist"] as const)[lists++ % 3];
+      return { ...bt, template };
+    }
+    return bt;
+  });
 }
 
 /** No template three times running: a third icon hero becomes an icon list of its ideas. */
@@ -245,9 +290,9 @@ export function motionScenes(beats: MotionBeat[], icons: (string | null)[][], st
     const duration = +(r2(bt.e) - r2(bt.s)).toFixed(2);
     // Lists and flows pair icons with items by position; only the orbit can drop a repeat.
     const found = icons[i] ?? [];
-    let names = bt.template === "icon-orbit" ? [...new Set(found.filter((n): n is string => !!n))] : found.some(Boolean) ? found.map((n) => n ?? "lucide:check-circle") : [];
+    let names = bt.template === "icon-orbit" || bt.template === "integrations" || bt.template === "hero-type" ? [...new Set(found.filter((n): n is string => !!n))] : found.some(Boolean) ? found.map((n) => n ?? "lucide:check-circle") : [];
     // An icon template never goes out empty: the hero, orbit and metric fall back to a neutral mark.
-    if (!names.length && (bt.template === "icon-hero" || bt.template === "icon-orbit")) names = ["lucide:sparkles"];
+    if (!names.length && (bt.template === "icon-hero" || bt.template === "icon-orbit" || bt.template === "integrations")) names = ["lucide:sparkles"];
     const common = { duration, background: st.background, motion: st.motion, transition: i === 0 ? ("cut" as const) : ("fade" as const) };
     if (bt.template === "cta-end") return { ...common, template: "cta-end", headline: bt.headline ?? b.product, cta: b.cta, url: b.url || undefined };
     return {

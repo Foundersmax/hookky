@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { formatsIntent } from "../formats";
 import { addScene, addBackdrop, addAssets, setState, useStudio } from "../store";
 import { fileToUploadAsset, fileToVideoAsset, isVideoFile } from "./ChatPanel";
 import { Icon } from "./Icon";
@@ -34,7 +35,10 @@ export function EmptyCanvas() {
       <p className="empty-title">An empty canvas</p>
       <p className="empty-sub">Describe your ad to the creative agent, or start here.</p>
       <div className="empty-actions">
-        <button className="btn primary" onClick={() => setState({ sheet: "formats" })}>
+        <button className="btn primary" onClick={() => ((formatsIntent.section = "mograph"), setState({ sheet: "formats" }))}>
+          <Icon name="mic" /> Voice-over → motion graphics
+        </button>
+        <button className="btn" onClick={() => setState({ sheet: "formats" })}>
           <Icon name="sparkle" /> Creative formats
         </button>
         <button className="btn" onClick={() => addScene()}>
