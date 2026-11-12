@@ -35,11 +35,17 @@ function Thumb({ design, style }: { design: CaptionStyle["design"]; style: Capti
   return <canvas ref={ref} style={{ width: "100%", aspectRatio: "168 / 76", display: "block" }} aria-hidden />;
 }
 
-/** Caption design and options (shown when burned-in captions are on). */
-export function CaptionControls() {
-  const style = useStudio((s) => s.project.captionStyle) ?? {};
+/**
+ * Caption design and options. Bound to the project's captions by default; pass `value`/`onChange`
+ * to drive another caption style (the "Caption a video" tool).
+ */
+export function CaptionControls({ value, onChange }: { value?: CaptionStyle; onChange?: (s: CaptionStyle | undefined) => void } = {}) {
+  const own = useStudio((s) => s.project.captionStyle);
+  const style = (onChange ? value : own) ?? {};
   const accent = useStudio((s) => s.project.brand.accent);
-  const set = (patch: Partial<CaptionStyle>) => updateProject((p) => ({ ...p, captionStyle: cleanCaptionStyle({ ...p.captionStyle, ...patch }) }));
+  const set = (patch: Partial<CaptionStyle>) =>
+    onChange ? onChange(cleanCaptionStyle({ ...style, ...patch })) : updateProject((p) => ({ ...p, captionStyle: cleanCaptionStyle({ ...p.captionStyle, ...patch }) }));
+  const placed = style.x !== undefined && style.y !== undefined;
   const design = CAPTION_DESIGNS.find((d) => d.id === style.design) ?? CAPTION_DESIGNS[0];
   const upper = style.upper ?? ["karaoke", "box", "pop"].includes(design.id);
   const seg = <T extends string>(label: string, value: T, opts: [T, string][], on: (v: T) => void) => (
@@ -63,7 +69,8 @@ export function CaptionControls() {
           </button>
         ))}
       </div>
-      {seg("Position", style.position ?? "bottom", [["top", "Top"], ["middle", "Middle"], ["bottom", "Bottom"]], (position) => set({ position }))}
+      {seg("Position", (placed ? "" : style.position ?? "bottom") as "top" | "middle" | "bottom", [["top", "Top"], ["middle", "Middle"], ["bottom", "Bottom"]], (position) => set({ position, x: undefined, y: undefined }))}
+      <span className="tiny">{placed ? "Placed by hand. Pick a position above to snap back." : "Or drag the captions on the preview to place them anywhere."}</span>
       {seg("Size", style.size ?? "m", [["s", "Small"], ["m", "Medium"], ["l", "Large"]], (size) => set({ size }))}
       <div className="opt-row">
         <span className="opt-label">Words at a time</span>

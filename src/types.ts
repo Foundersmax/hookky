@@ -344,4 +344,7 @@ export interface CaptionStyle {
   highlight?: boolean;
   /** highlight colour as #rrggbb (the brand accent when unset) */
   color?: string;
+  /** where the captions' centre sits, as fractions of the frame (set by dragging; overrides `position`) */
+  x?: number;
+  y?: number;
 }

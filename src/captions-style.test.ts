@@ -16,3 +16,22 @@ test("captions: phrases break at the word limit, punctuation and pauses", () => 
   assert.deepEqual(captionPhrases(words, 4).map((p) => p.map((w) => w.w).join(" ")), ["One two three,", "four five six", "seven eight."]);
   assert.deepEqual(captionPhrases(words, 1).length, 8);
 });
+
+test("captions: a dragged position is kept as fractions inside the frame; presets clear it", () => {
+  assert.deepEqual(cleanCaptionStyle({ design: "pop", x: 0.31234, y: 1.7 }), { x: 0.312, y: 1, design: "pop" });
+  assert.deepEqual(cleanCaptionStyle({ design: "pop", x: 0.3 }), { design: "pop" }, "half a position is no position");
+  assert.deepEqual(cleanCaptionStyle({ position: "top", x: undefined, y: undefined }), { position: "top" });
+});
+
+test("captions: typed words are spread across the video in order, inside its length", async () => {
+  const { spreadWords } = await import("./captionWords");
+  const w = spreadWords("Look at this. A very extraordinary rabbit!", 6);
+  assert.equal(w.length, 7);
+  for (let i = 0; i < w.length; i++) {
+    assert.ok(w[i].e > w[i].s && w[i].e <= 6, `word ${i} inside the video`);
+    if (i) assert.ok(w[i].s >= w[i - 1].e, "in order, no overlap");
+  }
+  assert.ok(w[5].e - w[5].s > w[1].e - w[1].s, "longer words get longer");
+  assert.deepEqual(spreadWords("   ", 5), []);
+  assert.deepEqual(spreadWords("hi", 0), []);
+});

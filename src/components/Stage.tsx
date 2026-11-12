@@ -131,12 +131,55 @@ export function Stage() {
     const found = rnd.hits.filter((h) => x >= h.x - padPx && x <= h.x + h.w + padPx && y >= h.y - padPx && y <= h.y + h.h + padPx).sort((a, b) => a.w * a.h - b.w * b.h)[0];
     return found ?? null;
   };
+  // ---- captions can be dragged into place
+  const capDrag = useRef<{ dx: number; dy: number; moved: boolean } | null>(null);
+  const skipClick = useRef(false);
+  const [overCap, setOverCap] = useState(false);
+  const [capGuide, setCapGuide] = useState(false);
+  const inCaption = (e: { clientX: number; clientY: number }) => {
+    const b = renderer.current?.captionBox;
+    if (!b || full !== "off" || edit) return null;
+    const { x, y } = toCanvas(e);
+    const m = Math.min(W, H) * 0.015;
+    return x >= b.x - m && x <= b.x + b.w + m && y >= b.y - m && y <= b.y + b.h + m ? { b, x, y } : null;
+  };
+  const onCanvasDown = (e: React.PointerEvent) => {
+    const hit = inCaption(e);
+    if (!hit) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    capDrag.current = { dx: hit.x - (hit.b.x + hit.b.w / 2), dy: hit.y - (hit.b.y + hit.b.h / 2), moved: false };
+  };
+  const dragCaption = (e: React.PointerEvent) => {
+    const d = capDrag.current;
+    if (!d) return false;
+    const p = toCanvas(e);
+    let x = Math.min(1, Math.max(0, (p.x - d.dx) / W));
+    const y = Math.min(1, Math.max(0, (p.y - d.dy) / H));
+    const snap = Math.abs(x - 0.5) < 0.02; // the centre line holds on to it
+    if (snap) x = 0.5;
+    setCapGuide(snap);
+    // the first move is the undo step; the rest of the drag updates in place
+    setState((st) => ({ project: { ...st.project, captionStyle: { ...st.project.captionStyle, x: +x.toFixed(3), y: +y.toFixed(3) } } }), { history: !d.moved });
+    d.moved = true;
+    return true;
+  };
+  const onCanvasUp = () => {
+    if (capDrag.current?.moved) skipClick.current = true;
+    capDrag.current = null;
+    setCapGuide(false);
+  };
   const onCanvasMove = (e: React.PointerEvent) => {
+    if (dragCaption(e)) return;
+    const oc = !!inCaption(e);
+    if (oc !== overCap) setOverCap(oc);
+    if (oc) return setHover(null);
     if (clock.playing || edit || full !== "off") return;
     const h = hitAt(e);
     setHover((prev) => (prev?.field === h?.field && prev?.x === h?.x && prev?.y === h?.y ? prev : h));
   };
   const onCanvasClick = (e: React.MouseEvent) => {
+    if (skipClick.current) return void (skipClick.current = false);
+    if (inCaption(e)) return; // a click on the captions is the start of a drag, not play/pause
     if (full !== "off" || clock.playing) return clock.toggle();
     const h = hitAt(e);
     const idx = renderer.current?.hitScene ?? -1;
@@ -222,10 +265,13 @@ export function Stage() {
       >
         <canvas
           ref={canvas}
-          style={{ width: box.w, height: box.h, cursor: hover && !c.playing ? "text" : undefined }}
+          style={{ width: box.w, height: box.h, cursor: overCap ? (capDrag.current ? "grabbing" : "grab") : hover && !c.playing ? "text" : undefined, touchAction: overCap ? "none" : undefined }}
           onClick={onCanvasClick}
+          onPointerDown={onCanvasDown}
+          onPointerUp={onCanvasUp}
+          onPointerCancel={onCanvasUp}
           onPointerMove={onCanvasMove}
-          onPointerLeave={() => setHover(null)}
+          onPointerLeave={() => (setHover(null), setOverCap(false))}
           onDragOver={(e) => {
             if (!e.dataTransfer.types.includes("application/x-hookky-asset") && !e.dataTransfer.types.includes("Files")) return;
             e.preventDefault();
@@ -237,6 +283,7 @@ export function Stage() {
         />
         {!project.scenes.length && full === "off" && <EmptyCanvas />}
         {hover && !edit && !c.playing && full === "off" && <div className="hit-outline" style={outlineStyle(hover)} aria-hidden />}
+        {capGuide && <div className="cap-guide" style={{ left: (canvas.current?.offsetLeft ?? 0) + box.w / 2, top: canvas.current?.offsetTop ?? 0, height: box.h }} aria-hidden />}
         {dropping && <div className="drop-hint" style={{ width: box.w, height: box.h }}>Drop to use this image in the scene</div>}
         {edit && (
           <div className="text-editor" style={editorStyle(edit.hit)}>

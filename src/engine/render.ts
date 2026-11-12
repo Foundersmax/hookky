@@ -10,7 +10,7 @@ import { MOGRAPH_TEMPLATES } from "./mograph";
 import { DATA_TEMPLATES } from "./mographData";
 import { DASH_TEMPLATES } from "./mographDash";
 import { PRO_TEMPLATES } from "./mographPro";
-import { renderCaptions } from "./captions";
+import { renderCaptions, type CaptionBox } from "./captions";
 import { BUILTIN_ICONS } from "../mograph/builtin";
 
 /** Looks up a drawable by asset ref; `t` is the scene-local time (video clips use it). */
@@ -113,6 +113,8 @@ export class Renderer {
   private bufA: HTMLCanvasElement;
   private bufB: HTMLCanvasElement;
   private grainTile: HTMLCanvasElement;
+  /** where the captions were drawn in the last frame (frame units), for dragging them */
+  captionBox: CaptionBox | null = null;
 
   constructor(
     public canvas: HTMLCanvasElement,
@@ -169,7 +171,7 @@ export class Renderer {
       this.drawScene(ctx, project, cur, lt, img, true);
     }
 
-    if (project.captions && project.audio?.words?.length) drawCaptions(ctx, this.W, this.H, project, tt, cur.scene);
+    this.captionBox = project.captions && project.audio?.words?.length ? drawCaptions(ctx, this.W, this.H, project, tt, cur.scene) : null;
     if (project.grain) {
       ctx.save();
       ctx.globalAlpha = 0.07;
@@ -1631,7 +1633,7 @@ export function chunkPhrases(words: Word[], max = 3): Word[][] {
 function drawCaptions(ctx: CanvasRenderingContext2D, W: number, H: number, p: Project, t: number, scene?: Scene) {
   // Under cinema bars, captions at the bottom sit in the bar like a film's subtitles.
   const bar = scene?.effects?.includes("letterbox") ? (W / H > 1.2 ? (H - W / 2.39) / 2 : H * 0.06) : 0;
-  renderCaptions(ctx, W, H, { words: p.audio!.words!, style: p.captionStyle, brand: p.brand, t, bar });
+  return renderCaptions(ctx, W, H, { words: p.audio!.words!, style: p.captionStyle, brand: p.brand, t, bar });
 }
 
 function makeGrain() {

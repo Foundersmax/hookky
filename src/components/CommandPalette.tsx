@@ -134,6 +134,7 @@ export function CommandPalette({ host }: { host: PaletteHost }) {
         add("Agent", "auto-review", on ? "Turn auto visual review off" : "Turn auto visual review on", () => (setAutoReview(!on), host.toast(on ? "Claude won't review new storyboards automatically" : "Claude will review each new storyboard's frames")));
       }
       add("Studio", "formats", "Creative formats…", () => setState({ sheet: "formats" }), { hint: "21 attention structures, written by Claude" });
+      add("Studio", "caption-video", "Caption a video…", () => setState({ sheet: "caption" }), { hint: "transcribes the speech, 9 designs" });
       add("Studio", "upscale", "Upscale a video…", () => setState({ sheet: "upscale" }), { hint: "to 1080p, 4K or 8K, on this device" });
       add("Studio", "footage", "Footage from the voice-over…", () => setState({ sheet: "footage" }), { hint: "stock footage for every line" });
       add("Studio", "sound", "Sound templates…", () => setState({ sheet: "sound" }), { hint: "cut an ad to a voice-over or a track" });

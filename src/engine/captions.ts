@@ -47,7 +47,10 @@ interface Opts {
   zoom?: number;
 }
 
-export function renderCaptions(ctx: CanvasRenderingContext2D, W: number, H: number, o: Opts) {
+export interface CaptionBox { x: number; y: number; w: number; h: number }
+
+/** Draw the captions for time `t`; returns where they landed (for dragging), or null if none show. */
+export function renderCaptions(ctx: CanvasRenderingContext2D, W: number, H: number, o: Opts): CaptionBox | null {
   const st = o.style ?? {};
   const design = CAPTION_DESIGNS.find((d) => d.id === st.design) ?? CAPTION_DESIGNS[0];
   const per = st.words && st.words > 0 ? st.words : design.words;
@@ -55,7 +58,7 @@ export function renderCaptions(ctx: CanvasRenderingContext2D, W: number, H: numb
   const t = o.t;
   // the newest phrase that has started (the one before may still be inside its hold)
   const ph = [...phrases].reverse().find((p) => t >= p[0].s - 0.1 && t <= p[p.length - 1].e + 0.25);
-  if (!ph) return;
+  if (!ph) return null;
   const u = (Math.min(W, H) / 1080) * (o.zoom ?? 1);
   const k = st.size === "s" ? 0.8 : st.size === "l" ? 1.28 : 1;
   const id = design.id;
@@ -101,6 +104,12 @@ export function renderCaptions(ctx: CanvasRenderingContext2D, W: number, H: numb
   if (st.position === "top") top = margin + padY;
   else if (st.position === "middle") top = H / 2 - blockH / 2;
   else top = bar >= blockH + padY * 2 + 8 * u ? H - bar / 2 - blockH / 2 : H - margin - blockH - padY;
+  // dragged into place: the block's centre goes where it was dropped, kept inside the frame
+  const placed = st.x !== undefined && st.y !== undefined;
+  const bw = id === "band" ? W : widest() + size * (id === "pill" || id === "type" ? 1.6 : 0.4);
+  const cx = placed && id !== "band" ? clamp(st.x! * W, bw / 2, W - bw / 2) : W / 2;
+  if (placed) top = clamp(st.y! * H - blockH / 2, padY, H - blockH - padY);
+  const box: CaptionBox = { x: cx - bw / 2, y: top - padY, w: bw, h: blockH + padY * 2 };
 
   // phrase entrance (pop springs in; the others ease up a touch)
   const pin = clamp((t - (ph[0].s - 0.1)) / 0.22);
@@ -112,9 +121,9 @@ export function renderCaptions(ctx: CanvasRenderingContext2D, W: number, H: numb
   (ctx as any).letterSpacing = "0px";
   if (id === "pop") {
     const s = 0.72 + 0.28 * ease.outBack(pin);
-    ctx.translate(W / 2, top + blockH / 2);
+    ctx.translate(cx, top + blockH / 2);
     ctx.scale(s, s);
-    ctx.translate(-W / 2, -(top + blockH / 2));
+    ctx.translate(-cx, -(top + blockH / 2));
   } else ctx.translate(0, (1 - ease.outCubic(pin)) * size * 0.25);
   ctx.globalAlpha = clamp(pin * 1.5);
 
@@ -127,7 +136,7 @@ export function renderCaptions(ctx: CanvasRenderingContext2D, W: number, H: numb
   }
   rows.forEach(([a, b], r) => {
     const lw = lineOf(a, b);
-    const x0 = W / 2 - lw / 2, y = top + lh * r + lh / 2;
+    const x0 = cx - lw / 2, y = top + lh * r + lh / 2;
     if (id === "pill" || id === "type") {
       const px = size * 0.8;
       ctx.fillStyle = id === "type" ? "rgba(8,8,10,0.86)" : "rgba(10,10,10,0.72)";
@@ -216,4 +225,5 @@ export function renderCaptions(ctx: CanvasRenderingContext2D, W: number, H: numb
     }
   });
   ctx.restore();
+  return box;
 }

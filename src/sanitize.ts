@@ -71,7 +71,9 @@ export function cleanCaptionStyle(v: unknown): CaptionStyle | undefined {
   const size = oneOf(o.size, ["s", "m", "l"] as const);
   const words = Number.isFinite(Number(o.words)) && Number(o.words) >= 1 ? Math.min(8, Math.round(Number(o.words))) : undefined;
   const color = typeof o.color === "string" && /^#[0-9a-f]{6}$/i.test(o.color) ? o.color : undefined;
-  const out: CaptionStyle = { ...(design && { design }), ...(position && { position }), ...(size && { size }), ...(words && { words }), ...(typeof o.upper === "boolean" && { upper: o.upper }), ...(o.highlight === false && { highlight: false }), ...(color && { color }) };
+  const frac = (n: unknown) => (typeof n === "number" && Number.isFinite(n) ? Math.round(Math.min(1, Math.max(0, n)) * 1000) / 1000 : undefined);
+  const x = frac(o.x), y = frac(o.y);
+  const out: CaptionStyle = { ...(x !== undefined && y !== undefined && { x, y }), ...(design && { design }), ...(position && { position }), ...(size && { size }), ...(words && { words }), ...(typeof o.upper === "boolean" && { upper: o.upper }), ...(o.highlight === false && { highlight: false }), ...(color && { color }) };
   return Object.keys(out).length ? out : undefined;
 }
 

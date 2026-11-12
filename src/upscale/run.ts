@@ -27,7 +27,7 @@ function loadVideo(url: string): Promise<HTMLVideoElement> {
     v.src = url;
   });
 }
-const seek = (v: HTMLVideoElement, t: number) =>
+export const seek = (v: HTMLVideoElement, t: number) =>
   new Promise<void>((resolve) => {
     if (Math.abs(v.currentTime - t) < 1e-4 && v.readyState >= 2) return resolve();
     const done = () => {
@@ -95,7 +95,7 @@ export const CODEC_NOTE: Partial<Record<Mux, string>> = {
   av1: "AV1 plays in Chrome, Edge, Firefox, VLC and on YouTube; older phones and QuickTime may not open it.",
   vp9: "VP9 plays in Chrome, Edge, Firefox and VLC; QuickTime and iPhones won't open it.",
 };
-async function soundOf(file: Blob): Promise<AudioBuffer | null> {
+export async function soundOf(file: Blob): Promise<AudioBuffer | null> {
   try {
     const oc = new OfflineAudioContext(2, 48000, 48000);
     const buf = await oc.decodeAudioData(await file.arrayBuffer());

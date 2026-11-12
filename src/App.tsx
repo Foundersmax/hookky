@@ -18,6 +18,7 @@ import { CommandPalette } from "./components/CommandPalette";
 import { SoundTemplates } from "./components/SoundTemplates";
 import { FootageSheet } from "./components/FootageSheet";
 import { UpscaleSheet } from "./components/UpscaleSheet";
+import { CaptionSheet } from "./components/CaptionSheet";
 import { FormatsSheet } from "./components/FormatsSheet";
 import { clock } from "./clock";
 import { images } from "./runtime";
@@ -359,6 +360,11 @@ export function App() {
       {sheet === "footage" && (
         <ErrorBoundary area="footage">
           <FootageSheet />
+        </ErrorBoundary>
+      )}
+      {sheet === "caption" && (
+        <ErrorBoundary area="captions">
+          <CaptionSheet />
         </ErrorBoundary>
       )}
       {sheet === "upscale" && (
