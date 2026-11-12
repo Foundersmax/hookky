@@ -10,6 +10,7 @@ import { MOGRAPH_TEMPLATES } from "./mograph";
 import { DATA_TEMPLATES } from "./mographData";
 import { DASH_TEMPLATES } from "./mographDash";
 import { PRO_TEMPLATES } from "./mographPro";
+import { renderCaptions } from "./captions";
 import { BUILTIN_ICONS } from "../mograph/builtin";
 
 /** Looks up a drawable by asset ref; `t` is the scene-local time (video clips use it). */
@@ -1628,31 +1629,9 @@ export function chunkPhrases(words: Word[], max = 3): Word[][] {
 }
 
 function drawCaptions(ctx: CanvasRenderingContext2D, W: number, H: number, p: Project, t: number, scene?: Scene) {
-  const words = p.audio!.words!;
-  const phrases = chunkPhrases(words, 5);
-  const ph = phrases.find((ph) => t >= ph[0].s - 0.1 && t <= ph[ph.length - 1].e + 0.25);
-  if (!ph) return;
-  const u = Math.min(W, H) / 1080;
-  const size = 34 * u;
-  const f: FontSpec = { family: p.brand.fontBody, weight: 600, size, tracking: -0.01 };
-  const text = ph.map((w) => w.w).join(" ");
-  const tw = measure(ctx, text, f);
-  const padX = 28 * u, h = size * 1.9;
-  // Under cinema bars, subtitles sit in the bottom bar like a film's.
+  // Under cinema bars, captions at the bottom sit in the bar like a film's subtitles.
   const bar = scene?.effects?.includes("letterbox") ? (W / H > 1.2 ? (H - W / 2.39) / 2 : H * 0.06) : 0;
-  const x = W / 2 - tw / 2, y = bar >= h + 8 * u ? H - bar / 2 - h / 2 : H - Math.min(W, H) * 0.1 - h;
-  ctx.save();
-  ctx.fillStyle = "rgba(10,10,10,0.72)";
-  rr(ctx, x - padX, y, tw + padX * 2, h, h / 2);
-  ctx.fill();
-  let cx = x;
-  for (const w of ph) {
-    const ww = measure(ctx, w.w, f);
-    const active = t >= w.s && t <= w.e + 0.05;
-    drawLabel(ctx, w.w, f, cx, y + h / 2, "left", active ? p.brand.accent : t > w.e ? "#FFFFFF" : "rgba(255,255,255,0.5)");
-    cx += ww + measure(ctx, " ", f);
-  }
-  ctx.restore();
+  renderCaptions(ctx, W, H, { words: p.audio!.words!, style: p.captionStyle, brand: p.brand, t, bar });
 }
 
 function makeGrain() {

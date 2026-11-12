@@ -1,3 +1,4 @@
+import { CaptionControls } from "./CaptionControls";
 import { useRef, useState } from "react";
 import { useStudio, setAudio, getState, setState, updateProject, fitToVoiceover } from "../store";
 import { alignScript } from "../audio/analyze";
@@ -105,6 +106,7 @@ export function VoicePanel({ toast }: { toast: (s: string) => void }) {
             <input type="checkbox" checked={captions} onChange={(e) => updateProject((p) => ({ ...p, captions: e.target.checked }))} />
             Burn-in captions
           </label>
+          {captions && <CaptionControls />}
         </>
       )}
 

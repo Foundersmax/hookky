@@ -215,6 +215,8 @@ export interface Project {
   brand: Brand;
   scenes: Scene[];
   captions: boolean;
+  /** how burned-in captions look (design, position, size…); the pill at the bottom when unset */
+  captionStyle?: CaptionStyle;
   grain: boolean;
   audio?: AudioTrack;
   music?: MusicTrack;
@@ -328,3 +330,18 @@ export const ASPECT_SIZE: Record<Aspect, [number, number]> = {
   "1:1": [1080, 1080],
   "4:5": [1080, 1350],
 };
+
+/** The look of burned-in captions. */
+export interface CaptionStyle {
+  design?: "pill" | "subtitle" | "karaoke" | "box" | "pop" | "band" | "neon" | "type" | "minimal";
+  position?: "bottom" | "middle" | "top";
+  size?: "s" | "m" | "l";
+  /** words per caption, 1–8 (the design's own when unset) */
+  words?: number;
+  /** capitals (each design has its own default) */
+  upper?: boolean;
+  /** colour the word being spoken (on by default) */
+  highlight?: boolean;
+  /** highlight colour as #rrggbb (the brand accent when unset) */
+  color?: string;
+}

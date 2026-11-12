@@ -139,6 +139,7 @@ export function CommandPalette({ host }: { host: PaletteHost }) {
       add("Studio", "sound", "Sound templates…", () => setState({ sheet: "sound" }), { hint: "cut an ad to a voice-over or a track" });
       add("Studio", "export", "Export video…", () => host.openTab("Export"));
       add("Studio", "export-gif", "Export a GIF…", () => host.openTab("Export"), { hint: "a scene or the whole cut" });
+      add("Studio", "caption-design", "Caption design…", () => (updateProject((p) => (p.captions ? p : { ...p, captions: true })), host.openTab("Voice")), { hint: "9 designs, position, size, highlight" });
       add("Studio", "export-captions", "Download captions (.srt / .vtt)…", () => host.openTab("Export"));
       add("Studio", "export-poster", "Save posters / thumbnails…", () => host.openTab("Export"), { hint: "up to 4K PNG" });
       add("Studio", "version", "Save a version", () => saveVersion().then((v) => host.toast(`Saved version “${v.name}”`)));

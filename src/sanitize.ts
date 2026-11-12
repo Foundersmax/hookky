@@ -1,7 +1,7 @@
 // Strict cleaning of scenes and brand values from any source (Claude, the local director,
 // an opened project file, an older saved version). Whatever comes in, what comes out is
 // something the renderer can draw without throwing.
-import type { Brand, Project, Scene, Stat, Aspect, Direction } from "./types";
+import type { Brand, Project, Scene, Stat, Aspect, Direction, CaptionStyle } from "./types";
 import { ICON_NAME, cleanIcon } from "./mograph/icons";
 import { TEMPLATES, TRANSITIONS, BACKGROUNDS, MOTIONS, PACES, GRADES, EFFECTS } from "./types";
 import { STYLE_PRESETS } from "./presets";
@@ -62,6 +62,19 @@ function focusOf(v: unknown): { x: number; y: number } | undefined {
 }
 
 /** Clean one scene. Unknown fields are dropped; bad values fall back to safe defaults. */
+/** A caption style with only known values (unknown ones fall back to each design's defaults). */
+export function cleanCaptionStyle(v: unknown): CaptionStyle | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  const o = v as Record<string, unknown>;
+  const design = oneOf(o.design, ["pill", "subtitle", "karaoke", "box", "pop", "band", "neon", "type", "minimal"] as const);
+  const position = oneOf(o.position, ["bottom", "middle", "top"] as const);
+  const size = oneOf(o.size, ["s", "m", "l"] as const);
+  const words = Number.isFinite(Number(o.words)) && Number(o.words) >= 1 ? Math.min(8, Math.round(Number(o.words))) : undefined;
+  const color = typeof o.color === "string" && /^#[0-9a-f]{6}$/i.test(o.color) ? o.color : undefined;
+  const out: CaptionStyle = { ...(design && { design }), ...(position && { position }), ...(size && { size }), ...(words && { words }), ...(typeof o.upper === "boolean" && { upper: o.upper }), ...(o.highlight === false && { highlight: false }), ...(color && { color }) };
+  return Object.keys(out).length ? out : undefined;
+}
+
 /** Text size multiples, 0.5–2 in 5% steps; 1 (the template's own size) is left out. */
 export function cleanTextScale(v: unknown): { display?: number; body?: number } | undefined {
   if (!v || typeof v !== "object") return undefined;
@@ -161,6 +174,7 @@ export function sanitizeProject(input: unknown, fallback: Project): Project {
     style: typeof p.style === "string" && /^[a-z-]{2,20}$/.test(p.style) ? p.style : fallback.style,
     brand,
     captions: typeof p.captions === "boolean" ? p.captions : fallback.captions,
+    captionStyle: cleanCaptionStyle(p.captionStyle),
     grain: typeof p.grain === "boolean" ? p.grain : fallback.grain,
     scenes: scenes.length ? scenes : fallback.scenes,
     audio: undefined,
