@@ -44,7 +44,7 @@ jobs:
           done
       - name: Studio services (agent, transcription, connected sources)
         run: |
-          curl -sS -m 20 https://app.rookker.com/api/health | jq -r '"  agent: \(.agent) · transcription: \(.transcription) · accounts: \(.accounts // false)", (.connectors[] | "  \(if .configured then "on " else "off" end)  \(.id)")' || echo "  health check failed"
+          curl -sS -m 20 https://app.rookker.com/api/health | jq -r '"  agent: \(.agent) · transcription: \(.transcription) · accounts: \(.accounts // false) · export AAC: \(.exportAac // false)", (.connectors[] | "  \(if .configured then "on " else "off" end)  \(.id)")' || echo "  health check failed"
           echo "== password gate (expect 401 when HOOKKY_PASSWORD is set)"
           curl -sS -m 20 -o /dev/null -w '  / → %{http_code}\n' https://app.rookker.com/ || true
       - name: Certificate on rookker.com

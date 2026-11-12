@@ -233,14 +233,23 @@ export function wordsIn(g: G, text: string, font: FontSpec, x: number, yMid: num
         const s = spring(p);
         ctx.save();
         ctx.globalAlpha *= clamp(p * 2.2);
-        if (p < 0.9) ctx.filter = `blur(${((1 - p) * L.font.size * 0.22).toFixed(1)}px)`;
+        // out of focus while it arrives: a few faint copies spread around it (a real blur filter
+        // costs several milliseconds a word)
+        const spread = p < 0.9 ? (1 - p) * L.font.size * 0.16 : 0;
         if (tok.em) {
           const gr = ctx.createLinearGradient(lx, 0, lx + w, 0);
           gr.addColorStop(0, c.accent);
           gr.addColorStop(1, a2);
           ctx.fillStyle = gr;
         } else ctx.fillStyle = o.color ?? c.fg;
-        ctx.fillText(tok.text, lx, base + (1 - s) * L.font.size * 0.45);
+        const yy = base + (1 - s) * L.font.size * 0.45;
+        if (spread > 0.5) {
+          const a0 = ctx.globalAlpha;
+          ctx.globalAlpha = a0 * 0.3;
+          for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) ctx.fillText(tok.text, lx + dx * spread, yy + dy * spread);
+          ctx.globalAlpha = a0 * clamp(p * 1.4);
+        }
+        ctx.fillText(tok.text, lx, yy);
         ctx.restore();
       }
       lx += w;

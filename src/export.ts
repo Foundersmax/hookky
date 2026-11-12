@@ -7,6 +7,7 @@ import { VideoSeeker } from "./engine/videos";
 import { images } from "./runtime";
 import { musicEnvelope, voiceGain, musicTime } from "./audio/mix";
 import { Muxer, ArrayBufferTarget } from "mp4-muxer";
+import { parseAdts } from "./adts";
 import { downloadsCap, isHosted } from "./host";
 
 export function pickMime(): { mime: string; ext: string } {
@@ -50,8 +51,11 @@ type ExportOpts = {
   scale?: number;
   bitrate?: number;
   onProgress?: (p: number) => void;
+  /** what the export is doing now ("Encoding the sound", …) */
+  onStage?: (label: string) => void;
   signal?: AbortSignal;
 };
+export type ExportResult = { blob: Blob; ext: string; audio?: "aac" | "opus"; note?: string };
 
 /** Output size in pixels for a format at a quality scale. */
 export const outputSize = (aspect: Aspect, scale = 1): [number, number] => {
@@ -67,7 +71,7 @@ export function videoBitrate(width: number, height: number, fps: number) {
 }
 
 /** Frame-accurate export via WebCodecs (faster than real time, never drops frames); falls back to MediaRecorder. */
-export async function exportVideo(project: Project, aspect: Aspect, opts: ExportOpts): Promise<{ blob: Blob; ext: string }> {
+export async function exportVideo(project: Project, aspect: Aspect, opts: ExportOpts): Promise<ExportResult> {
   if (typeof VideoEncoder !== "undefined" && typeof VideoFrame !== "undefined") {
     const codec = await pickVideoCodec(...outputSize(aspect, opts.scale), opts.fps ?? 30);
     if (codec) return exportWebCodecs(project, aspect, codec, opts);
@@ -92,6 +96,118 @@ export async function pickVideoCodec(width: number, height: number, framerate: n
     } catch {}
   }
   return null;
+}
+
+type RawChunk = { data: Uint8Array; timestamp: number; duration: number };
+type Sound = { mux: "aac" | "opus"; config: AudioDecoderConfig; chunks: RawChunk[]; note?: string };
+
+/** Encode the mixed sound with a WebCodecs AudioEncoder; null if the codec isn't available. */
+async function encodeWith(codec: string, audio: AudioBuffer): Promise<{ config: AudioDecoderConfig; chunks: RawChunk[] } | null> {
+  if (typeof AudioEncoder === "undefined") return null;
+  const cfg = { codec, sampleRate: 48000, numberOfChannels: 2, bitrate: 192000 };
+  try {
+    if (!(await AudioEncoder.isConfigSupported(cfg)).supported) return null;
+  } catch {
+    return null;
+  }
+  const chunks: RawChunk[] = [];
+  let config: AudioDecoderConfig | null = null;
+  let failure: Error | null = null;
+  const enc = new AudioEncoder({
+    output: (c, m) => {
+      const data = new Uint8Array(c.byteLength);
+      c.copyTo(data);
+      chunks.push({ data, timestamp: c.timestamp, duration: c.duration ?? 0 });
+      if (m?.decoderConfig && !config) config = m.decoderConfig;
+    },
+    error: (e) => (failure = e as Error),
+  });
+  enc.configure(cfg);
+  const L = audio.getChannelData(0), R = audio.getChannelData(audio.numberOfChannels > 1 ? 1 : 0);
+  const block = 4800;
+  for (let off = 0; off < audio.length; off += block) {
+    const n = Math.min(block, audio.length - off);
+    const data = new Float32Array(n * 2);
+    data.set(L.subarray(off, off + n), 0);
+    data.set(R.subarray(off, off + n), n);
+    const ad = new AudioData({ format: "f32-planar", sampleRate: 48000, numberOfFrames: n, numberOfChannels: 2, timestamp: Math.round((off / 48000) * 1e6), data });
+    enc.encode(ad);
+    ad.close();
+  }
+  await enc.flush();
+  enc.close();
+  if (failure) throw failure;
+  return { config: config ?? { codec, sampleRate: 48000, numberOfChannels: 2 }, chunks };
+}
+
+/** Opus chunks → a tiny audio-only MP4 → the server's AAC → raw AAC chunks (timed from 0). */
+async function aacFromServer(opus: { config: AudioDecoderConfig; chunks: RawChunk[] }, signal?: AbortSignal): Promise<{ config: AudioDecoderConfig; chunks: RawChunk[] }> {
+  const m = new Muxer({ target: new ArrayBufferTarget(), audio: { codec: "opus", numberOfChannels: 2, sampleRate: 48000 }, fastStart: "in-memory", firstTimestampBehavior: "offset" });
+  opus.chunks.forEach((c, i) => m.addAudioChunkRaw(c.data, "key", c.timestamp, c.duration, i === 0 ? { decoderConfig: opus.config } : undefined));
+  m.finalize();
+  const t = AbortSignal.timeout(90_000);
+  const r = await fetch("/api/export/aac", { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: m.target.buffer, signal: signal ? AbortSignal.any([signal, t]) : t });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.error ?? `HTTP ${r.status}`);
+  const adts = parseAdts(new Uint8Array(await r.arrayBuffer()));
+  if (!adts) throw new Error("The converted audio was empty.");
+  // The encoder's first frame is its priming delay (1024 samples): drop it so sound and picture line up.
+  const per = (1024 / adts.sampleRate) * 1e6;
+  const frames = adts.frames.slice(1);
+  return {
+    config: { codec: "mp4a.40.2", sampleRate: adts.sampleRate, numberOfChannels: adts.channels || 2, description: adts.asc },
+    chunks: frames.map((data, i) => ({ data, timestamp: Math.round(i * per), duration: Math.round(per) })),
+  };
+}
+
+/**
+ * The export's sound, as AAC wherever possible (it plays everywhere): the browser's own encoder,
+ * else Opus converted to AAC by the server, else Opus as is (plays in browsers and VLC, not in
+ * QuickTime or iOS Photos), with a note saying so.
+ */
+async function encodeAudio(audio: AudioBuffer, signal?: AbortSignal): Promise<Sound | null> {
+  const aac = await encodeWith("mp4a.40.2", audio);
+  if (aac) return { mux: "aac", ...aac };
+  const opus = await encodeWith("opus", audio);
+  if (!opus) return null;
+  try {
+    return { mux: "aac", ...(await aacFromServer(opus, signal)) };
+  } catch (e) {
+    if ((e as Error)?.name === "AbortError" && signal?.aborted) throw e;
+    return { mux: "opus", ...opus, note: "This browser can't make AAC sound and the server couldn't convert it, so the sound is Opus: it plays in browsers and VLC, but not in QuickTime or iOS Photos. Export from Chrome on Mac or Windows for AAC." };
+  }
+}
+
+/**
+ * Invisible dither: ±1 level of noise over the frame before it's encoded. Rate control reads soft
+ * dark gradients as "easy" and starves them, so they band and block; the dither turns the 8-bit
+ * steps into fine texture the encoder keeps, and the gradients stay smooth.
+ */
+function makeDither() {
+  const tile = document.createElement("canvas");
+  tile.width = tile.height = 128;
+  const tx = tile.getContext("2d")!;
+  const d = tx.createImageData(128, 128);
+  for (let i = 0; i < d.data.length; i += 4) {
+    const v = Math.random() < 0.5 ? 0 : 255;
+    d.data[i] = d.data[i + 1] = d.data[i + 2] = v;
+    d.data[i + 3] = 255;
+  }
+  tx.putImageData(d, 0, 0);
+  let pat: CanvasPattern | null = null;
+  return (canvas: HTMLCanvasElement, i: number) => {
+    const ctx = canvas.getContext("2d")!;
+    pat ??= ctx.createPattern(tile, "repeat");
+    if (!pat) return;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1 / 128; // about one 8-bit level either way
+    ctx.globalCompositeOperation = "source-over";
+    const o = (i * 37) % 128;
+    ctx.translate(-o, -((i * 71) % 128));
+    ctx.fillStyle = pat;
+    ctx.fillRect(0, 0, canvas.width + 128, canvas.height + 128);
+    ctx.restore();
+  };
 }
 
 /** Mix voice-over + ducked music offline into a stereo 48k buffer. */
@@ -135,29 +251,21 @@ async function exportWebCodecs(project: Project, aspect: Aspect, vc: { codec: st
   await images.preload(projectImageRefs(p));
 
   const audio = await mixAudio(p, duration);
-  let ac: { codec: string; mux: "aac" | "opus" } | null = null;
-  if (audio && typeof AudioEncoder !== "undefined") {
-    for (const c of [{ codec: "mp4a.40.2", mux: "aac" as const }, { codec: "opus", mux: "opus" as const }]) {
-      try {
-        if ((await AudioEncoder.isConfigSupported({ codec: c.codec, sampleRate: 48000, numberOfChannels: 2, bitrate: 192000 })).supported) {
-          ac = c;
-          break;
-        }
-      } catch {}
-    }
-  }
-  const audioOk = !!ac;
+  opts.onStage?.(audio ? "Encoding the sound" : "Rendering");
+  const sound = audio ? await encodeAudio(audio, opts.signal) : null;
+  const audioOk = !!sound;
 
   const muxer = new Muxer({
     target: new ArrayBufferTarget(),
     video: { codec: vc.mux, width: W, height: H, frameRate: fps },
-    ...(ac && { audio: { codec: ac.mux, numberOfChannels: 2, sampleRate: 48000 } }),
+    ...(sound && { audio: { codec: sound.mux, numberOfChannels: 2, sampleRate: 48000 } }),
     fastStart: "in-memory",
     firstTimestampBehavior: "offset",
   });
   let failure: Error | null = null;
   const venc = new VideoEncoder({ output: (c, m) => muxer.addVideoChunk(c, m), error: (e) => (failure = e as Error) });
   venc.configure({ codec: vc.codec, width: W, height: H, bitrate: opts.bitrate ?? videoBitrate(W, H, fps), framerate: fps, ...(vc.mux === "avc" && { avc: { format: "avc" as const } }) });
+  const dither = makeDither();
 
   const frames = Math.ceil(duration * fps);
   const seeker = new VideoSeeker();
@@ -169,6 +277,7 @@ async function exportWebCodecs(project: Project, aspect: Aspect, vc: { codec: st
       }
       if (failure) throw failure;
       await renderExact(r, p, i / fps, seeker);
+      dither(canvas, i);
       const frame = new VideoFrame(canvas, { timestamp: Math.round((i * 1e6) / fps), duration: Math.round(1e6 / fps) });
       venc.encode(frame, { keyFrame: i % (fps * 2) === 0 });
       frame.close();
@@ -184,27 +293,11 @@ async function exportWebCodecs(project: Project, aspect: Aspect, vc: { codec: st
     seeker.dispose();
   }
 
-  if (ac && audio) {
-    const aenc = new AudioEncoder({ output: (c, m) => muxer.addAudioChunk(c, m), error: (e) => (failure = e as Error) });
-    aenc.configure({ codec: ac.codec, sampleRate: 48000, numberOfChannels: 2, bitrate: 192000 });
-    const L = audio.getChannelData(0), R = audio.getChannelData(audio.numberOfChannels > 1 ? 1 : 0);
-    const block = 4800;
-    for (let off = 0; off < audio.length; off += block) {
-      const n = Math.min(block, audio.length - off);
-      const data = new Float32Array(n * 2);
-      data.set(L.subarray(off, off + n), 0);
-      data.set(R.subarray(off, off + n), n);
-      const ad = new AudioData({ format: "f32-planar", sampleRate: 48000, numberOfFrames: n, numberOfChannels: 2, timestamp: Math.round((off / 48000) * 1e6), data });
-      aenc.encode(ad);
-      ad.close();
-    }
-    await aenc.flush();
-    aenc.close();
-  }
+  if (sound) sound.chunks.forEach((c, i) => muxer.addAudioChunkRaw(c.data, "key", c.timestamp, c.duration, i === 0 ? { decoderConfig: sound.config } : undefined));
   if (failure) throw failure;
   muxer.finalize();
   opts.onProgress?.(1);
-  return { blob: new Blob([muxer.target.buffer], { type: "video/mp4" }), ext: "mp4" };
+  return { blob: new Blob([muxer.target.buffer], { type: "video/mp4" }), ext: "mp4", audio: sound?.mux, ...(sound?.note && { note: sound.note }) };
 }
 
 /** Fallback: render in real time and capture with MediaRecorder. */

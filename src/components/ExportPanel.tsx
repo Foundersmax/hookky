@@ -107,15 +107,17 @@ export function ExportPanel({ toast }: { toast: (s: string) => void }) {
   const quality = prefs.scale === 2 ? "4K" : "1080p";
   const videoName = (a: Aspect) => `${slug}-${a.replace(":", "x")}${prefs.scale === 2 ? "-4k" : ""}${prefs.fps === 60 ? "-60fps" : ""}`;
 
+  let exportNote = "";
   const exportVideos = () =>
     task(`Rendering ${formats[0]}`, async (signal, step) => {
       for (const [i, a] of formats.entries()) {
         const label = `Rendering ${a} · ${quality} ${prefs.fps} fps${formats.length > 1 ? ` (${i + 1}/${formats.length})` : ""}`;
         step(label, 0);
-        const { blob, ext } = await exportVideo(getState().project, a, { fps: prefs.fps, scale: prefs.scale, onProgress: (p) => step(label, p), signal });
+        const { blob, ext, note } = await exportVideo(getState().project, a, { fps: prefs.fps, scale: prefs.scale, onProgress: (p) => step(label, p), onStage: (st) => step(`${st} · ${a}`, 0), signal });
+        if (note) exportNote = note;
         if (!(await download(blob, `${videoName(a)}.${ext}`))) return false;
       }
-    }, formats.length > 1 ? `Exported ${formats.length} videos` : "Export complete");
+    }, () => `${formats.length > 1 ? `Exported ${formats.length} videos` : "Export complete"}${exportNote ? `. ${exportNote}` : ""}`);
 
   let gifSize = 0;
   const exportGifFile = () =>

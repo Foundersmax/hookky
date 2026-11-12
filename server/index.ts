@@ -16,6 +16,7 @@ import { runAgentTurn, claudeConfigured, resetConversation, claudeCheck, probeCl
 import { listConnectors, searchVisuals, searchVideos, importFromUrl, magnificUpscale, reportStockUse, type Orientation } from "./connectors";
 import { proxyVideo } from "./videoProxy";
 import { accountsEnabled, migrate } from "./db";
+import { toAac, aacAvailable } from "./aac";
 import { accountRoutes, requireUser, sameOrigin, takeAgentTurn, authCors } from "./accounts";
 import { mailConfigured } from "./mailer";
 import { safeFetch, readLimited, BlockedUrlError } from "./safeFetch";
@@ -72,7 +73,7 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 60 
 
 app.get("/api/health", (_req, res) => {
   void recheckClaude();
-  res.json({ agent: claudeConfigured() ? "claude" : "local", claude: claudeCheck(), voice: voiceAvailable(), ...(freepikVideoStatus() && { freepikVideo: { ...freepikVideoStatus(), licensedToday: licensesToday() } }), transcription: transcriptionProvider(), connectors: listConnectors(), accounts, ...(build && { build }), ...(process.env.RENDER_GIT_COMMIT && { commit: process.env.RENDER_GIT_COMMIT }) });
+  res.json({ agent: claudeConfigured() ? "claude" : "local", claude: claudeCheck(), voice: voiceAvailable(), exportAac: aacAvailable(), ...(freepikVideoStatus() && { freepikVideo: { ...freepikVideoStatus(), licensedToday: licensesToday() } }), transcription: transcriptionProvider(), connectors: listConnectors(), accounts, ...(build && { build }), ...(process.env.RENDER_GIT_COMMIT && { commit: process.env.RENDER_GIT_COMMIT }) });
 });
 
 app.post("/api/agent", async (req, res) => {
@@ -171,6 +172,20 @@ app.post("/api/icons/resolve", async (req, res) => {
     res.json({ kit, icons: await resolveIcons(ideas, kit) });
   } catch (e: any) {
     res.status(500).json({ error: e?.message ?? String(e) });
+  }
+});
+
+// Exports: AAC for browsers that can only encode Opus (the body is the export's audio, Opus in MP4).
+app.post("/api/export/aac", express.raw({ type: () => true, limit: "30mb" }), async (req, res) => {
+  try {
+    const body = req.body as Buffer;
+    if (!Buffer.isBuffer(body) || !body.length) return void res.status(400).json({ error: "Send the audio as the request body." });
+    const aac = await toAac(body);
+    res.setHeader("Content-Type", "audio/aac");
+    res.setHeader("Cache-Control", "no-store");
+    res.send(aac);
+  } catch (e: any) {
+    res.status(422).json({ error: e?.message ?? String(e) });
   }
 });
 

@@ -5,6 +5,40 @@ import { rgba, mix, clamp, ease, win, hash } from "./util";
 import { accent2, hueShift, isDark } from "./kit";
 
 type Bg = (g: G) => void;
+
+// ---------------------------------------------------------------- soft light at low resolution
+// Smooth gradients look the same drawn at a sixth of the size and scaled up (bilinear), at a
+// fraction of the cost: full-frame radial gradients are the most expensive thing in a frame.
+const LOW = 6;
+let low: { c: HTMLCanvasElement | OffscreenCanvas; x: CanvasRenderingContext2D } | null = null;
+function lowCanvas(w: number, h: number) {
+  if (!low) {
+    const c = typeof OffscreenCanvas !== "undefined" ? new OffscreenCanvas(w, h) : Object.assign(document.createElement("canvas"), { width: w, height: h });
+    low = { c, x: c.getContext("2d") as CanvasRenderingContext2D };
+  }
+  if (low.c.width !== w || low.c.height !== h) (low.c.width = w), (low.c.height = h);
+  return low;
+}
+/** Draw `paint` (in frame units) at low resolution and lay it over the frame. */
+export function soft(g: G, paint: (ctx: CanvasRenderingContext2D) => void) {
+  const { ctx, W, H } = g;
+  const tr = ctx.getTransform();
+  // the low canvas matches the frame's pixel size divided by LOW
+  const px = Math.max(1, Math.abs(tr.a));
+  const w = Math.max(8, Math.ceil((W * px) / LOW)), h = Math.max(8, Math.ceil((H * px) / LOW));
+  const L = lowCanvas(w, h);
+  L.x.setTransform(1, 0, 0, 1, 0, 0);
+  L.x.clearRect(0, 0, w, h);
+  L.x.setTransform(w / W, 0, 0, h / H, 0, 0);
+  paint(L.x);
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "medium";
+  ctx.drawImage(L.c as CanvasImageSource, 0, 0, W, H);
+  ctx.restore();
+}
+/** Run a whole background through `soft` (its drawing calls go to the low canvas). */
+const lowRes = (bg: Bg): Bg => (g) => soft(g, (x) => bg({ ...g, ctx: x }));
 const soundAt = (g: G) => g.level(g.abs + g.t);
 
 export const EXTRA_BACKGROUNDS: Record<string, Bg> = {
@@ -37,19 +71,21 @@ export const EXTRA_BACKGROUNDS: Record<string, Bg> = {
     for (let x = (W / 2) % step; x < W; x += step) (ctx.moveTo(x, 0), ctx.lineTo(x, H));
     for (let y = (t * 6 * u) % step; y < H; y += step) (ctx.moveTo(0, y), ctx.lineTo(W, y));
     ctx.stroke();
-    // the grid only shows inside the light
-    const m = ctx.createRadialGradient(W / 2, H * 0.1, 0, W / 2, H * 0.1, Math.max(W, H) * 0.85);
-    m.addColorStop(0, rgba(c.bg, 0));
-    m.addColorStop(1, rgba(c.bg, 1));
-    ctx.fillStyle = m;
-    ctx.fillRect(0, 0, W, H);
-    const sp = ctx.createRadialGradient(W / 2, -H * 0.15, 0, W / 2, -H * 0.15, Math.max(W, H) * 0.95);
-    sp.addColorStop(0, rgba(c.accent, 0.3));
-    sp.addColorStop(0.45, rgba(accent2(g), 0.08));
-    sp.addColorStop(1, rgba(c.accent, 0));
-    ctx.fillStyle = sp;
-    ctx.fillRect(0, 0, W, H);
     ctx.restore();
+    // the grid only shows inside the light; both washes are smooth, so they're drawn soft
+    soft(g, (x) => {
+      const m = x.createRadialGradient(W / 2, H * 0.1, 0, W / 2, H * 0.1, Math.max(W, H) * 0.85);
+      m.addColorStop(0, rgba(c.bg, 0));
+      m.addColorStop(1, rgba(c.bg, 1));
+      x.fillStyle = m;
+      x.fillRect(0, 0, W, H);
+      const sp = x.createRadialGradient(W / 2, -H * 0.15, 0, W / 2, -H * 0.15, Math.max(W, H) * 0.95);
+      sp.addColorStop(0, rgba(c.accent, 0.3));
+      sp.addColorStop(0.45, rgba(accent2(g), 0.08));
+      sp.addColorStop(1, rgba(c.accent, 0));
+      x.fillStyle = sp;
+      x.fillRect(0, 0, W, H);
+    });
   },
 
   /** Slow diagonal beams of light crossing the frame. */
@@ -291,3 +327,6 @@ export const EXTRA_BACKGROUNDS: Record<string, Bg> = {
     void clamp;
   },
 };
+
+// The soft-light backgrounds: drawn at low resolution (their solid base is drawn first at full size).
+for (const k of ["orbs", "mesh"] as const) if (EXTRA_BACKGROUNDS[k]) EXTRA_BACKGROUNDS[k] = lowRes(EXTRA_BACKGROUNDS[k]);

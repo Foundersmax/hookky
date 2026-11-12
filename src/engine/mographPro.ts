@@ -21,13 +21,16 @@ const activeAt = (t: number, cues: number[]) => {
 };
 /** A soft pool of accent light behind the subject. */
 function glow(g: G, cx: number, cy: number, R: number, a = 0.2) {
-  const { ctx, c } = g;
+  const { ctx, c, W, H } = g;
+  if (a <= 0.002) return;
   const gr = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
   gr.addColorStop(0, rgba(c.accent, a));
   gr.addColorStop(0.6, rgba(accent2(g), a * 0.35));
   gr.addColorStop(1, rgba(c.accent, 0));
   ctx.fillStyle = gr;
-  ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
+  // only the part of the pool that's on screen
+  const x0 = Math.max(0, cx - R), y0 = Math.max(0, cy - R);
+  ctx.fillRect(x0, y0, Math.min(W, cx + R) - x0, Math.min(H, cy + R) - y0);
 }
 
 function bentoRects(n: number, a: Rect, portrait: boolean, gap: number): Rect[] {
