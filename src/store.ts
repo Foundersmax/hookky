@@ -37,7 +37,7 @@ export interface StudioState {
   /** what the app shows */
   view: "home" | "studio" | "admin";
   /** an open sheet over the studio */
-  sheet?: "sound" | "footage" | "formats";
+  sheet?: "sound" | "footage" | "formats" | "upscale";
   health?: { agent: "claude" | "hosted" | "local"; claude?: { state: string }; voice?: boolean; transcription: string; connectors: { id: string; label: string; configured: boolean; kind: string; note: string }[]; accounts?: boolean };
   /** Accounts (server with a database): who is signed in. "off" when the server has no accounts. */
   auth: { status: "checking" | "signed_out" | "signed_in" | "off"; user?: AuthUser; usage?: { today: number; limit: number | null } };

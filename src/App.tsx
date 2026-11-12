@@ -17,6 +17,7 @@ import { Versions } from "./components/Versions";
 import { CommandPalette } from "./components/CommandPalette";
 import { SoundTemplates } from "./components/SoundTemplates";
 import { FootageSheet } from "./components/FootageSheet";
+import { UpscaleSheet } from "./components/UpscaleSheet";
 import { FormatsSheet } from "./components/FormatsSheet";
 import { clock } from "./clock";
 import { images } from "./runtime";
@@ -358,6 +359,11 @@ export function App() {
       {sheet === "footage" && (
         <ErrorBoundary area="footage">
           <FootageSheet />
+        </ErrorBoundary>
+      )}
+      {sheet === "upscale" && (
+        <ErrorBoundary area="upscale">
+          <UpscaleSheet />
         </ErrorBoundary>
       )}
       {sheet === "sound" && (

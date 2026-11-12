@@ -99,7 +99,7 @@ export async function pickVideoCodec(width: number, height: number, framerate: n
 }
 
 type RawChunk = { data: Uint8Array; timestamp: number; duration: number };
-type Sound = { mux: "aac" | "opus"; config: AudioDecoderConfig; chunks: RawChunk[]; note?: string };
+export type Sound = { mux: "aac" | "opus"; config: AudioDecoderConfig; chunks: RawChunk[]; note?: string };
 
 /** Encode the mixed sound with a WebCodecs AudioEncoder; null if the codec isn't available. */
 async function encodeWith(codec: string, audio: AudioBuffer): Promise<{ config: AudioDecoderConfig; chunks: RawChunk[] } | null> {
@@ -164,7 +164,7 @@ async function aacFromServer(opus: { config: AudioDecoderConfig; chunks: RawChun
  * else Opus converted to AAC by the server, else Opus as is (plays in browsers and VLC, not in
  * QuickTime or iOS Photos), with a note saying so.
  */
-async function encodeAudio(audio: AudioBuffer, signal?: AbortSignal): Promise<Sound | null> {
+export async function encodeAudio(audio: AudioBuffer, signal?: AbortSignal): Promise<Sound | null> {
   const aac = await encodeWith("mp4a.40.2", audio);
   if (aac) return { mux: "aac", ...aac };
   const opus = await encodeWith("opus", audio);
