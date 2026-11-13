@@ -44,12 +44,12 @@ before(async () => {
   origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   process.env.FAL_QUEUE_URL = origin;
   process.env.FAL_KEY = "test-key";
-  process.env.AI_VIDEO_DAILY = "3";
+  process.env.AI_VIDEO_DAILY_CREDITS = "300";
 });
 after(() => server.close());
 
 test("a generation is queued, polled and finishes with a playable clip", async () => {
-  const { generate, jobStatus, aiVideoUsed } = await import("./aivideo");
+  const { generate, jobStatus, aiVideoUsage } = await import("./aivideo");
   const { videoHostAllowed } = await import("./connectors");
   const { id, model } = await generate({ model: "kling-3-pro", mode: "text", prompt: "a fox runs", duration: 5, aspect: "9:16" }, "u:1");
   assert.equal(model, "Kling 3 Pro");
@@ -57,7 +57,7 @@ test("a generation is queued, polled and finishes with a playable clip", async (
   const sent = seen.at(-1)!;
   assert.equal(sent.path, "/fal-ai/kling-video/v3/pro/text-to-video");
   assert.deepEqual(sent.body, { prompt: "a fox runs", aspect_ratio: "9:16", duration: "5", generate_audio: true });
-  assert.equal(aiVideoUsed("u:1"), 1);
+  assert.equal((await aiVideoUsage("u:1")).used, 112, "Kling 3 Pro, 5 s at 1080p with sound: about $1.12");
   assert.deepEqual(await jobStatus(id), { state: "queued", position: 2 });
   assert.deepEqual(await jobStatus(id), { state: "running" });
   const done = await jobStatus(id);
@@ -90,22 +90,37 @@ test("a finished job with no video says why", async () => {
 });
 
 test("failures are explained and don't use up the day's count", async () => {
-  const { generate, aiVideoUsed, AiVideoError } = await import("./aivideo");
-  const before = aiVideoUsed("u:2");
+  const { generate, aiVideoUsage, AiVideoError } = await import("./aivideo");
+  const before = (await aiVideoUsage("u:2")).used;
   nextFailure = { status: 422, body: { detail: [{ msg: "duration must be 5 or 10" }] } };
   await assert.rejects(generate({ model: "sora-2", mode: "text", prompt: "x" }, "u:2"), /didn't accept these settings: duration must be 5 or 10/);
   nextFailure = { status: 403, body: { detail: "User is locked. Exhausted balance." } };
   await assert.rejects(generate({ model: "sora-2", mode: "text", prompt: "x" }, "u:2"), /Exhausted balance/);
   await assert.rejects(generate({ model: "sora-2", mode: "image", prompt: "x" }, "u:2"), (e: unknown) => e instanceof AiVideoError && e.status === 400 && /Add an image/.test(e.message));
-  assert.equal(aiVideoUsed("u:2"), before);
+  assert.equal((await aiVideoUsage("u:2")).used, before);
 });
 
-test("the daily cap holds per person", async () => {
-  const { generate, aiVideoUsed, AiVideoError } = await import("./aivideo");
-  for (let i = 0; i < 3; i++) await generate({ model: "hailuo-02", mode: "text", prompt: "x" }, "u:3");
-  await assert.rejects(generate({ model: "hailuo-02", mode: "text", prompt: "x" }, "u:3"), (e: unknown) => e instanceof AiVideoError && e.status === 429);
-  assert.equal(aiVideoUsed("u:3"), 3);
+test("the daily credit allowance holds per person", async () => {
+  const { generate, aiVideoUsage, AiVideoError } = await import("./aivideo");
+  // Hailuo 02: 6 s at 768P, about $0.27 = 27 credits; 300 a day buys 11 of them
+  for (let i = 0; i < 11; i++) await generate({ model: "hailuo-02", mode: "text", prompt: "x" }, "u:3");
+  assert.equal((await aiVideoUsage("u:3")).used, 297);
+  await assert.rejects(generate({ model: "hailuo-02", mode: "text", prompt: "x" }, "u:3"), (e: unknown) => e instanceof AiVideoError && e.status === 429 && /needs about 27 credits and you have 3 left/.test(e.message));
   await generate({ model: "hailuo-02", mode: "text", prompt: "x" }, "u:4"); // someone else is unaffected
+});
+
+test("a clip that fails gives its credits back", async () => {
+  const { generate, jobStatus, aiVideoUsage } = await import("./aivideo");
+  const before = (await aiVideoUsage("u:9")).used;
+  const { id, credits } = await generate({ model: "sora-2", mode: "text", prompt: "x", duration: 8 }, "u:9");
+  assert.equal(credits, 80);
+  assert.equal((await aiVideoUsage("u:9")).used, before + 80);
+  const keep = result;
+  result = { video: null };
+  polls.set(id.split(".").pop()!, 2);
+  assert.equal((await jobStatus(id)).state, "failed");
+  result = keep;
+  assert.equal((await aiVideoUsage("u:9")).used, before, "refunded");
 });
 
 test("without a key nothing is sent", async () => {

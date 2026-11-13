@@ -6,12 +6,13 @@
 import type { Request, Response } from "express";
 import { Readable } from "node:stream";
 import { randomBytes } from "node:crypto";
-import { normalize, buildInput, modelById, onFal, supports, VIDEO_MODELS, PROVIDER_NAMES, type GenMode, type GenRequest, type Normal, type Provider } from "../src/aivideo/models";
+import { normalize, buildInput, modelById, onFal, supports, estimateCost, USD_PER_SECOND, VIDEO_MODELS, PROVIDER_NAMES, type GenMode, type GenRequest, type Normal, type Provider } from "../src/aivideo/models";
 import { rememberVideoUrls } from "./connectors";
 import { MAKERS, MakerError, type Source } from "./videoProviders";
 import { safeFetch } from "./safeFetch";
 import { createReadStream, statSync } from "node:fs";
 import { storageOn, clipKey, stored, saveClip, readClip } from "./storage";
+import { reserve, release, commit, settle, spentToday, dailyLimitFor, OverLimit, type Actor } from "./videoLedger";
 import { isOff, envOff, switchedOff, ALL_ROUTES } from "./aivideoSwitches";
 
 type Route = Provider | "fal";
@@ -47,30 +48,21 @@ export function aiVideoConnections() {
     models: VIDEO_MODELS.filter((m) => (r === "fal" ? onFal(m, "text") || onFal(m, "image") : m.direct?.provider === r)).map((m) => m.name),
   }));
 }
-/** Clips one person can generate a day (each one costs money). */
-export const aiVideoDailyLimit = () => {
-  const n = Number(process.env.AI_VIDEO_DAILY);
-  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 20;
-};
-
-// ---------------------------------------------------------------- daily use, per person
-const used = new Map<string, { day: string; n: number }>();
-const today = () => new Date().toISOString().slice(0, 10);
-export function aiVideoUsed(who: string) {
-  const u = used.get(who);
-  return u && u.day === today() ? u.n : 0;
+/** Price list in dollars per second, with any AIV_PRICE_<ID> overrides from the environment. */
+export function prices(): Record<string, number> {
+  const out = { ...USD_PER_SECOND };
+  for (const m of VIDEO_MODELS) {
+    const v = Number(process.env[`AIV_PRICE_${m.id.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`]);
+    if (Number.isFinite(v) && v >= 0 && v < 100) out[m.id] = v;
+  }
+  return out;
 }
-function take(who: string): boolean {
-  const n = aiVideoUsed(who);
-  if (n >= aiVideoDailyLimit()) return false;
-  used.set(who, { day: today(), n: n + 1 });
-  if (used.size > 5000) for (const k of [...used.keys()].slice(0, 1000)) used.delete(k);
-  return true;
+const asActor = (a: string | Actor): Actor => (typeof a === "string" ? { who: a } : a);
+/** Today's credits for a person, and their allowance (null: no limit). */
+export async function aiVideoUsage(a: string | Actor) {
+  const actor = asActor(a);
+  return { used: await spentToday(actor.who), limit: dailyLimitFor(actor) };
 }
-const giveBack = (who: string) => {
-  const u = used.get(who);
-  if (u && u.day === today() && u.n > 0) u.n--;
-};
 
 export class AiVideoError extends Error {
   constructor(message: string, readonly status = 400) {
@@ -198,7 +190,8 @@ export function serveInput(req: Request, res: Response) {
 // ---------------------------------------------------------------- generate
 const routeName = (r: Route) => PROVIDER_NAMES[r];
 /** Queue a generation on the first route that takes it; returns the job id the studio polls with. */
-export async function generate(req: GenRequest, who: string, origin = ""): Promise<{ id: string; model: string; route: Route; via: string; notes?: string[] }> {
+export async function generate(req: GenRequest, actorOrWho: string | Actor, origin = ""): Promise<{ id: string; model: string; route: Route; via: string; notes?: string[]; credits: number; usd: number }> {
+  const actor = asActor(actorOrWho);
   let n: Normal;
   try {
     n = normalize(req);
@@ -213,17 +206,26 @@ export async function generate(req: GenRequest, who: string, origin = ""): Promi
     if (offNow.length) throw new AiVideoError(`${n.model.name} isn't available: ${offNow.join(" and ")} ${offNow.length > 1 ? "are" : "is"} switched off.`, 503);
     throw new AiVideoError(`${n.model.name} isn't connected: add ${d ? MAKERS[d.provider].keyName : ""}${d && onFal(n.model, n.mode) ? " or " : ""}${onFal(n.model, n.mode) ? "FAL_KEY" : ""} on the server.`, 503);
   }
-  if (!take(who)) throw new AiVideoError(`You've made today's ${aiVideoDailyLimit()} AI videos. The count resets at midnight UTC.`, 429);
+  const cost = estimateCost(n, prices());
+  let hold: string;
+  try {
+    hold = await reserve(actor, cost.credits, cost.usd);
+  } catch (e) {
+    if (e instanceof OverLimit) throw new AiVideoError(e.message, 429);
+    throw e;
+  }
   const notes: string[] = [];
   for (const [i, route] of routes.entries()) {
     try {
       const rid = route === "fal" ? await falSubmit(req) : await MAKERS[route].submit(n, n.model.direct!, { publicImage: async (u) => hostImage(u, origin) });
-      return { id: makeId(n, route, rid), model: n.model.name, route, via: routeName(route), ...(notes.length && { notes }) };
+      const id = makeId(n, route, rid);
+      await commit(hold, { id, actor, model: n.model.id, route }).catch((e) => console.error(`Couldn't record video job ${id}: ${e?.message ?? e}`));
+      return { id, model: n.model.name, route, via: routeName(route), ...(notes.length && { notes }), credits: cost.credits, usd: cost.usd };
     } catch (e) {
       const err = e instanceof MakerError ? e : new MakerError(String((e as Error)?.message ?? e), 502, true);
       notes.push(`${routeName(route)} ${err.message}`);
       if (err.retry && i < routes.length - 1) continue;
-      giveBack(who); // a request that never queued doesn't count
+      release(hold); // a request that never queued costs nothing
       throw new AiVideoError(notes.length > 1 ? `${notes.join(". Then ")}.` : `${routeName(route)} ${err.message}.`, err.status);
     }
   }
@@ -234,8 +236,13 @@ export async function generate(req: GenRequest, who: string, origin = ""): Promi
 export type JobState = { state: "queued" | "running" | "done" | "failed"; position?: number; progress?: number; video?: { url: string; width?: number; height?: number }; error?: string };
 export const fileUrl = (id: string) => `/api/aivideo/file?id=${encodeURIComponent(id)}`;
 
-/** Where a job is; when it's done, where its video plays from. */
+/** Where a job is; when it's done, where its video plays from. A failed job gets its credits back. */
 export async function jobStatus(id: string): Promise<JobState> {
+  const s = await jobStatusInner(id);
+  if (s.state === "done" || s.state === "failed") await settle(id, s.state).catch((e) => console.error(`Couldn't settle video job ${id}: ${e?.message ?? e}`));
+  return s;
+}
+async function jobStatusInner(id: string): Promise<JobState> {
   const j = parseId(id);
   if (j.route === "fal") {
     const s = await falStatus(j.model, j.mode, j.rid);

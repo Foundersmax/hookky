@@ -69,6 +69,21 @@ create table if not exists settings (
   value jsonb not null,
   updated_at timestamptz not null default now()
 );
+alter table users add column if not exists video_daily_credits integer;
+create table if not exists video_jobs (
+  id text primary key,
+  user_id bigint references users(id) on delete set null,
+  who text not null,
+  model text not null,
+  route text not null,
+  credits integer not null,
+  usd numeric(12,4) not null,
+  state text not null default 'queued' check (state in ('queued', 'done', 'failed')),
+  created_at timestamptz not null default now(),
+  settled_at timestamptz
+);
+create index if not exists video_jobs_who_created on video_jobs (who, created_at);
+create index if not exists video_jobs_created on video_jobs (created_at);
 create table if not exists usage (
   user_id bigint not null references users(id) on delete cascade,
   day date not null,

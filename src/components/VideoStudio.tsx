@@ -4,14 +4,137 @@ import { uid } from "../engine/util";
 import { download } from "../export";
 import { handoff } from "../handoff";
 import { Icon } from "./Icon";
-import { VIDEO_MODELS, supports, type GenMode, type VideoModel } from "../aivideo/models";
+import { VIDEO_MODELS, supports, normalize, estimateCost, type GenMode, type VideoModel } from "../aivideo/models";
 import { useGenerations, startGeneration, removeGeneration, clearFinished, refreshUsage, pending, playable, fetchClip, fileName, type Generation } from "../aivideo/store";
 
 const MAX_MODELS = 3;
 
 type Connection = { id: string; name: string; keyName: string; keySet: boolean; on: boolean; locked: boolean; models: string[] };
-/** Admins: switch each video connection on or off for everyone. */
+type Spend = {
+  report: {
+    month: { usd: number; credits: number; clips: number; failed: number; budgetUsd: number | null };
+    today: { usd: number; clips: number };
+    byRoute: { route: string; clips: number; usd: number }[];
+    byModel: { model: string; clips: number; usd: number }[];
+    people: { who: string; email?: string; name?: string; clips: number; credits: number; usd: number; today: number }[];
+  };
+  limits: { dailyCredits: number | null; monthlyBudgetUsd: number | null };
+};
+const usd = (n: number) => `$${n < 1000 ? n.toFixed(2) : Math.round(n).toLocaleString("en-US")}`;
+const ROUTE_NAMES: Record<string, string> = { google: "Google Vertex AI", openai: "OpenAI", kling: "Kling", minimax: "MiniMax", byteplus: "BytePlus ModelArk", luma: "Luma", fal: "fal.ai" };
+
+/** Admins: this month's estimated spend, and the limits that cap it. */
+function Spending() {
+  const [data, setData] = useState<Spend | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState<string | null>(null);
+  const [daily, setDaily] = useState("");
+  const [budget, setBudget] = useState("");
+  const load = () =>
+    fetch("/api/admin/aivideo/spend")
+      .then(async (r) => {
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(j.error ?? `The server answered ${r.status}.`);
+        setData(j);
+        setDaily(j.limits.dailyCredits === null ? "" : String(j.limits.dailyCredits));
+        setBudget(j.limits.monthlyBudgetUsd === null ? "" : String(j.limits.monthlyBudgetUsd));
+      })
+      .catch((e) => setError(e.message));
+  useEffect(() => void load(), []);
+  const save = async () => {
+    setError(null);
+    setSaved(null);
+    try {
+      const r = await fetch("/api/admin/aivideo/limits", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dailyCredits: daily.trim(), monthlyBudgetUsd: budget.trim() }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error ?? `The server answered ${r.status}.`);
+      setSaved("Saved.");
+      void load();
+      void refreshUsage();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  if (error && !data) return <p className="vs-error" role="alert">{error}</p>;
+  if (!data) return <p className="vs-conn-lead">Loading…</p>;
+  const { month, today, byRoute, byModel, people } = data.report;
+  const pct = month.budgetUsd ? Math.min(100, (month.usd / month.budgetUsd) * 100) : 0;
+  return (
+    <div className="vs-spend">
+      <div className="vs-spend-top">
+        <div>
+          <small>This month (estimated)</small>
+          <b>{usd(month.usd)}</b>
+          <small>{month.clips} clips{month.failed ? ` · ${month.failed} failed (not counted)` : ""}</small>
+        </div>
+        <div>
+          <small>Today</small>
+          <b>{usd(today.usd)}</b>
+          <small>{today.clips} clips</small>
+        </div>
+        <div>
+          <small>Monthly budget</small>
+          <b>{month.budgetUsd === null ? "None" : usd(month.budgetUsd)}</b>
+          <small>{month.budgetUsd === null ? "no cap on spend" : `${usd(Math.max(0, month.budgetUsd - month.usd))} left`}</small>
+        </div>
+      </div>
+      {month.budgetUsd !== null && (
+        <div className={`vs-meter big ${pct >= 90 ? "hot" : ""}`} role="meter" aria-label="Monthly budget used" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)}>
+          <span style={{ width: `${pct}%` }} />
+        </div>
+      )}
+      <div className="vs-spend-limits">
+        <div className="field">
+          <label htmlFor="vs-daily">Credits per person a day</label>
+          <input id="vs-daily" type="number" min={0} inputMode="numeric" value={daily} placeholder="No limit" onChange={(e) => setDaily(e.target.value)} />
+          <small>1 credit ≈ $0.01. Admins have no daily limit. Set a person's own in People.</small>
+        </div>
+        <div className="field">
+          <label htmlFor="vs-budget">Monthly budget (US$)</label>
+          <input id="vs-budget" type="number" min={0} step="1" inputMode="decimal" value={budget} placeholder="No budget" onChange={(e) => setBudget(e.target.value)} />
+          <small>When it's reached, nobody can generate until next month or until it's raised.</small>
+        </div>
+        <div className="vs-spend-save">
+          <button className="btn primary" onClick={() => void save()}>Save limits</button>
+          {saved && <small role="status">{saved}</small>}
+        </div>
+      </div>
+      {error && <p className="vs-error" role="alert">{error}</p>}
+      <div className="vs-spend-tables">
+        <table>
+          <caption>By maker</caption>
+          <tbody>
+            {byRoute.length ? byRoute.map((r) => (
+              <tr key={r.route}><td>{ROUTE_NAMES[r.route] ?? r.route}</td><td>{r.clips}</td><td>{usd(r.usd)}</td></tr>
+            )) : <tr><td colSpan={3}>No clips yet this month.</td></tr>}
+          </tbody>
+        </table>
+        <table>
+          <caption>By model</caption>
+          <tbody>
+            {byModel.length ? byModel.map((r) => (
+              <tr key={r.model}><td>{VIDEO_MODELS.find((m) => m.id === r.model)?.name ?? r.model}</td><td>{r.clips}</td><td>{usd(r.usd)}</td></tr>
+            )) : <tr><td colSpan={3}>No clips yet this month.</td></tr>}
+          </tbody>
+        </table>
+        <table className="wide">
+          <caption>People this month</caption>
+          <thead><tr><th>Person</th><th>Clips</th><th>Credits today</th><th>Month</th></tr></thead>
+          <tbody>
+            {people.length ? people.map((p) => (
+              <tr key={p.who}><td>{p.name || p.email || (p.who === "everyone" ? "Everyone" : p.who)}</td><td>{p.clips}</td><td>{p.today}</td><td>{usd(p.usd)}</td></tr>
+            )) : <tr><td colSpan={4}>No clips yet this month.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      <p className="vs-conn-lead">Estimates from list prices; your makers' bills are the real figure. Override a model's price with <code>AIV_PRICE_&lt;MODEL&gt;</code> (dollars per second) in the server's environment.</p>
+    </div>
+  );
+}
+
+/** Admins: switch each video connection on or off for everyone, and see and cap the spend. */
 function Connections({ onClose }: { onClose: () => void }) {
+  const [tab, setTab] = useState<"connections" | "spend">("connections");
   const [list, setList] = useState<Connection[] | null>(null);
   const [storage, setStorage] = useState<{ on: boolean; bucket: string | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -46,9 +169,14 @@ function Connections({ onClose }: { onClose: () => void }) {
     <div className="sheet-backdrop" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="sheet vs-conn" role="dialog" aria-modal="true" aria-labelledby="vs-conn-title">
         <div className="sheet-head">
-          <h3 id="vs-conn-title">Video connections</h3>
+          <h3 id="vs-conn-title">AI video settings</h3>
           <button className="btn ghost icon" aria-label="Close" onClick={onClose}>×</button>
         </div>
+        <div className="seg vs-conn-tabs" role="tablist">
+          <button role="tab" aria-selected={tab === "connections"} className={tab === "connections" ? "on" : ""} onClick={() => setTab("connections")}>Connections</button>
+          <button role="tab" aria-selected={tab === "spend"} className={tab === "spend" ? "on" : ""} onClick={() => setTab("spend")}>Spending & limits</button>
+        </div>
+        {tab === "spend" ? <Spending /> : <>
         <p className="vs-conn-lead">Switch a maker off to stop new videos on its account, for everyone. Clips already rendering still finish. A model whose maker is off runs on fal.ai instead, if fal.ai is on.</p>
         {error && <p className="vs-error" role="alert">{error}</p>}
         {!list && !error && <p className="vs-conn-lead">Loading…</p>}
@@ -80,6 +208,7 @@ function Connections({ onClose }: { onClose: () => void }) {
             </li>
           ))}
         </ul>
+        </>}
       </div>
     </div>
   );
@@ -180,7 +309,7 @@ function Card({ g, onReuse }: { g: Generation; onReuse: (g: Generation) => void 
     addAssets([{ id: uid("a"), kind: "video", title: g.prompt.slice(0, 60), src: g.url!, thumb, source: `AI · ${g.modelName}`, w: v?.videoWidth || g.w, h: v?.videoHeight || g.h, duration: v && Number.isFinite(v.duration) ? v.duration : g.settings.duration }]);
     say("Added to your library. Open a project and find it under Assets.");
   };
-  const meta = [g.mode === "image" ? "Image → video" : "Text → video", g.settings.aspect, g.settings.duration && `${g.settings.duration}s`, g.settings.resolution, g.via && `via ${g.via}`].filter(Boolean).join(" · ");
+  const meta = [g.mode === "image" ? "Image → video" : "Text → video", g.settings.aspect, g.settings.duration && `${g.settings.duration}s`, g.settings.resolution, g.via && `via ${g.via}`, g.credits && (g.state === "failed" ? `${g.credits} credits returned` : `${g.credits} credits`)].filter(Boolean).join(" · ");
   return (
     <article className={`vs-card ${g.state}`}>
       <div className="vs-media">
@@ -281,8 +410,17 @@ export function VideoStudio() {
     setError(null);
     setPicked((p) => (p.includes(m.id) ? (p.length > 1 ? p.filter((x) => x !== m.id) : p) : p.length >= MAX_MODELS ? [...p.slice(1), m.id] : [...p, m.id]));
   };
-  const left = usage ? Math.max(0, usage.limit - usage.used) : 0;
-  const why = !usage ? "Checking the server…" : !usage.configured ? null : !models.length ? `Pick a model that does ${mode === "text" ? "text to video" : "image to video"}.` : !prompt.trim() ? "Describe the video." : mode === "image" && !image ? "Add the image to animate." : left < models.length ? (left ? `Only ${left} left today: pick fewer models.` : `You've made today's ${usage.limit} videos. The count resets at midnight UTC.`) : null;
+  // what this would cost: each picked model at the length, quality and sound it would really use
+  const costs = models.map((m) => {
+    try {
+      return { m, ...estimateCost(normalize({ model: m.id, mode, prompt: "x", image: "data:image/png;base64,AA==", aspect, duration, resolution, audio }), usage?.prices) };
+    } catch {
+      return { m, usd: 0, credits: 0, seconds: 0 };
+    }
+  });
+  const totalCredits = costs.reduce((s, c) => s + c.credits, 0);
+  const left = usage ? (usage.limit === null ? Infinity : Math.max(0, usage.limit - usage.used)) : 0;
+  const why = !usage ? "Checking the server…" : !usage.configured ? null : !models.length ? `Pick a model that does ${mode === "text" ? "text to video" : "image to video"}.` : !prompt.trim() ? "Describe the video." : mode === "image" && !image ? "Add the image to animate." : totalCredits > left ? (left === 0 ? `You've used today's ${usage.limit} video credits. They reset at midnight UTC.` : `This needs about ${totalCredits} credits and you have ${left} left today. Try fewer models, a shorter clip or a lower quality.`) : null;
   const canGo = !!usage?.configured && !why && !sending;
 
   async function go() {
@@ -472,8 +610,14 @@ export function VideoStudio() {
           {error && <p className="vs-error" role="alert">{error}</p>}
           <button className="btn primary vs-generate" disabled={!canGo} onClick={() => void go()} title={why ?? "Generate (⌘↵)"}>
             <Icon name="sparkle" /> {sending ? "Sending…" : models.length > 1 ? `Generate on ${models.length} models` : "Generate"}
+            {totalCredits > 0 && !sending && <span className="vs-cost" title={costs.map((c) => `${c.m.name}: about ${c.credits} credits`).join("\n")}>≈ {totalCredits} credits</span>}
           </button>
-          <small className="vs-usage">{why ?? (usage?.configured ? `${usage.used} of ${usage.limit} made today${usage.storage ? " · clips are kept" : ""} · each clip is billed by the model's maker${models.length === 1 && usage.routes?.[models[0].id] ? ` (${usage.routes[models[0].id]!.via})` : ""}` : "")}</small>
+          {usage?.configured && usage.limit !== null && (
+            <div className="vs-meter" role="meter" aria-label="Video credits used today" aria-valuemin={0} aria-valuemax={usage.limit} aria-valuenow={usage.used}>
+              <span style={{ width: `${Math.min(100, (usage.used / Math.max(1, usage.limit)) * 100)}%` }} />
+            </div>
+          )}
+          <small className="vs-usage">{why ?? (usage?.configured ? `${usage.limit === null ? `${usage.used} credits used today · no daily limit` : `${usage.used} of ${usage.limit} credits used today`}${usage.storage ? " · clips are kept" : ""}${models.length === 1 && usage.routes?.[models[0].id] ? ` · runs on ${usage.routes[models[0].id]!.via}` : ""}` : "")}</small>
         </div>
       </aside>
 
@@ -489,8 +633,8 @@ export function VideoStudio() {
               </button>
             )}
             {admin && (
-              <button className="btn" onClick={() => setConn(true)} title="Switch video makers on or off for everyone">
-                <Icon name="link" /> Connections
+              <button className="btn" onClick={() => setConn(true)} title="Video makers, spending and limits">
+                <Icon name="link" /> Settings
               </button>
             )}
           </span>

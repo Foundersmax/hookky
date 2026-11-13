@@ -85,7 +85,7 @@ before(async () => {
     R2_ENDPOINT: s3o, R2_ACCESS_KEY_ID: "AK-TEST", R2_SECRET_ACCESS_KEY: "secret", R2_BUCKET: "bucket-1",
     KLING_API_KEY: "k", KLING_BASE_URL: `${mo}/kling`,
     FAL_KEY: "f", FAL_QUEUE_URL: `${mo}/fal`,
-    AI_VIDEO_DAILY: "100",
+    AI_VIDEO_DAILY_CREDITS: "1000000",
   });
   const { serveFile } = await import("./aivideo");
   const e = express();

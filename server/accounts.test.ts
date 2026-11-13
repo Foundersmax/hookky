@@ -112,6 +112,14 @@ test("sign-up → confirm email → admin approval → sign in", { skip }, async
   assert.equal((await ana.call("POST", "/api/agent-turn", {})).json.ok, true, "a raised limit applies at once");
   for (let i = 0; i < 4; i++) assert.equal((await owner.call("POST", "/api/agent-turn", {})).json.limit, null);
 
+  // Video credits: Ana gets the default; an admin sets her own allowance.
+  let row = (await owner.call("GET", "/api/admin/users")).json.users.find((u: any) => u.id === anaRow.id);
+  assert.deepEqual([row.video_daily_credits, row.video_limit, row.video_today], [null, 300, 0]);
+  assert.equal((await owner.call("POST", `/api/admin/users/${anaRow.id}`, { action: "set_video_limit", limit: 1200 })).status, 200);
+  assert.equal((await owner.call("POST", `/api/admin/users/${anaRow.id}`, { action: "set_video_limit", limit: -5 })).status, 400);
+  row = (await owner.call("GET", "/api/admin/users")).json.users.find((u: any) => u.id === anaRow.id);
+  assert.deepEqual([row.video_daily_credits, row.video_limit], [1200, 1200]);
+
   // Disabling signs Ana out everywhere.
   assert.equal((await owner.call("POST", `/api/admin/users/${anaRow.id}`, { action: "disable" })).status, 200);
   assert.equal((await ana.call("GET", "/api/thing")).status, 401);

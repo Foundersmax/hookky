@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { VIDEO_MODELS, buildInput, normalize, modelById, supports, onFal } from "./aivideo/models";
+import { VIDEO_MODELS, buildInput, normalize, modelById, supports, onFal, estimateCost, USD_PER_SECOND } from "./aivideo/models";
 
 const IMG = "data:image/jpeg;base64,/9j/4AAQ";
 
@@ -86,4 +86,16 @@ test("bad requests are refused in plain words", () => {
   assert.equal(buildInput({ model: "sora-2", mode: "text", prompt: "x".repeat(5000) }).input.prompt, "x".repeat(2000));
   assert.equal(buildInput({ model: "veo-31", mode: "text", prompt: "x", seed: -4 }).input.seed, undefined);
   assert.ok(modelById("seedance-15-pro"));
+});
+
+test("cost estimates: per second, by quality, sound and length", () => {
+  const c = (r: Parameters<typeof normalize>[0]) => estimateCost(normalize(r));
+  assert.deepEqual(c({ model: "veo-31", mode: "text", prompt: "x", duration: 8, resolution: "1080p" }), { usd: 5.12, credits: 512, seconds: 8 });
+  assert.equal(c({ model: "veo-31", mode: "text", prompt: "x", duration: 8, resolution: "1080p", audio: false }).credits, 256, "silent Veo is half price");
+  assert.equal(c({ model: "seedance-25", mode: "text", prompt: "x", duration: 30, resolution: "1080p" }).credits, 1440);
+  assert.equal(c({ model: "seedance-25", mode: "text", prompt: "x", duration: 4, resolution: "480p" }).credits, 72, "a short draft is a twentieth of that");
+  assert.equal(c({ model: "hailuo-23-pro", mode: "text", prompt: "x" }).credits, 79, "fixed 6 s at 1080P");
+  assert.equal(c({ model: "ltx-23-fast", mode: "text", prompt: "x", duration: 6, resolution: "2160p" }).credits, 96);
+  assert.equal(estimateCost(normalize({ model: "sora-2", mode: "text", prompt: "x", duration: 4 }), { "sora-2": 0.0001 }).credits, 1, "never below one credit");
+  for (const m of VIDEO_MODELS) assert.ok(USD_PER_SECOND[m.id] > 0, `${m.id} has a price`);
 });

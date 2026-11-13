@@ -112,7 +112,7 @@ before(async () => {
     BYTEPLUS_ARK_API_KEY: "a-key", ARK_BASE_URL: `${origin}/ark/api/v3`,
     LUMA_API_KEY: "l-key", LUMA_BASE_URL: `${origin}/luma`,
     FAL_KEY: "f-key", FAL_QUEUE_URL: `${origin}/fal`,
-    AI_VIDEO_DAILY: "100", AIV_ALLOW_HTTP_INPUTS: "1",
+    AI_VIDEO_DAILY_CREDITS: "1000000", AIV_ALLOW_HTTP_INPUTS: "1",
   });
   const { serveFile, serveInput } = await import("./aivideo");
   const e = express();
@@ -278,7 +278,7 @@ test("Luma Ray: frames handed over as short-lived links on this server", async (
 });
 
 test("a maker that is down or refuses the key falls back to fal.ai; bad settings don't", async () => {
-  const { generate, aiVideoUsed } = await import("./aivideo");
+  const { generate, aiVideoUsage } = await import("./aivideo");
   fails["/kling/"] = { status: 200, body: { code: 1102, message: "Account balance not enough" } };
   const out = await generate({ model: "kling-3-standard", mode: "text", prompt: "x" }, "u:f");
   assert.equal(out.route, "fal");
@@ -287,10 +287,10 @@ test("a maker that is down or refuses the key falls back to fal.ai; bad settings
   assert.equal(last("/fal/").path, "/fal/fal-ai/kling-video/v3/standard/text-to-video");
   fails["/vertex/"] = { status: 503, body: { error: { message: "Service unavailable" } } };
   assert.equal((await generate({ model: "veo-31", mode: "text", prompt: "x" }, "u:f")).route, "fal");
-  const before = aiVideoUsed("u:f");
+  const before = (await aiVideoUsage("u:f")).used;
   fails["/openai/"] = { status: 400, body: { error: { message: "Your prompt was flagged" } } };
   await assert.rejects(generate({ model: "sora-2", mode: "text", prompt: "x" }, "u:f"), /OpenAI Your prompt was flagged/);
-  assert.equal(aiVideoUsed("u:f"), before, "a refused request doesn't count");
+  assert.equal((await aiVideoUsage("u:f")).used, before, "a refused request doesn't count");
 });
 
 test("both routes failing says what each said", async () => {

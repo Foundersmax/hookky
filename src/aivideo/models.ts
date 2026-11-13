@@ -159,3 +159,32 @@ export function buildInput(req: GenRequest): { endpoint: string; input: Record<s
   if (n.seed !== undefined) input.seed = n.seed;
   return { endpoint, input, model: m };
 }
+
+// ---------------------------------------------------------------- cost
+/**
+ * Rough list prices in US dollars per second of 720p video with sound (where the model makes
+ * sound), from the makers' and fal.ai's published rates. They drive credits and the admin's spend
+ * estimate, not billing: the makers bill you directly. Override one on the server with
+ * AIV_PRICE_<ID>=0.12 (dollars per second).
+ */
+export const USD_PER_SECOND: Record<string, number> = {
+  "seedance-25": 0.3, "seedance-20": 0.25, "seedance-20-fast": 0.12, "seedance-15-pro": 0.052, "seedance-1-fast": 0.025,
+  "kling-3-pro": 0.14, "kling-3-standard": 0.084, "kling-25-turbo": 0.07,
+  "hailuo-23-pro": 0.082, "hailuo-23-standard": 0.047, "hailuo-02": 0.045,
+  "veo-31": 0.4, "veo-31-fast": 0.15, "sora-2": 0.1, "wan-26": 0.1, "luma-ray-2": 0.1,
+  "pixverse-6": 0.06, "vidu-q3": 0.07, "ltx-23-fast": 0.04, "grok-imagine": 0.05,
+};
+const RES_FACTOR: Record<string, number> = { "480p": 0.6, "540p": 0.75, "720p": 1, "768P": 1, "1080p": 1.6, "1080P": 1.6, "1440p": 2.5, "2160p": 4 };
+/** One credit is about one US cent of estimated cost. */
+export const USD_PER_CREDIT = 0.01;
+
+/** What a request is likely to cost, in dollars and credits. Assumes the length and quality it will really get. */
+export function estimateCost(n: Normal, prices: Record<string, number> = USD_PER_SECOND): { usd: number; credits: number; seconds: number } {
+  const m = n.model;
+  const seconds = n.duration ?? (m.id.startsWith("hailuo") ? 6 : m.id === "sora-2" ? 4 : 5);
+  const res = n.resolution ?? m.direct?.resolution ?? "720p";
+  let usd = (prices[m.id] ?? 0.1) * seconds * (RES_FACTOR[res] ?? 1);
+  if (n.audio === false) usd *= m.family === "Veo" ? 0.5 : 0.75; // silent clips are cheaper on most makers
+  usd = Math.round(usd * 10000) / 10000;
+  return { usd, credits: Math.max(1, Math.ceil(Math.round((usd / USD_PER_CREDIT) * 1000) / 1000)), seconds };
+}

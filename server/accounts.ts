@@ -1,5 +1,6 @@
 // Accounts: sign-up with email verification and admin approval, sessions, password reset, an
 // admin API, and per-user daily limits on agent turns. Active only when DATABASE_URL is set.
+import { dailyLimitFor, limits as videoLimits } from "./videoLedger";
 import express, { type Request, type Response, type NextFunction } from "express";
 import { randomBytes, scrypt as scryptCb, createHash, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
@@ -18,6 +19,8 @@ export interface User {
   role: Role;
   status: Status;
   daily_limit: number | null;
+  /** AI video credits a day (null: the default) */
+  video_daily_credits?: number | null;
 }
 declare module "express-serve-static-core" {
   interface Request {
@@ -152,7 +155,7 @@ export async function sessionUser(req: Request): Promise<User | null> {
   const { rows } = await db().query(
     `update sessions s set last_seen_at = now() from users u
      where s.token_hash = $1 and s.expires_at > now() and u.id = s.user_id and u.status = 'active'
-     returning u.id, u.email, u.name, u.role, u.status, u.daily_limit`,
+     returning u.id, u.email, u.name, u.role, u.status, u.daily_limit, u.video_daily_credits`,
     [sha(t)],
   );
   return rows[0] ? { ...rows[0], id: Number(rows[0].id) } : null;
@@ -384,7 +387,8 @@ export function accountRoutes() {
     const q = String(req.query.q ?? "").trim().toLowerCase().slice(0, 100);
     const status = String(req.query.status ?? "");
     const { rows } = await db().query(
-      `select u.id, u.email, u.name, u.role, u.status, u.daily_limit, u.created_at, u.verified_at, u.approved_at, u.last_login_at,
+      `select u.id, u.email, u.name, u.role, u.status, u.daily_limit, u.video_daily_credits, u.created_at, u.verified_at, u.approved_at, u.last_login_at,
+              coalesce((select sum(credits) from video_jobs where user_id = u.id and state <> 'failed' and created_at >= date_trunc('day', now() at time zone 'utc') at time zone 'utc'), 0)::int as video_today,
               coalesce((select agent_turns from usage where user_id = u.id and day = current_date), 0) as today,
               coalesce((select sum(agent_turns) from usage where user_id = u.id and day > current_date - 30), 0)::int as last30
        from users u
@@ -394,7 +398,7 @@ export function accountRoutes() {
        limit 500`,
       [q, ["unverified", "pending", "active", "disabled"].includes(status) ? status : ""],
     );
-    res.json({ users: rows.map((u) => ({ ...u, id: Number(u.id), limit: limitFor(u) })), defaultLimit: defaultLimit() });
+    res.json({ users: rows.map((u) => ({ ...u, id: Number(u.id), limit: limitFor(u), video_limit: dailyLimitFor({ who: `u:${u.id}`, role: u.role, videoDailyCredits: u.video_daily_credits }) })), defaultLimit: defaultLimit(), defaultVideoLimit: videoLimits().dailyCredits });
   });
 
   r.post("/api/admin/users/:id", async (req, res) => {
@@ -443,6 +447,13 @@ export function accountRoutes() {
         const limit = v === null || v === "" || v === undefined ? null : Math.floor(Number(v));
         if (limit !== null && !(Number.isFinite(limit) && limit >= 0 && limit <= 100000)) return void res.status(400).json({ error: "Limit must be a number from 0 to 100000, or empty for the default." });
         await db().query("update users set daily_limit = $2 where id = $1", [id, limit]);
+        break;
+      }
+      case "set_video_limit": {
+        const v = req.body?.limit;
+        const limit = v === null || v === "" || v === undefined ? null : Math.floor(Number(v));
+        if (limit !== null && !(Number.isFinite(limit) && limit >= 0 && limit <= 1_000_000)) return void res.status(400).json({ error: "Video credits must be a number from 0 to 1000000, or empty for the default." });
+        await db().query("update users set video_daily_credits = $2 where id = $1", [id, limit]);
         break;
       }
       case "resend_verify":

@@ -9,6 +9,9 @@ interface Row {
   status: "unverified" | "pending" | "active" | "disabled";
   daily_limit: number | null;
   limit: number | null;
+  video_daily_credits: number | null;
+  video_limit: number | null;
+  video_today: number;
   today: number;
   last30: number;
   created_at: string;
@@ -39,6 +42,7 @@ export function AdminPanel() {
   const me = useStudio((s) => s.auth.user);
   const [rows, setRows] = useState<Row[] | null>(null);
   const [defaultLimit, setDefaultLimit] = useState(100);
+  const [defaultVideo, setDefaultVideo] = useState<number | null>(300);
   const [filter, setFilter] = useState<string>(() => (new URL(location.href).searchParams.get("admin") === "pending" ? "pending" : ""));
   const [q, setQ] = useState("");
   const [busyId, setBusyId] = useState<number | null>(null);
@@ -51,6 +55,7 @@ export function AdminPanel() {
       const j = await res.json();
       setRows(j.users);
       setDefaultLimit(j.defaultLimit);
+      setDefaultVideo(j.defaultVideoLimit ?? null);
       setError("");
     } catch (e: any) {
       setError(e.message);
@@ -123,6 +128,10 @@ export function AdminPanel() {
                     Agent today {u.today}
                     {u.limit === null ? " (no limit)" : ` / ${u.limit}`} · 30 days {u.last30}
                   </span>
+                  <span>
+                    Video credits today {u.video_today ?? 0}
+                    {u.video_limit === null || u.video_limit === undefined ? " (no limit)" : ` / ${u.video_limit}`}
+                  </span>
                 </div>
                 <div className="person-actions">
                   {u.status === "pending" && <button className="btn primary" disabled={busy} onClick={() => act(u, "approve")}>Approve</button>}
@@ -154,6 +163,22 @@ export function AdminPanel() {
                       />
                     </label>
                   )}
+                  <label className="limit-field" title={u.role === "admin" ? "Admins have no daily video limit unless you set one here" : `Empty uses the default (${defaultVideo === null ? "no limit" : `${defaultVideo} credits a day`})`}>
+                    Video credits/day
+                    <input
+                      type="number"
+                      min={0}
+                      max={1000000}
+                      placeholder={u.role === "admin" ? "No limit" : defaultVideo === null ? "No limit" : String(defaultVideo)}
+                      defaultValue={u.video_daily_credits ?? ""}
+                      onBlur={(e) => {
+                        const v = e.target.value.trim();
+                        if (v === String(u.video_daily_credits ?? "")) return;
+                        act(u, "set_video_limit", { limit: v === "" ? null : Number(v) });
+                      }}
+                      onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+                    />
+                  </label>
                   {!self && <button className="btn ghost danger" disabled={busy} onClick={() => act(u, "delete", {}, `Delete ${u.email}? This can't be undone.`)}>Delete</button>}
                 </div>
               </li>

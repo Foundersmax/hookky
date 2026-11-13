@@ -22,11 +22,16 @@ export interface Generation {
   /** the connection it ran on ("Kling", "fal.ai"…) and why, if it had to fall back */
   via?: string;
   note?: string;
+  /** credits charged (given back if it fails) */
+  credits?: number;
 }
 export interface Usage {
   configured: boolean;
-  limit: number;
+  /** today's video credits: the allowance (null: no limit) and what's used */
+  limit: number | null;
   used: number;
+  /** price list (dollars per second) the server charges by */
+  prices?: Record<string, number>;
   /** the connection each model would use now (null: not connected) */
   routes?: Record<string, { route: string; via: string; modes: ("text" | "image")[] } | null>;
   /** finished clips are copied to the server's storage (Cloudflare R2) */
@@ -117,8 +122,8 @@ export async function startGeneration(req: GenRequest) {
   emit();
   try {
     const out = await json("/api/aivideo/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(req) });
-    if (usage && Number.isFinite(out.used)) usage = { ...usage, used: out.used, limit: out.limit ?? usage.limit };
-    patch(local, { id: out.id, state: "queued", via: out.via, ...(out.route === "fal" && { settings: effective(req, true) }), ...(out.notes?.length && { note: `${out.notes.join(". ")}, so it ran on ${out.via}.` }) });
+    if (usage && Number.isFinite(out.used)) usage = { ...usage, used: out.used, limit: out.limit === undefined ? usage.limit : out.limit };
+    patch(local, { id: out.id, state: "queued", via: out.via, credits: out.credits, ...(out.route === "fal" && { settings: effective(req, true) }), ...(out.notes?.length && { note: `${out.notes.join(". ")}, so it ran on ${out.via}.` }) });
     ensurePolling();
   } catch (e) {
     patch(local, { state: "failed", error: (e as Error)?.message ?? "Couldn't send this to the server." });
@@ -151,7 +156,10 @@ async function poll() {
       try {
         const s = await json(`/api/aivideo/status?id=${encodeURIComponent(g.id)}`);
         if (s.state === "done" && s.video?.url) patch(g.id, { state: "done", url: s.video.url, w: s.video.width, h: s.video.height, doneAt: Date.now(), position: undefined });
-        else if (s.state === "failed") patch(g.id, { state: "failed", error: s.error ?? "The model couldn't make this one." });
+        else if (s.state === "failed") {
+          patch(g.id, { state: "failed", error: s.error ?? "The model couldn't make this one." });
+          void refreshUsage(); // its credits came back
+        }
         else if (s.state !== g.state || s.position !== g.position) patch(g.id, { state: s.state, position: s.position });
       } catch (e) {
         // a network blip or a server restart: keep waiting, unless the server says the job is unknown

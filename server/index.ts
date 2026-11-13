@@ -18,8 +18,9 @@ import { proxyVideo } from "./videoProxy";
 import { accountsEnabled, migrate } from "./db";
 import { loadSwitches, setSwitch, envOff, ALL_ROUTES } from "./aivideoSwitches";
 import { storageOn, storageBucket } from "./storage";
+import { loadLimits, setLimits, limits as videoLimits, report as videoReport, type Actor } from "./videoLedger";
 import { toAac, aacAvailable } from "./aac";
-import { generate as aiVideoGenerate, jobStatus as aiVideoStatus, aiVideoConfigured, aiVideoDailyLimit, aiVideoUsed, aiVideoProviders, aiVideoRoutes, aiVideoConnections, serveFile as aiVideoFile, serveInput as aiVideoInput, AiVideoError } from "./aivideo";
+import { generate as aiVideoGenerate, jobStatus as aiVideoStatus, aiVideoConfigured, aiVideoUsage, prices as aiVideoPrices, aiVideoProviders, aiVideoRoutes, aiVideoConnections, serveFile as aiVideoFile, serveInput as aiVideoInput, AiVideoError } from "./aivideo";
 import { accountRoutes, requireUser, sameOrigin, takeAgentTurn, authCors } from "./accounts";
 import { mailConfigured } from "./mailer";
 import { safeFetch, readLimited, BlockedUrlError } from "./safeFetch";
@@ -49,6 +50,7 @@ const accounts = accountsEnabled();
 if (accounts) {
   await migrate();
   await loadSwitches().catch((e) => console.error("Couldn't read the AI video switches:", e.message));
+  await loadLimits().catch((e) => console.error("Couldn't read the AI video limits:", e.message));
   if (!process.env.ADMIN_EMAILS?.trim()) console.warn("ADMIN_EMAILS is not set: nobody can approve new accounts. Set it to your email address.");
   if (!mailConfigured()) console.warn("BREVO_API_KEY is not set: account emails are printed to this log instead of sent.");
 }
@@ -179,16 +181,22 @@ app.post("/api/icons/resolve", async (req, res) => {
   }
 });
 
-// AI video: every model through one fal.ai key. Each generation costs money, so it has a daily cap per person.
-const aiWho = (req: express.Request) => (req.user ? `u:${req.user.id}` : "everyone");
-app.get("/api/aivideo/usage", (req, res) => {
-  res.json({ configured: aiVideoConfigured(), limit: aiVideoDailyLimit(), used: aiVideoUsed(aiWho(req)), providers: aiVideoProviders(), routes: aiVideoRoutes(), storage: storageOn() });
+// AI video: each generation costs money, so it's charged in credits against a daily allowance per
+// person and a monthly budget for the app (see videoLedger.ts).
+const aiActor = (req: express.Request): Actor => (req.user ? { who: `u:${req.user.id}`, userId: req.user.id, role: req.user.role, videoDailyCredits: req.user.video_daily_credits ?? null } : { who: "everyone" });
+app.get("/api/aivideo/usage", async (req, res) => {
+  try {
+    const u = await aiVideoUsage(aiActor(req));
+    res.json({ configured: aiVideoConfigured(), ...u, providers: aiVideoProviders(), routes: aiVideoRoutes(), storage: storageOn(), prices: aiVideoPrices() });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message ?? String(e) });
+  }
 });
 app.post("/api/aivideo/generate", async (req, res) => {
   try {
     const origin = (process.env.APP_URL?.trim() || `${req.protocol}://${req.get("host")}`).replace(/\/+$/, "");
-    const out = await aiVideoGenerate(req.body ?? {}, aiWho(req), origin);
-    res.json({ ...out, limit: aiVideoDailyLimit(), used: aiVideoUsed(aiWho(req)) });
+    const out = await aiVideoGenerate(req.body ?? {}, aiActor(req), origin);
+    res.json({ ...out, ...(await aiVideoUsage(aiActor(req))) });
   } catch (e: any) {
     res.status(e instanceof AiVideoError ? e.status : 500).json({ error: e?.message ?? String(e) });
   }
@@ -196,7 +204,7 @@ app.post("/api/aivideo/generate", async (req, res) => {
 // Admins switch video connections off and on for everyone (needs accounts; otherwise use AI_VIDEO_OFF).
 app.get("/api/admin/aivideo", (req, res) => {
   if (!accounts || req.user?.role !== "admin") return void res.status(403).json({ error: "Admins only." });
-  res.json({ connections: aiVideoConnections(), storage: { on: storageOn(), bucket: storageOn() ? storageBucket() : null } });
+  res.json({ connections: aiVideoConnections(), storage: { on: storageOn(), bucket: storageOn() ? storageBucket() : null }, limits: videoLimits() });
 });
 app.post("/api/admin/aivideo", async (req, res) => {
   if (!accounts || req.user?.role !== "admin") return void res.status(403).json({ error: "Admins only." });
@@ -205,9 +213,39 @@ app.post("/api/admin/aivideo", async (req, res) => {
   if (on && envOff().has(route)) return void res.status(409).json({ error: `${route} is switched off in the server's environment (AI_VIDEO_OFF), so it can't be turned on here.` });
   try {
     await setSwitch(route, on);
-    res.json({ connections: aiVideoConnections(), storage: { on: storageOn(), bucket: storageOn() ? storageBucket() : null } });
+    res.json({ connections: aiVideoConnections(), storage: { on: storageOn(), bucket: storageOn() ? storageBucket() : null }, limits: videoLimits() });
   } catch (e: any) {
     res.status(500).json({ error: `Couldn't save the switch (${e?.message ?? e}).` });
+  }
+});
+app.get("/api/admin/aivideo/spend", async (req, res) => {
+  if (!accounts || req.user?.role !== "admin") return void res.status(403).json({ error: "Admins only." });
+  try {
+    res.json({ report: await videoReport(), limits: videoLimits() });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message ?? String(e) });
+  }
+});
+app.post("/api/admin/aivideo/limits", async (req, res) => {
+  if (!accounts || req.user?.role !== "admin") return void res.status(403).json({ error: "Admins only." });
+  const b = req.body ?? {};
+  const read = (v: unknown, max: number) => (v === null || v === "" ? null : Number.isFinite(Number(v)) && Number(v) >= 0 && Number(v) <= max ? Number(v) : undefined);
+  const next: { dailyCredits?: number | null; monthlyBudgetUsd?: number | null } = {};
+  if ("dailyCredits" in b) {
+    const v = read(b.dailyCredits, 1_000_000);
+    if (v === undefined) return void res.status(400).json({ error: "Daily credits must be a number from 0 to 1000000, or empty for no limit." });
+    next.dailyCredits = v === null ? null : Math.floor(v);
+  }
+  if ("monthlyBudgetUsd" in b) {
+    const v = read(b.monthlyBudgetUsd, 10_000_000);
+    if (v === undefined) return void res.status(400).json({ error: "The monthly budget must be an amount in dollars, or empty for no budget." });
+    next.monthlyBudgetUsd = v === null ? null : Math.round(v * 100) / 100;
+  }
+  try {
+    await setLimits(next);
+    res.json({ limits: videoLimits() });
+  } catch (e: any) {
+    res.status(500).json({ error: `Couldn't save the limits (${e?.message ?? e}).` });
   }
 });
 app.get("/api/aivideo/file", (req, res) => void aiVideoFile(req, res));
