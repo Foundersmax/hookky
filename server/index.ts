@@ -17,7 +17,7 @@ import { listConnectors, searchVisuals, searchVideos, importFromUrl, magnificUps
 import { proxyVideo } from "./videoProxy";
 import { accountsEnabled, migrate } from "./db";
 import { toAac, aacAvailable } from "./aac";
-import { generate as aiVideoGenerate, jobStatus as aiVideoStatus, aiVideoConfigured, aiVideoDailyLimit, aiVideoUsed, AiVideoError } from "./aivideo";
+import { generate as aiVideoGenerate, jobStatus as aiVideoStatus, aiVideoConfigured, aiVideoDailyLimit, aiVideoUsed, aiVideoProviders, aiVideoRoutes, serveFile as aiVideoFile, serveInput as aiVideoInput, AiVideoError } from "./aivideo";
 import { accountRoutes, requireUser, sameOrigin, takeAgentTurn, authCors } from "./accounts";
 import { mailConfigured } from "./mailer";
 import { safeFetch, readLimited, BlockedUrlError } from "./safeFetch";
@@ -74,7 +74,7 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 60 
 
 app.get("/api/health", (_req, res) => {
   void recheckClaude();
-  res.json({ agent: claudeConfigured() ? "claude" : "local", claude: claudeCheck(), voice: voiceAvailable(), exportAac: aacAvailable(), aiVideo: aiVideoConfigured(), ...(freepikVideoStatus() && { freepikVideo: { ...freepikVideoStatus(), licensedToday: licensesToday() } }), transcription: transcriptionProvider(), connectors: listConnectors(), accounts, ...(build && { build }), ...(process.env.RENDER_GIT_COMMIT && { commit: process.env.RENDER_GIT_COMMIT }) });
+  res.json({ agent: claudeConfigured() ? "claude" : "local", claude: claudeCheck(), voice: voiceAvailable(), exportAac: aacAvailable(), aiVideo: aiVideoConfigured(), aiVideoProviders: aiVideoProviders(), ...(freepikVideoStatus() && { freepikVideo: { ...freepikVideoStatus(), licensedToday: licensesToday() } }), transcription: transcriptionProvider(), connectors: listConnectors(), accounts, ...(build && { build }), ...(process.env.RENDER_GIT_COMMIT && { commit: process.env.RENDER_GIT_COMMIT }) });
 });
 
 app.post("/api/agent", async (req, res) => {
@@ -179,16 +179,19 @@ app.post("/api/icons/resolve", async (req, res) => {
 // AI video: every model through one fal.ai key. Each generation costs money, so it has a daily cap per person.
 const aiWho = (req: express.Request) => (req.user ? `u:${req.user.id}` : "everyone");
 app.get("/api/aivideo/usage", (req, res) => {
-  res.json({ configured: aiVideoConfigured(), limit: aiVideoDailyLimit(), used: aiVideoUsed(aiWho(req)) });
+  res.json({ configured: aiVideoConfigured(), limit: aiVideoDailyLimit(), used: aiVideoUsed(aiWho(req)), providers: aiVideoProviders(), routes: aiVideoRoutes() });
 });
 app.post("/api/aivideo/generate", async (req, res) => {
   try {
-    const out = await aiVideoGenerate(req.body ?? {}, aiWho(req));
+    const origin = (process.env.APP_URL?.trim() || `${req.protocol}://${req.get("host")}`).replace(/\/+$/, "");
+    const out = await aiVideoGenerate(req.body ?? {}, aiWho(req), origin);
     res.json({ ...out, limit: aiVideoDailyLimit(), used: aiVideoUsed(aiWho(req)) });
   } catch (e: any) {
     res.status(e instanceof AiVideoError ? e.status : 500).json({ error: e?.message ?? String(e) });
   }
 });
+app.get("/api/aivideo/file", (req, res) => void aiVideoFile(req, res));
+app.get("/api/aivideo/input/:token", aiVideoInput);
 app.get("/api/aivideo/status", async (req, res) => {
   try {
     res.setHeader("Cache-Control", "no-store");

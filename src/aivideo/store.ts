@@ -19,11 +19,16 @@ export interface Generation {
   error?: string;
   at: number;
   doneAt?: number;
+  /** the connection it ran on ("Kling", "fal.ai"…) and why, if it had to fall back */
+  via?: string;
+  note?: string;
 }
 export interface Usage {
   configured: boolean;
   limit: number;
   used: number;
+  /** the connection each model would use now (null: not connected) */
+  routes?: Record<string, { route: string; via: string } | null>;
 }
 
 const KEY = "rookker.aivideo.v1";
@@ -109,7 +114,7 @@ export async function startGeneration(req: GenRequest) {
   try {
     const out = await json("/api/aivideo/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(req) });
     if (usage && Number.isFinite(out.used)) usage = { ...usage, used: out.used, limit: out.limit ?? usage.limit };
-    patch(local, { id: out.id, state: "queued" });
+    patch(local, { id: out.id, state: "queued", via: out.via, ...(out.notes?.length && { note: `${out.notes.join(". ")}, so it ran on ${out.via}.` }) });
     ensurePolling();
   } catch (e) {
     patch(local, { state: "failed", error: (e as Error)?.message ?? "Couldn't send this to the server." });
@@ -155,7 +160,7 @@ async function poll() {
 }
 
 /** The clip through the studio's own origin (so it can be drawn, downloaded and captioned). */
-export const playable = (url: string) => `/api/video?u=${encodeURIComponent(url)}`;
+export const playable = (url: string) => (url.startsWith("/") ? url : `/api/video?u=${encodeURIComponent(url)}`);
 export async function fetchClip(g: Generation): Promise<File> {
   if (!g.url) throw new Error("This clip isn't ready.");
   const r = await fetch(playable(g.url), { signal: AbortSignal.timeout(180_000) });

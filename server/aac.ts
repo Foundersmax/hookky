@@ -7,7 +7,7 @@ import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 /** The bundled ffmpeg (ffmpeg-static), else one on PATH. */
-function ffmpegPath(): string {
+export function ffmpegPath(): string {
   try {
     const p = require("ffmpeg-static") as string | null;
     if (p) return p;

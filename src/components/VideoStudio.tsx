@@ -104,7 +104,7 @@ function Card({ g, onReuse }: { g: Generation; onReuse: (g: Generation) => void 
     addAssets([{ id: uid("a"), kind: "video", title: g.prompt.slice(0, 60), src: g.url!, thumb, source: `AI · ${g.modelName}`, w: v?.videoWidth || g.w, h: v?.videoHeight || g.h, duration: v && Number.isFinite(v.duration) ? v.duration : g.settings.duration }]);
     say("Added to your library. Open a project and find it under Assets.");
   };
-  const meta = [g.mode === "image" ? "Image → video" : "Text → video", g.settings.aspect, g.settings.duration && `${g.settings.duration}s`, g.settings.resolution].filter(Boolean).join(" · ");
+  const meta = [g.mode === "image" ? "Image → video" : "Text → video", g.settings.aspect, g.settings.duration && `${g.settings.duration}s`, g.settings.resolution, g.via && `via ${g.via}`].filter(Boolean).join(" · ");
   return (
     <article className={`vs-card ${g.state}`}>
       <div className="vs-media">
@@ -129,6 +129,7 @@ function Card({ g, onReuse }: { g: Generation; onReuse: (g: Generation) => void 
           <small>{meta}</small>
         </div>
         <p title={g.prompt}>{g.prompt}</p>
+        {g.note && <small className="vs-note-card">{g.note}</small>}
         <div className="vs-actions">
           {g.state === "done" && !broken && (
             <>
@@ -183,7 +184,7 @@ export function VideoStudio() {
 
   useEffect(() => void refreshUsage(), []);
 
-  const models = useMemo(() => picked.map((id) => VIDEO_MODELS.find((m) => m.id === id)!).filter((m) => m && supports(m, mode)), [picked, mode]);
+  const models = useMemo(() => picked.map((id) => VIDEO_MODELS.find((m) => m.id === id)!).filter((m) => m && supports(m, mode) && (!usage?.configured || usage.routes?.[m.id] !== null)), [picked, mode, usage]);
   // options on offer: everything any picked model has (each model takes its nearest)
   const aspects = union(models.map((m) => (mode === "text" || m.i2vAspect ? m.aspects : undefined)));
   const durations = union(models.map((m) => m.durations)).sort((a, b) => a - b);
@@ -288,21 +289,24 @@ export function VideoStudio() {
             </div>
             <div className="vs-models">
               {shown.map((m) => {
-                const ok = supports(m, mode);
+                const route = usage?.routes?.[m.id];
+                const connected = !usage?.configured || route !== null;
+                const ok = supports(m, mode) && connected;
                 const on = picked.includes(m.id);
                 return (
-                  <button key={m.id} className={`vs-model ${on ? "on" : ""}`} aria-pressed={on} disabled={!ok} onClick={() => toggle(m)} title={ok ? m.blurb : `${m.name} doesn't do ${mode === "text" ? "text to video" : "image to video"}`}>
+                  <button key={m.id} className={`vs-model ${on ? "on" : ""}`} aria-pressed={on} disabled={!ok} onClick={() => toggle(m)} title={!connected ? `${m.name} isn't connected on this server` : ok ? m.blurb : `${m.name} doesn't do ${mode === "text" ? "text to video" : "image to video"}`}>
                     <span className="vs-check" aria-hidden />
                     <span className="vs-model-text">
                       <b>
                         {m.name} <i>{m.maker}</i>
                       </b>
-                      <small>{ok ? m.blurb : "Text to video only"}</small>
+                      <small>{!connected ? "Not connected" : ok ? m.blurb : "Text to video only"}</small>
                     </span>
                     <span className="vs-badges">
                       {badges(m).map((b) => (
                         <em key={b}>{b}</em>
                       ))}
+                      {route && <em className="vs-via" title={`Runs on ${route.via}`}>{route.route === "fal" ? "fal.ai" : "Direct"}</em>}
                     </span>
                   </button>
                 );
@@ -383,14 +387,14 @@ export function VideoStudio() {
         <div className="vs-go">
           {usage && !usage.configured && (
             <p className="vs-setup" role="status">
-              <b>AI video isn't switched on yet.</b> Add a fal.ai API key as <code>FAL_KEY</code> in the server's environment (Render → Environment), then reload. One key reaches every model here.
+              <b>AI video isn't switched on yet.</b> In the server's environment (Render → Environment), add a video maker's own API key (<code>VERTEX_API_KEY</code>, <code>OPENAI_API_KEY</code>, <code>KLING_API_KEY</code>, <code>MINIMAX_API_KEY</code>, <code>BYTEPLUS_ARK_API_KEY</code>, <code>LUMA_API_KEY</code>) or <code>FAL_KEY</code> to reach every model at once, then reload.
             </p>
           )}
           {error && <p className="vs-error" role="alert">{error}</p>}
           <button className="btn primary vs-generate" disabled={!canGo} onClick={() => void go()} title={why ?? "Generate (⌘↵)"}>
             <Icon name="sparkle" /> {sending ? "Sending…" : models.length > 1 ? `Generate on ${models.length} models` : "Generate"}
           </button>
-          <small className="vs-usage">{why ?? (usage?.configured ? `${usage.used} of ${usage.limit} made today · each clip is billed to your fal.ai account` : "")}</small>
+          <small className="vs-usage">{why ?? (usage?.configured ? `${usage.used} of ${usage.limit} made today · each clip is billed by the model's maker${models.length === 1 && usage.routes?.[models[0].id] ? ` (${usage.routes[models[0].id]!.via})` : ""}` : "")}</small>
         </div>
       </aside>
 

@@ -53,7 +53,7 @@ test("a generation is queued, polled and finishes with a playable clip", async (
   const { videoHostAllowed } = await import("./connectors");
   const { id, model } = await generate({ model: "kling-3-pro", mode: "text", prompt: "a fox runs", duration: 5, aspect: "9:16" }, "u:1");
   assert.equal(model, "Kling 3 Pro");
-  assert.match(id, /^kling-3-pro\.text\.req-\d+$/);
+  assert.match(id, /^kling-3-pro\.text\.fal\.req-\d+$/);
   const sent = seen.at(-1)!;
   assert.equal(sent.path, "/fal-ai/kling-video/v3/pro/text-to-video");
   assert.deepEqual(sent.body, { prompt: "a fox runs", aspect_ratio: "9:16", duration: "5", generate_audio: true });

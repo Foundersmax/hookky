@@ -228,7 +228,8 @@ const PUBLIC_API = new Set(["/api/health"]);
 
 /** Every /api route except health and auth needs an active, signed-in user. Pages stay public (the app shows sign-in). */
 export async function requireUser(req: Request, res: Response, next: NextFunction) {
-  if (!req.path.startsWith("/api/") || PUBLIC_API.has(req.path) || req.path.startsWith("/api/auth/")) return next();
+  // the video makers fetch the frames people animate from /api/aivideo/input/<unguessable token>
+  if (!req.path.startsWith("/api/") || PUBLIC_API.has(req.path) || req.path.startsWith("/api/auth/") || req.path.startsWith("/api/aivideo/input/")) return next();
   try {
     const u = await sessionUser(req);
     if (!u) return void res.status(401).json({ error: "Sign in to use Rookker.", code: "signed_out" });

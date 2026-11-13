@@ -1,13 +1,33 @@
-// AI video generation through fal.ai's queue: one key (FAL_KEY) reaches Seedance, Kling, MiniMax
-// Hailuo, Veo, Sora, Wan, Luma, PixVerse, Vidu, LTX and Grok. A generation is submitted, then
-// polled; the finished clip's URL is handed to the studio and allowed through the video proxy.
-import { buildInput, modelById, type GenRequest } from "../src/aivideo/models";
+// AI video generation. Each model can run on its maker's own API (Google, OpenAI, Kling, MiniMax,
+// BytePlus, Luma: see videoProviders.ts) or through fal.ai, which reaches every model with one key.
+// The maker's own API is used when its key is set (AI_VIDEO_ROUTE=fal flips that); if it is down
+// or refuses the key, the request falls back to the other route. A job id carries its route, so
+// it can be checked on (and its file fetched) even after a server restart.
+import type { Request, Response } from "express";
+import { Readable } from "node:stream";
+import { randomBytes } from "node:crypto";
+import { normalize, buildInput, modelById, VIDEO_MODELS, PROVIDER_NAMES, type GenRequest, type Normal, type Provider } from "../src/aivideo/models";
 import { rememberVideoUrls } from "./connectors";
+import { MAKERS, MakerError, type Source } from "./videoProviders";
+import { safeFetch } from "./safeFetch";
 
-const base = () => (process.env.FAL_QUEUE_URL || "https://queue.fal.run").replace(/\/+$/, "");
-const key = () => process.env.FAL_KEY?.trim() || process.env.FAL_API_KEY?.trim() || "";
-export const aiVideoConfigured = () => !!key();
-/** Clips one person can generate a day (each one costs money on the fal account). */
+type Route = Provider | "fal";
+const falBase = () => (process.env.FAL_QUEUE_URL || "https://queue.fal.run").replace(/\/+$/, "");
+const falKey = () => process.env.FAL_KEY?.trim() || process.env.FAL_API_KEY?.trim() || "";
+const falOn = () => !!falKey();
+
+/** The routes a model can run on, best first. */
+export function routesFor(modelId: string): Route[] {
+  const m = modelById(modelId);
+  if (!m) return [];
+  const direct: Route[] = m.direct && MAKERS[m.direct.provider].configured() ? [m.direct.provider] : [];
+  const fal: Route[] = falOn() ? ["fal"] : [];
+  return process.env.AI_VIDEO_ROUTE === "fal" ? [...fal, ...direct] : [...direct, ...fal];
+}
+export const aiVideoConfigured = () => VIDEO_MODELS.some((m) => routesFor(m.id).length > 0);
+/** Which connections are switched on (names only, for health and the workspace). */
+export const aiVideoProviders = (): Route[] => [...(Object.keys(MAKERS) as Provider[]).filter((p) => MAKERS[p].configured()), ...(falOn() ? (["fal"] as Route[]) : [])];
+/** Clips one person can generate a day (each one costs money). */
 export const aiVideoDailyLimit = () => {
   const n = Number(process.env.AI_VIDEO_DAILY);
   return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 20;
@@ -32,28 +52,52 @@ const giveBack = (who: string) => {
   if (u && u.day === today() && u.n > 0) u.n--;
 };
 
-// ---------------------------------------------------------------- jobs
-type Job = { statusUrl: string; responseUrl: string; who: string; at: number };
-const jobs = new Map<string, Job>();
-const JOB_ID = /^([a-z0-9-]{2,40})\.(text|image)\.([A-Za-z0-9-]{8,64})$/;
+export class AiVideoError extends Error {
+  constructor(message: string, readonly status = 400) {
+    super(message);
+  }
+}
 
-/** Only fal's own queue URLs are ever fetched with the key. */
-function ownUrl(u: unknown): u is string {
+// ---------------------------------------------------------------- job ids: model.mode.route.<request id>
+const b64u = (s: string) => Buffer.from(s).toString("base64url");
+const unb64u = (s: string) => Buffer.from(s, "base64url").toString();
+const ROUTES = new Set<string>(["fal", ...Object.keys(MAKERS)]);
+function parseId(id: string): { model: NonNullable<ReturnType<typeof modelById>>; mode: "text" | "image"; route: Route; rid: string } {
+  const m = /^([a-z0-9-]{2,40})\.(text|image)\.(?:([a-z]{2,12})\.([A-Za-z0-9_-]{4,400})|([A-Za-z0-9-]{8,64}))$/.exec(id);
+  const model = m && modelById(m[1]);
+  if (!m || !model) throw new AiVideoError("Unknown job.", 404);
+  if (m[5]) return { model, mode: m[2] as "text" | "image", route: "fal", rid: m[5] }; // ids from before routes existed
+  if (!ROUTES.has(m[3])) throw new AiVideoError("Unknown job.", 404);
+  const rid = m[3] === "fal" ? m[4] : unb64u(m[4]);
+  if (!rid || /[\s\0]/.test(rid)) throw new AiVideoError("Unknown job.", 404);
+  return { model, mode: m[2] as "text" | "image", route: m[3] as Route, rid };
+}
+const makeId = (n: Normal, route: Route, rid: string) => `${n.model.id}.${n.mode}.${route}.${route === "fal" ? rid : b64u(rid)}`;
+
+// ---------------------------------------------------------------- fal.ai
+type FalJob = { statusUrl: string; responseUrl: string };
+const falJobs = new Map<string, FalJob>();
+function falOwnUrl(u: unknown): u is string {
   if (typeof u !== "string") return false;
   try {
-    const url = new URL(u), b = new URL(base());
+    const url = new URL(u), b = new URL(falBase());
     return url.protocol === b.protocol && (url.host === b.host || (b.host === "queue.fal.run" && /(^|\.)fal\.run$/.test(url.hostname)));
   } catch {
     return false;
   }
 }
-async function fal(url: string, init: { method?: string; body?: unknown } = {}) {
-  const r = await fetch(url, {
-    method: init.method ?? "GET",
-    headers: { Authorization: `Key ${key()}`, Accept: "application/json", ...(init.body !== undefined && { "Content-Type": "application/json" }) },
-    ...(init.body !== undefined && { body: JSON.stringify(init.body) }),
-    signal: AbortSignal.timeout(45_000),
-  });
+async function fal(url: string, body?: unknown) {
+  let r: globalThis.Response;
+  try {
+    r = await fetch(url, {
+      method: body === undefined ? "GET" : "POST",
+      headers: { Authorization: `Key ${falKey()}`, Accept: "application/json", ...(body !== undefined && { "Content-Type": "application/json" }) },
+      ...(body !== undefined && { body: JSON.stringify(body) }),
+      signal: AbortSignal.timeout(45_000),
+    });
+  } catch (e) {
+    throw new MakerError(`couldn't be reached (${(e as Error)?.message ?? e})`, 502, true);
+  }
   const text = await r.text();
   let json: any = null;
   try {
@@ -61,81 +105,206 @@ async function fal(url: string, init: { method?: string; body?: unknown } = {}) 
   } catch {}
   return { ok: r.ok, status: r.status, json, text };
 }
-/** fal's error bodies in a sentence a person can act on. */
-function explain(status: number, json: any, text: string): string {
+function falExplain(status: number, json: any, text: string): MakerError {
   const d = json?.detail;
   const msg = typeof d === "string" ? d : Array.isArray(d) ? d.map((x: any) => x?.msg ?? "").filter(Boolean).join("; ") : typeof json?.error === "string" ? json.error : typeof json?.message === "string" ? json.message : "";
-  if (status === 401) return "fal.ai rejected the key. Check FAL_KEY on the server.";
-  if (status === 403) return msg || "fal.ai refused the request: the account may be out of credit or locked.";
-  if (status === 404) return "fal.ai doesn't have this model any more. Pick another.";
-  if (status === 422) return `The model didn't accept these settings${msg ? `: ${msg}` : "."}`;
-  if (status === 429) return "fal.ai is rate-limiting this account. Try again in a minute.";
-  return msg || `fal.ai answered ${status}${text ? `: ${text.slice(0, 160)}` : ""}`;
+  if (status === 401) return new MakerError("rejected the key. Check FAL_KEY on the server", 503, true);
+  if (status === 403) return new MakerError(msg || "refused the request: the account may be out of credit or locked", 503, true);
+  if (status === 404) return new MakerError("doesn't have this model any more", 502, true);
+  if (status === 422) return new MakerError(`didn't accept these settings${msg ? `: ${msg}` : ""}`, 422, false);
+  if (status === 429) return new MakerError("is rate-limiting this account. Try again in a minute", 429, true);
+  return new MakerError(msg || `answered ${status}${text ? `: ${text.slice(0, 160)}` : ""}`, 502, status >= 500);
 }
-
-export class AiVideoError extends Error {
-  constructor(message: string, readonly status = 400) {
-    super(message);
-  }
+async function falSubmit(req: GenRequest): Promise<string> {
+  const built = buildInput(req);
+  const r = await fal(`${falBase()}/${built.endpoint}`, built.input);
+  if (!r.ok) throw falExplain(r.status, r.json, r.text);
+  const rid = r.json?.request_id;
+  if (typeof rid !== "string" || !/^[A-Za-z0-9-]{8,64}$/.test(rid)) throw new MakerError("didn't return a request id", 502, true);
+  const app = built.endpoint.split("/").slice(0, 2).join("/");
+  falJobs.set(rid, {
+    statusUrl: falOwnUrl(r.json.status_url) ? r.json.status_url : `${falBase()}/${app}/requests/${rid}/status`,
+    responseUrl: falOwnUrl(r.json.response_url) ? r.json.response_url : `${falBase()}/${app}/requests/${rid}`,
+  });
+  if (falJobs.size > 3000) for (const k of [...falJobs.keys()].slice(0, 500)) falJobs.delete(k);
+  return rid;
 }
-
-/** Queue a generation; returns the job id the studio polls with. */
-export async function generate(req: GenRequest, who: string): Promise<{ id: string; model: string }> {
-  if (!aiVideoConfigured()) throw new AiVideoError("AI video isn't set up on this server yet (FAL_KEY is missing).", 503);
-  let built: ReturnType<typeof buildInput>;
-  try {
-    built = buildInput(req);
-  } catch (e: any) {
-    throw new AiVideoError(e?.message ?? "That request can't be run.");
-  }
-  if (!take(who)) throw new AiVideoError(`You've made today's ${aiVideoDailyLimit()} AI videos. The count resets at midnight UTC.`, 429);
-  try {
-    const r = await fal(`${base()}/${built.endpoint}`, { method: "POST", body: built.input });
-    if (!r.ok) throw new AiVideoError(explain(r.status, r.json, r.text), r.status === 401 || r.status === 403 ? 503 : 502);
-    const rid = r.json?.request_id;
-    if (typeof rid !== "string" || !/^[A-Za-z0-9-]{8,64}$/.test(rid)) throw new AiVideoError("fal.ai didn't return a request id.", 502);
-    const app = built.endpoint.split("/").slice(0, 2).join("/");
-    const statusUrl = ownUrl(r.json.status_url) ? r.json.status_url : `${base()}/${app}/requests/${rid}/status`;
-    const responseUrl = ownUrl(r.json.response_url) ? r.json.response_url : `${base()}/${app}/requests/${rid}`;
-    const id = `${built.model.id}.${req.mode === "image" ? "image" : "text"}.${rid}`;
-    jobs.set(id, { statusUrl, responseUrl, who, at: Date.now() });
-    if (jobs.size > 3000) for (const k of [...jobs.keys()].slice(0, 500)) jobs.delete(k);
-    return { id, model: built.model.name };
-  } catch (e) {
-    giveBack(who); // a request that never queued doesn't count
-    if (e instanceof AiVideoError) throw e;
-    throw new AiVideoError(`Couldn't reach fal.ai (${(e as Error)?.message ?? e}).`, 502);
-  }
-}
-
-export type JobState = { state: "queued" | "running" | "done" | "failed"; position?: number; video?: { url: string; width?: number; height?: number }; error?: string };
-
-/** Where a job is; when it's done, its video. */
-export async function jobStatus(id: string): Promise<JobState> {
-  if (!aiVideoConfigured()) throw new AiVideoError("AI video isn't set up on this server.", 503);
-  const m = JOB_ID.exec(id);
-  const model = m && modelById(m[1]);
-  if (!m || !model) throw new AiVideoError("Unknown job.", 404);
-  // after a restart the URLs are rebuilt from the id (fal keeps the request)
-  const endpoint = m[2] === "image" ? model.i2v : model.t2v;
-  const app = (endpoint ?? "").split("/").slice(0, 2).join("/");
-  const job = jobs.get(id) ?? { statusUrl: `${base()}/${app}/requests/${m[3]}/status`, responseUrl: `${base()}/${app}/requests/${m[3]}`, who: "", at: 0 };
-  let s;
-  try {
-    s = await fal(job.statusUrl);
-  } catch (e) {
-    throw new AiVideoError(`Couldn't reach fal.ai (${(e as Error)?.message ?? e}).`, 502);
-  }
-  if (!s.ok) return s.status === 404 ? { state: "failed", error: "fal.ai no longer has this request." } : { state: "failed", error: explain(s.status, s.json, s.text) };
+async function falStatus(model: NonNullable<ReturnType<typeof modelById>>, mode: "text" | "image", rid: string): Promise<JobState> {
+  if (!falOn()) throw new AiVideoError("fal.ai isn't set up on this server any more (FAL_KEY is missing).", 503);
+  const app = ((mode === "image" ? model.i2v : model.t2v) ?? "").split("/").slice(0, 2).join("/");
+  const job = falJobs.get(rid) ?? { statusUrl: `${falBase()}/${app}/requests/${rid}/status`, responseUrl: `${falBase()}/${app}/requests/${rid}` };
+  const s = await fal(job.statusUrl).catch((e: MakerError) => {
+    throw new AiVideoError(`Couldn't reach fal.ai (${e.message}).`, 502);
+  });
+  if (!s.ok) return s.status === 404 ? { state: "failed", error: "fal.ai no longer has this request." } : { state: "failed", error: `fal.ai ${falExplain(s.status, s.json, s.text).message}.` };
   const st = String(s.json?.status ?? "");
   if (st === "IN_QUEUE") return { state: "queued", ...(Number.isFinite(s.json?.queue_position) && { position: s.json.queue_position }) };
   if (st === "IN_PROGRESS") return { state: "running" };
   if (st !== "COMPLETED") return { state: "failed", error: `fal.ai reported "${st || "nothing"}".` };
   const r = await fal(job.responseUrl).catch((e) => ({ ok: false, status: 0, json: null, text: String(e?.message ?? e) }));
-  if (!r.ok) return { state: "failed", error: explain(r.status, r.json, r.text) };
+  if (!r.ok) return { state: "failed", error: `fal.ai ${falExplain(r.status, r.json, r.text).message}.` };
   const v = r.json?.video ?? r.json?.videos?.[0];
   const url = typeof v === "string" ? v : v?.url;
   if (typeof url !== "string" || !/^https:\/\/[^\s]+$/.test(url)) return { state: "failed", error: "The model finished without a video (it may have been blocked by its safety filter). Try rewording the prompt." };
   rememberVideoUrls([{ kind: "video", src: url } as never]);
   return { state: "done", video: { url, ...(Number.isFinite(v?.width) && { width: v.width }), ...(Number.isFinite(v?.height) && { height: v.height }) } };
+}
+
+// ---------------------------------------------------------------- images some makers need as links
+const inputs = new Map<string, { buf: Buffer; type: string; at: number }>();
+const INPUT_TTL = 2 * 3600_000;
+function hostImage(dataUrl: string, origin: string): string {
+  const m = /^data:(image\/(?:png|jpe?g|webp));base64,(.+)$/.exec(dataUrl);
+  if (!m) throw new MakerError("needs an image", 422);
+  if (!/^https:\/\//.test(origin) && !process.env.AIV_ALLOW_HTTP_INPUTS) throw new MakerError("needs this server's public https address to read your image (set APP_URL)", 422, true);
+  const now = Date.now();
+  for (const [k, v] of inputs) if (now - v.at > INPUT_TTL) inputs.delete(k);
+  const token = randomBytes(18).toString("base64url");
+  inputs.set(token, { buf: Buffer.from(m[2], "base64"), type: m[1], at: now });
+  return `${origin}/api/aivideo/input/${token}.${m[1].split("/")[1].replace("jpeg", "jpg")}`;
+}
+/** GET /api/aivideo/input/:token — public on purpose (the maker's servers fetch it), unguessable, short-lived. */
+export function serveInput(req: Request, res: Response) {
+  const token = String(req.params.token ?? "").replace(/\.(png|jpe?g|webp)$/, "");
+  const hit = inputs.get(token);
+  if (!hit || Date.now() - hit.at > INPUT_TTL) return void res.status(404).send("Gone.");
+  res.setHeader("Content-Type", hit.type);
+  res.setHeader("Cache-Control", "private, max-age=600");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.end(hit.buf);
+}
+
+// ---------------------------------------------------------------- generate
+const routeName = (r: Route) => PROVIDER_NAMES[r];
+/** Queue a generation on the first route that takes it; returns the job id the studio polls with. */
+export async function generate(req: GenRequest, who: string, origin = ""): Promise<{ id: string; model: string; route: Route; via: string; notes?: string[] }> {
+  let n: Normal;
+  try {
+    n = normalize(req);
+  } catch (e: any) {
+    throw new AiVideoError(e?.message ?? "That request can't be run.");
+  }
+  const routes = routesFor(n.model.id);
+  if (!routes.length) {
+    if (!aiVideoConfigured()) throw new AiVideoError("AI video isn't set up on this server yet: add a video maker's API key (or FAL_KEY) in the server's environment.", 503);
+    const d = n.model.direct;
+    throw new AiVideoError(`${n.model.name} isn't connected: add ${d ? `${MAKERS[d.provider].keyName} or ` : ""}FAL_KEY on the server.`, 503);
+  }
+  if (!take(who)) throw new AiVideoError(`You've made today's ${aiVideoDailyLimit()} AI videos. The count resets at midnight UTC.`, 429);
+  const notes: string[] = [];
+  for (const [i, route] of routes.entries()) {
+    try {
+      const rid = route === "fal" ? await falSubmit(req) : await MAKERS[route].submit(n, n.model.direct!, { publicImage: async (u) => hostImage(u, origin) });
+      return { id: makeId(n, route, rid), model: n.model.name, route, via: routeName(route), ...(notes.length && { notes }) };
+    } catch (e) {
+      const err = e instanceof MakerError ? e : new MakerError(String((e as Error)?.message ?? e), 502, true);
+      notes.push(`${routeName(route)} ${err.message}`);
+      if (err.retry && i < routes.length - 1) continue;
+      giveBack(who); // a request that never queued doesn't count
+      throw new AiVideoError(notes.length > 1 ? `${notes.join(". Then ")}.` : `${routeName(route)} ${err.message}.`, err.status);
+    }
+  }
+  throw new AiVideoError("No route took this request.", 502); // unreachable
+}
+
+// ---------------------------------------------------------------- status
+export type JobState = { state: "queued" | "running" | "done" | "failed"; position?: number; progress?: number; video?: { url: string; width?: number; height?: number }; error?: string };
+export const fileUrl = (id: string) => `/api/aivideo/file?id=${encodeURIComponent(id)}`;
+
+/** Where a job is; when it's done, where its video plays from. */
+export async function jobStatus(id: string): Promise<JobState> {
+  const j = parseId(id);
+  if (j.route === "fal") return falStatus(j.model, j.mode, j.rid);
+  const maker = MAKERS[j.route];
+  if (!maker.configured()) throw new AiVideoError(`${routeName(j.route)} isn't connected on this server any more.`, 503);
+  try {
+    const p = await maker.poll(j.rid);
+    if (p.state === "done") return { state: "done", video: { url: fileUrl(id) } };
+    return p;
+  } catch (e) {
+    if (e instanceof MakerError && !e.retry) return { state: "failed", error: `${routeName(j.route)} ${e.message}.` };
+    throw new AiVideoError(`Couldn't check with ${routeName(j.route)} (${(e as Error).message}).`, 502);
+  }
+}
+
+// ---------------------------------------------------------------- files: finished clips from the makers, same-origin
+const sources = new Map<string, { src: Source; at: number }>();
+const SOURCE_TTL = 20 * 60_000;
+async function sourceFor(id: string, fresh = false): Promise<{ src: Source; trusted: string }> {
+  const j = parseId(id);
+  if (j.route === "fal") throw new AiVideoError("fal.ai clips play from their own link.", 404);
+  const maker = MAKERS[j.route];
+  if (!maker.configured()) throw new AiVideoError(`${routeName(j.route)} isn't connected on this server any more.`, 503);
+  const hit = sources.get(id);
+  if (hit && !fresh && Date.now() - hit.at < SOURCE_TTL) return { src: hit.src, trusted: maker.base() };
+  let src: Source;
+  try {
+    src = await maker.source(j.rid);
+  } catch (e) {
+    throw new AiVideoError(`${routeName(j.route)} ${(e as Error).message}.`, e instanceof MakerError ? e.status : 502);
+  }
+  sources.set(id, { src, at: Date.now() });
+  if (sources.size > 2000) for (const k of [...sources.keys()].slice(0, 400)) sources.delete(k);
+  return { src, trusted: maker.base() };
+}
+/** GET /api/aivideo/file?id= — the finished clip, with Range support so it can be scrubbed and exported. */
+export async function serveFile(req: Request, res: Response) {
+  const id = String(req.query.id ?? "");
+  const range = typeof req.headers.range === "string" && /^bytes=\d*-\d*$/.test(req.headers.range) ? req.headers.range : undefined;
+  try {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const { src, trusted } = await sourceFor(id, attempt > 0);
+      if ("file" in src) {
+        res.setHeader("Cache-Control", "private, max-age=86400");
+        return void res.sendFile(src.file, { headers: { "Content-Type": "video/mp4", "X-Content-Type-Options": "nosniff" } }, (err) => {
+          if (err && !res.headersSent) res.status(404).send("This clip is no longer on the server.");
+        });
+      }
+      const headers = { "User-Agent": "Mozilla/5.0 (compatible; Rookker/0.1)", ...src.headers, ...(range && { Range: range }) };
+      // the maker's own API host is trusted (it gets the key); links it hands out go through the SSRF guard
+      const sameHost = (() => {
+        try {
+          return new URL(src.url).origin === new URL(trusted).origin;
+        } catch {
+          return false;
+        }
+      })();
+      if (src.headers && !sameHost) throw new AiVideoError("Refusing to send a key to another host.", 502);
+      const r = sameHost ? await fetch(src.url, { headers, signal: AbortSignal.timeout(300_000) }) : (await safeFetch(src.url, { headers, timeoutMs: 300_000 })).res;
+      if ((r.status === 403 || r.status === 404 || r.status === 410) && attempt === 0) {
+        await r.body?.cancel().catch(() => {});
+        continue; // the link expired: ask the maker again
+      }
+      let type = (r.headers.get("content-type") || "").toLowerCase();
+      if (!type || type.startsWith("application/octet-stream") || type.startsWith("binary/octet-stream")) type = "video/mp4";
+      if (!(r.status === 200 || r.status === 206) || !/^video\//.test(type) || !r.body) {
+        await r.body?.cancel().catch(() => {});
+        return void res.status(r.status === 404 || r.status === 410 ? 410 : 502).send(`The clip couldn't be fetched (${r.status}).`);
+      }
+      res.status(r.status);
+      res.setHeader("Content-Type", type);
+      for (const h of ["content-length", "content-range", "accept-ranges", "last-modified", "etag"]) {
+        const v = r.headers.get(h);
+        if (v) res.setHeader(h, v);
+      }
+      if (!r.headers.get("accept-ranges")) res.setHeader("Accept-Ranges", "bytes");
+      res.setHeader("Cache-Control", "private, max-age=86400");
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      const body = Readable.fromWeb(r.body as any);
+      res.on("close", () => body.destroy());
+      body.on("error", () => res.destroy());
+      return void body.pipe(res);
+    }
+    res.status(410).send("This clip is no longer available.");
+  } catch (e: any) {
+    if (!res.headersSent) res.status(e instanceof AiVideoError ? e.status : 502).send(e?.message ?? String(e));
+  }
+}
+
+/** For the workspace: which route each model would take right now. */
+export function aiVideoRoutes(): Record<string, { route: Route; via: string } | null> {
+  return Object.fromEntries(VIDEO_MODELS.map((m) => {
+    const r = routesFor(m.id)[0];
+    return [m.id, r ? { route: r, via: routeName(r) } : null];
+  }));
 }
