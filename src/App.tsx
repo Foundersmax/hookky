@@ -13,6 +13,7 @@ import { Logo } from "./components/Logo";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ShortcutsSheet } from "./components/ShortcutsSheet";
 import { Home } from "./components/Home";
+import { FootageFinder } from "./components/FootageFinder";
 import { VideoStudio } from "./components/VideoStudio";
 import { Versions } from "./components/Versions";
 import { CommandPalette } from "./components/CommandPalette";
@@ -384,6 +385,11 @@ export function App() {
       {sheet === "footage" && (
         <ErrorBoundary area="footage">
           <FootageSheet />
+        </ErrorBoundary>
+      )}
+      {sheet === "finder" && (
+        <ErrorBoundary area="footage browser">
+          <FootageFinder />
         </ErrorBoundary>
       )}
       {sheet === "caption" && (

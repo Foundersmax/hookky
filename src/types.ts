@@ -133,7 +133,7 @@ export interface Scene {
   /** Icons for motion graphics ("lucide:moon"), drawn from the project's icon kit. */
   icons?: string[];
   /** How this shot was cast by the footage director: its kind and what was searched. */
-  shot?: { type: string; query: string };
+  shot?: { type: string; query: string; /** the words spoken over it, other searches to try, its subject, and what to keep out */ line?: string; queries?: string[]; must?: string[]; avoid?: string[] };
   notes?: string;
 }
 

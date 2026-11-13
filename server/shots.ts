@@ -13,6 +13,11 @@ export interface ShotOut {
   type: string;
   queries: string[];
   overlay: string;
+  /** what the shot shows, in a few words */
+  visual?: string;
+  /** one or two words a clip's description must contain to be on subject */
+  must?: string[];
+  media?: "video" | "photo" | "any";
 }
 
 const clean = (v: unknown, n: number) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, n) : "");
@@ -31,8 +36,11 @@ const TOOL = {
             type: { type: "string", enum: [...SHOT_TYPES] },
             queries: { type: "array", items: { type: "string" }, minItems: 2, maxItems: 4, description: "Stock video searches, best first. Each is a short natural description (3-8 words) of real live-action footage: who, doing what, where (e.g. 'young woman pouring coffee in sunlit kitchen'). No brand names, no abstract words, nothing animated." },
             overlay: { type: "string", description: "Words on screen for this shot (max 5, one *accent* word) or empty for clean footage. Use text on at most a third of the shots." },
+            visual: { type: "string", description: "What the viewer sees in this shot, in 3-8 words ('aerial of terraced coffee farms at dawn')." },
+            must: { type: "array", items: { type: "string" }, maxItems: 2, description: "One or two single lowercase words that a matching clip's title would almost certainly contain: the concrete subject of the shot ('coral', 'istanbul'). Never style words." },
+            media: { type: "string", enum: ["video", "photo", "any"], description: "'photo' when a photograph tells it better than stock video could (a historical moment, a specific real person, place or object, an old document or map); 'video' for anything that moves; 'any' when unsure." },
           },
-          required: ["type", "queries", "overlay"],
+          required: ["type", "queries", "overlay", "visual", "must", "media"],
         },
       },
     },
@@ -40,8 +48,16 @@ const TOOL = {
   },
 };
 
+const ROLE: Record<string, string> = {
+  ad: "You are a commercial director and editor building a shot list for an ad cut from real, live-action stock footage. Keep one visual world: the same kind of person (the ad's audience), the same kind of places and light across the ad, so it feels shot for one campaign. Show the product category whenever the line names it, and in the closing shot.",
+  documentary:
+    "You are a documentary director and archive researcher building a shot list for a documentary cut from stock footage and photographs. Show the actual thing being talked about: the real place, animal, object, process or era, by name. Establish each new place or subject with a wide shot before going closer. When the narration is about history or a specific real thing stock video won't have, ask for a photograph. Never illustrate a fact with generic lifestyle footage, and never show something the narration doesn't support.",
+  story:
+    "You are an editor building a shot list for a narrated explainer cut from stock footage. One clear, literal picture per idea: the thing itself, then a detail of it. Keep the same setting and subjects across neighbouring shots so the story reads as one piece.",
+};
+
 /** Ask Claude for a better shot list. Throws with a readable message when it can't. */
-export async function claudeShotList(input: { shots: ShotIn[]; brief: string; aspect: string; look: string; text: string }): Promise<ShotOut[]> {
+export async function claudeShotList(input: { shots: ShotIn[]; brief: string; aspect: string; look: string; text: string; genre?: string; direction?: string; topic?: string }): Promise<ShotOut[]> {
   if (!claudeConfigured()) throw new Error("Claude isn't configured on the server.");
   const shots = input.shots.slice(0, 40);
   const lines = shots.map((s, i) => `${i + 1}. "${clean(s.line, 300) || "(no words)"}"  [draft: ${s.type}; ${s.queries.slice(0, 2).join(" / ")}]`).join("\n");
@@ -49,15 +65,14 @@ export async function claudeShotList(input: { shots: ShotIn[]; brief: string; as
   try {
     const msg = await client.messages.create({
       model,
-      max_tokens: 4000,
+      max_tokens: 8000,
       tools: [TOOL],
       tool_choice: { type: "tool", name: "shot_list" },
-      system:
-        "You are a commercial director and editor building a shot list for an ad cut entirely from real, live-action stock footage (Freepik's library, searched in natural language). For each line of the voice-over, choose the shot that makes the line land as it's spoken: literal when the line is concrete, a strong visual metaphor when it's abstract, never the opposite of what's said (\"stress less\" shows calm, not stress). Vary coverage (establishing, wide, medium, close-up, detail, people) like a real edit. Keep one visual world: the same kind of person (the ad's audience), the same kind of places and light across the ad, so it feels shot for one campaign. Show the product category whenever the line names it, and in the closing shot.",
+      system: `${ROLE[input.genre ?? "ad"] ?? ROLE.ad} The libraries (Freepik, Pexels, Pixabay, Coverr) are searched in plain language, and they match on clip titles. First read the whole voice-over and decide what it is about and where it takes place; a line that says "it" or "they" is about what the lines before it named. Then, for each line, choose the shot that makes the line land as it's spoken: literal when the line is concrete, a strong visual metaphor when it's abstract, never the opposite of what's said ("stress less" shows calm, not stress). Vary coverage (establishing, wide, medium, close-up, detail, people) like a real edit, and don't repeat the same picture for neighbouring lines. Write each search the way a clip would be titled: subject, action, setting ("sea turtle swimming over coral reef"), most specific first, then a simpler fallback a small library would still answer ("sea turtle underwater"). When the person describes the footage they want, follow it in every shot: its style words go into the searches where a library would understand them (aerial, slow motion, night, black and white), and anything they ask to keep out must not appear in any search.`,
       messages: [
         {
           role: "user",
-          content: `Brief: ${clean(input.brief, 400) || "(none, infer from the voice-over)"}\nFormat: ${clean(input.aspect, 8)} · Look: ${clean(input.look, 20)} · Text: ${clean(input.text, 12)}\n\nVoice-over lines (${shots.length}):\n${lines}\n\nReturn exactly ${shots.length} shots in the same order.`,
+          content: `Kind of film: ${clean(input.genre, 20) || "ad"}\nBrief: ${clean(input.brief, 400) || "(none, infer from the voice-over)"}\nFootage the person wants: ${clean(input.direction, 600) || "(not described: choose what suits the voice-over)"}\nA first reading says it's about: ${clean(input.topic, 200) || "(unclear)"}\nFormat: ${clean(input.aspect, 8)} · Look: ${clean(input.look, 20)} · Text: ${clean(input.text, 12)}\n\nVoice-over lines (${shots.length}), each with a draft from a keyword-based planner that you should improve on:\n${lines}\n\nReturn exactly ${shots.length} shots in the same order.`,
         },
       ],
     });
@@ -71,6 +86,9 @@ export async function claudeShotList(input: { shots: ShotIn[]; brief: string; as
         type: (SHOT_TYPES as readonly string[]).includes(String(r.type)) ? String(r.type) : shots[i].type,
         queries: [...new Set([...queries, ...shots[i].queries])].slice(0, 5),
         overlay: input.text === "keywords" ? clean(r.overlay, 60) : "",
+        ...(clean(r.visual, 80) && { visual: clean(r.visual, 80) }),
+        must: (Array.isArray(r.must) ? r.must : []).map((m) => clean(m, 30).toLowerCase().split(" ")[0]).filter((m) => /^[a-z0-9-]{3,}$/.test(m)).slice(0, 2),
+        ...(["video", "photo", "any"].includes(String(r.media)) && { media: r.media as ShotOut["media"] }),
       };
     });
   } catch (e) {

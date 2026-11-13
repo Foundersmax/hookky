@@ -5,8 +5,9 @@ import { getState, setState, updateProject, libraryId, setAudio } from "../store
 import { sanitizeScene } from "../sanitize";
 import { alignScript } from "../audio/analyze";
 import { ingestVoiceover } from "../components/VoicePanel";
-import { assemble, planShots, type EditOptions, type ProdLook, type Shot, type TextMode } from "./plan";
-import { castAll, refinePlan, timingFor, visionPicker } from "./cast";
+import { assemble, type EditOptions, type ProdLook, type Shot, type TextMode } from "./plan";
+import { planFilm, type Genre } from "./mind";
+import { castAll, refinePlan, timingFor, visionPicker, type Sources } from "./cast";
 import { preferLicensed } from "./license";
 import { clock } from "../clock";
 
@@ -14,6 +15,12 @@ export interface DirectInput {
   voiceFile?: File;
   script?: string;
   brief: string;
+  /** ad, documentary or story: pacing, coverage and how the edit closes */
+  genre?: Genre;
+  /** the person's description of the footage they want */
+  direction?: string;
+  /** the stock libraries to search */
+  sources?: Sources;
   look: ProdLook;
   text: TextMode;
   aspect: Aspect;
@@ -46,15 +53,19 @@ export async function directFootage(input: DirectInput): Promise<string> {
     audio = getState().project.audio!;
   }
 
+  step("Understanding the voice-over");
+  const genre = input.genre ?? "ad";
+  const film = planFilm(audio, input.brief, { genre, direction: input.direction, text: input.text, brand: input.brand });
+  const local = film.shots;
   step("Writing the shot list");
-  const local = planShots(audio, input.brief, { text: input.text, brand: input.brand });
-  const timeout = new Promise<{ shots: Shot[]; by: "local"; note: string }>((r) => setTimeout(() => r({ shots: local, by: "local", note: "Claude took too long" }), 30000));
-  const plan = await Promise.race([refinePlan(local, input.brief, input.aspect, input.look, input.text), timeout]);
+  const timeout = new Promise<{ shots: Shot[]; by: "local"; note: string }>((r) => setTimeout(() => r({ shots: local, by: "local", note: "Claude took too long" }), 45000));
+  const about = [film.topic.main, ...film.topic.entities].filter(Boolean).slice(0, 5).join(", ");
+  const plan = await Promise.race([refinePlan(local, input.brief, input.aspect, input.look, input.text, { genre, direction: input.direction, topic: about }), timeout]);
   if (ctl.signal.aborted) return "Stopped.";
   let shots: Shot[] = plan.shots;
   input.onPlan?.(shots, plan.by);
 
-  const edit: EditOptions = { look: input.look, text: input.text, brand: input.brand, title: input.title, cta: input.cta, url: input.url };
+  const edit: EditOptions = { genre, look: input.look, text: input.text, brand: input.brand, title: input.title, cta: input.cta, url: input.url };
   // Lay the shots on the timeline straight away (type placeholders), as one undoable change.
   const projectId = getState().project.id;
   const first = assemble(shots, edit).map((s) => sanitizeScene(s));
@@ -79,7 +90,7 @@ export async function directFootage(input: DirectInput): Promise<string> {
       picks[i] = c.pick;
       input.onCast?.(i, c.pick);
       const clipId = c.pick ? libraryId(preferLicensed(c.pick, getState().assets)) : undefined;
-      shots = shots.map((s, k) => (k === i ? { ...s, clip: clipId, ...timingFor(c.pick, s, input.look) } : s));
+      shots = shots.map((s, k) => (k === i ? { ...s, clip: clipId, still: !!c.pick && c.pick.kind !== "video", ...timingFor(c.pick, s, input.look) } : s));
       const scenes = assemble(shots, edit).map((s, k) => sanitizeScene(s, ids[k]));
       // Quiet update: the plan step above is the undo point.
       setState({ project: { ...p, scenes: p.scenes.map((old, k) => (k === i ? scenes[k] : old)) } as Project });
@@ -87,7 +98,8 @@ export async function directFootage(input: DirectInput): Promise<string> {
     ctl.signal,
     [],
     // With Claude available it also looks at the top candidates for each shot.
-    plan.by === "claude" ? visionPicker(input.brief) : undefined,
+    plan.by === "claude" ? visionPicker([input.brief, input.direction].filter(Boolean).join(" · Footage wanted: ")) : undefined,
+    input.sources,
   );
   if (running === ctl) running = null;
   if (ctl.signal.aborted) return "Stopped casting: the project changed.";

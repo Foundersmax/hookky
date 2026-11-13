@@ -27,6 +27,20 @@ export interface Shot {
   clipSpeed?: number;
   /** the user picked this clip; don't recast it */
   locked?: boolean;
+  /** what the shot shows, in a few words (for the shot list) */
+  visual?: string;
+  /** words a clip's description should match: the subject of the line */
+  must?: string[];
+  /** things the footage must not show ("people", "text") */
+  avoid?: string[];
+  /** camera and style words asked for ("aerial", "slow motion") */
+  style?: string[];
+  /** footage, photos, or whichever fits best */
+  media?: "video" | "photo" | "any";
+  /** the speaker pauses before this shot: a new thought (dissolve into it) */
+  breath?: boolean;
+  /** the cast pick is a photo (moved with a slow push) */
+  still?: boolean;
 }
 
 export const LOOKS_PROD = {
@@ -40,10 +54,10 @@ export type ProdLook = keyof typeof LOOKS_PROD;
 export type TextMode = "subtitles" | "keywords" | "clean";
 
 // ---------------------------------------------------------------- words → pictures
-const STOP = new Set(
+export const STOP = new Set(
   "a an and are as at be been but by can could did do does for from had has have he her here him his how i if in into is it its it's just like make made me more most my no not now of on one or our out over own so some than that the their them then there these they this those to too up us very was we were what when where which while who why will with would you your yours ones thing things way really i'm you're we're it's that's don't can't won't get got let let's every all any each again goes go going gone come comes came keep keeps kept take takes took give gives gave put puts say says said see sees saw know knows want wants need needs feel feels look looks always ever still even also only much many lot lots everything something anything nothing someone everyone yesterday tonight yet already ready meet introducing".split(" "),
 );
-const stem = (w: string) => w.toLowerCase().replace(/[^a-z0-9]/g, "").replace(/(ies)$/, "y").replace(/(ing|ed|es|s)$/, "");
+export const stem = (w: string) => w.toLowerCase().replace(/[^a-z0-9]/g, "").replace(/(ies)$/, "y").replace(/(ing|ed|es|s)$/, "");
 
 /** Abstract ideas people say in ads, and what a cinematographer would point the camera at. */
 const LEXICON: Record<string, string[]> = {
@@ -136,11 +150,11 @@ export function keywords(line: string, exclude: string[] = []): string[] {
   return out.sort((a, b) => pic(b.w) - pic(a.w) || (pic(a.w) ? a.i - b.i : b.w.length - a.w.length)).map((x) => x.w);
 }
 
-const lexicon = (w: string) => LEXICON[w] ?? LEXICON[stem(w)];
+export const lexicon = (w: string): string[] | undefined => LEXICON[w] ?? LEXICON[stem(w)];
 
 /** Coverage like an editor would cut it: open wide, then medium and close, a detail now and then. */
 const COVERAGE: ShotType[] = ["medium", "close-up", "wide", "detail", "people", "medium", "close-up", "abstract"];
-const MODIFIER: Partial<Record<ShotType, string>> = { establishing: "aerial", wide: "wide", "close-up": "close up", detail: "macro", people: "people" };
+export const MODIFIER: Partial<Record<ShotType, string>> = { establishing: "aerial", wide: "wide", "close-up": "close up", detail: "macro", people: "people" };
 
 /** A picturable word and when it's said. */
 interface Beat {
@@ -180,6 +194,7 @@ export function wordCuts(slot: { s: number; e: number }, words: Word[] | undefin
 
 /** Ideas a camera can't point at directly rank below things it can. */
 const ABSTRACT = new Set("time fast speed quick slow calm peace morning night day energy power strong health new launch start begin idea think change future grow growth easy simple smart safe hard problem success win dream fun joy happy love world tired stress".split(" ").map(stem));
+export const isAbstract = (w: string) => ABSTRACT.has(stem(w));
 const concrete = (w: string) => (ABSTRACT.has(stem(w)) ? 0 : 1) + Math.min(w.length, 8) / 20;
 const best = (bs: Beat[]) => [...bs].sort((a, b) => concrete(b.w) - concrete(a.w))[0];
 
@@ -226,6 +241,11 @@ export interface Candidate {
   h?: number;
   duration?: number;
   source: string;
+  /** a photo rather than a clip */
+  kind?: "video" | "image";
+  /** where it came in its search results (0 = first), and which of the shot's searches found it */
+  rank?: number;
+  q?: number;
 }
 
 const orient = (w?: number, h?: number) => (!w || !h ? "landscape" : h > w * 1.1 ? "portrait" : w > h * 1.1 ? "landscape" : "square");
@@ -234,18 +254,57 @@ export const orientationFor = (a: Aspect) => (a === "9:16" || a === "4:5" ? "por
 const FAKE = /\b(animat\w*|cartoon|illustrat\w*|3d|render\w*|cgi|loop(ed|able)?|motion graphics?|template|green ?screen|chroma|hologra\w*|icons?|infographic|ai[- ]generated|generative|particles?|seamless)\b/i;
 
 /** How well a clip suits a shot: format, long enough to hold the shot, on topic, real, sharp. */
-export function scoreClip(c: Candidate, shot: Pick<Shot, "s" | "e" | "queries">, aspect: Aspect, speed: number): number {
+/** A word's root for matching a search against a clip's description: "turtles" = "turtle", "pouring" = "pour", "berries" = "berry". */
+export const root = (w: string) => w.toLowerCase().replace(/[^a-z0-9]/g, "").replace(/ies$/, "y").replace(/(?<=.{3})(ing|ed)$/, "").replace(/(?<=.{2})s$/, "").replace(/(?<=.{3})e$/, "");
+
+/** Words that mean the same thing to someone saying "no people" or "no text". */
+const AVOID_KIN: Record<string, string[]> = {
+  people: "people person man woman men women girl boy guy lady crowd face portrait businessman businesswoman couple family child kid kids children baby model".split(" "),
+  face: "face faces portrait selfie closeup".split(" "),
+  text: "text title logo sign typography word letter caption subtitle".split(" "),
+  city: "city urban street skyline building downtown traffic".split(" "),
+  animal: "animal dog cat bird horse wildlife pet".split(" "),
+};
+const avoidStems = (avoid: string[] = []) => new Set(avoid.flatMap((a) => [a, ...(AVOID_KIN[a] ?? AVOID_KIN[a.replace(/s$/, "")] ?? [])]).map(root));
+
+/** How much of a shot's subject a clip's description covers (0..1); undefined when the description says nothing useful. */
+export function subjectMatch(title: string, must: string[] = [], query = ""): number | undefined {
+  if (!must.length) return undefined;
+  const t = title.toLowerCase().trim();
+  const words = t.split(/[^a-z0-9]+/).filter((w) => w.length > 2);
+  // a description that's just the search echoed back (some libraries have no titles) proves nothing
+  if (words.length < 2 || t === query.toLowerCase().trim()) return undefined;
+  const have = new Set(words.map(root));
+  // a line can name two things ("turtles and sharks"): showing either fully counts
+  return Math.min(1, must.filter((m) => have.has(root(m))).length / Math.min(2, must.length));
+}
+
+export function scoreClip(c: Candidate, shot: Pick<Shot, "s" | "e" | "queries"> & Partial<Pick<Shot, "must" | "avoid" | "style" | "media">>, aspect: Aspect, speed: number): number {
   let sc = 0;
+  const still = c.kind === "image";
   const want = orientationFor(aspect), got = orient(c.w, c.h);
   if (got === want) sc += 5;
   else if (want === "square" || got === "square") sc += 2;
   else if (want === "portrait" && got === "landscape") sc += 0.5; // crops to a sliver: last resort
   const need = (shot.e - shot.s) * speed + 0.3;
   if (c.duration) sc += c.duration >= need ? 3 : c.duration >= need * 0.6 ? 1 : -2;
+  // The subject of the line: a clip that shows it beats a pretty clip that doesn't.
+  const m = subjectMatch(c.title, shot.must, shot.queries[c.q ?? 0]);
+  if (m !== undefined) sc += m > 0 ? 2 + m * 5 : -3;
+  const words = new Set(c.title.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 2).map(root));
+  const no = avoidStems(shot.avoid);
+  if ([...words].some((w) => no.has(w))) sc -= 9;
+  for (const s of shot.style ?? []) if (s.split(/\s+/).some((w) => words.has(root(w)))) sc += 1;
+  // Search engines rank by relevance: earlier results, and results of the first search, count for more.
+  if (c.rank !== undefined) sc += Math.max(0, 1.5 - c.rank * 0.15);
+  if (c.q !== undefined) sc += c.q === 0 ? 1.5 : c.q === 1 ? 0.8 : 0;
+  // Photos: wanted, a fallback, or allowed when they show the subject better.
+  if (still) sc += shot.media === "photo" ? 5 : shot.media === "any" ? -4 : -7;
+  else if (shot.media === "photo") sc -= 2;
   // On topic: the first search counts most, matching by word stem ("pouring" ~ "pour").
-  const title = new Set(c.title.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 2).map(stem));
+  const title = new Set(c.title.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 2).map(root));
   shot.queries.forEach((q, qi) => {
-    const ws = q.toLowerCase().split(/\W+/).filter((w) => w.length > 2 && !STOP.has(w)).map(stem);
+    const ws = q.toLowerCase().split(/\W+/).filter((w) => w.length > 2 && !STOP.has(w)).map(root);
     const hit = ws.filter((w) => title.has(w)).length;
     sc += hit * (qi === 0 ? 1.2 : 0.5) + (ws.length > 1 && hit === ws.length ? 1.5 : 0);
   });
@@ -259,7 +318,7 @@ export function scoreClip(c: Candidate, shot: Pick<Shot, "s" | "e" | "queries">,
 /** Pick the best unused clip for a shot; returns it and the next best as alternatives. */
 export function castShot(cands: Candidate[], shot: Shot, aspect: Aspect, speed: number, used: Set<string>): { clip?: Candidate; alts: Candidate[] } {
   const ranked = cands.map((c) => ({ c, sc: scoreClip(c, shot, aspect, speed) - (used.has(c.id) ? 20 : 0) })).sort((a, b) => b.sc - a.sc);
-  return { clip: ranked[0]?.c, alts: ranked.slice(1, 7).map((r) => r.c) };
+  return { clip: ranked[0]?.c, alts: ranked.slice(1, 13).map((r) => r.c) };
 }
 
 /** Where to start the clip and how fast to play it, so the shot sits in the middle of the clip. */
@@ -275,6 +334,8 @@ export function timeClip(clipDur: number | undefined, shotLen: number, speed: nu
 
 // ---------------------------------------------------------------- the edit
 export interface EditOptions {
+  /** an ad always closes on an end card; a documentary or story only with a button or link to show */
+  genre?: "ad" | "documentary" | "story";
   look: ProdLook;
   text: TextMode;
   brand: string;
@@ -291,6 +352,8 @@ export function assemble(shots: Shot[], o: EditOptions): Omit<Scene, "id">[] {
     const effects: Effect[] = [...look.effects];
     // Punctuate: an impact at the product reveal in punchy looks.
     if (sh.type === "product" && o.look === "commercial") effects.push("flash");
+    // A photo is never left frozen: a slow push across it.
+    if (sh.still && !effects.includes("push-in")) effects.unshift("push-in");
     const base: Omit<Scene, "id"> = {
       template: "fullbleed",
       duration: d,
@@ -298,11 +361,12 @@ export function assemble(shots: Shot[], o: EditOptions): Omit<Scene, "id">[] {
       ...(sh.clipStart && { clipStart: sh.clipStart }),
       ...(sh.clipSpeed && { clipSpeed: sh.clipSpeed }),
       headline: sh.overlay || undefined,
-      transition: i === 0 ? "cut" : look.transition === "fade" && i % 2 ? "fade" : sh.type === "product" ? "zoom" : look.transition,
+      // a new thought (the speaker paused) dissolves in; within a thought, cuts
+      transition: i === 0 ? "cut" : sh.breath ? "fade" : look.transition === "fade" && i % 2 ? "fade" : sh.type === "product" ? "zoom" : look.transition,
       grade: look.grade,
       effects: [...new Set(effects)].slice(0, 4),
       fxAmount: look.amount,
-      shot: { type: sh.type, query: sh.queries[0] ?? "" },
+      shot: { type: sh.type, query: sh.queries[0] ?? "", ...(sh.line && { line: sh.line.slice(0, 300) }), ...(sh.queries.length > 1 && { queries: sh.queries.slice(0, 6) }), ...(sh.must?.length && { must: sh.must.slice(0, 4) }), ...(sh.avoid?.length && { avoid: sh.avoid.slice(0, 4) }) },
     };
     if (!sh.clip) return { ...base, template: "kinetic-words", headline: emphasize(clipWords(sh.line || o.title, 8)), background: "gradient" };
     return base;
@@ -310,7 +374,7 @@ export function assemble(shots: Shot[], o: EditOptions): Omit<Scene, "id">[] {
   // The opener carries the title; the last shot becomes the end card, the footage still running behind it.
   if (scenes[0] && o.title && scenes[0].template === "fullbleed") Object.assign(scenes[0], { kicker: o.brand || undefined, headline: emphasize(clipWords(o.title, 6)) });
   const last = scenes[scenes.length - 1];
-  if (last && scenes.length > 2 && (o.cta || o.url || o.brand)) {
+  if (last && scenes.length > 2 && ((o.genre ?? "ad") === "ad" ? o.cta || o.url || o.brand : o.cta || o.url)) {
     const clip = last.image;
     scenes[scenes.length - 1] = { ...last, template: "cta-end", headline: emphasize(clipWords(o.brand || o.title || "Get started", 4)), cta: o.cta || "Learn more", url: o.url || undefined, ...(clip && { backdrop: [clip] }), image: undefined, effects: look.effects.filter((e) => e !== "letterbox").slice(0, 2) };
   }

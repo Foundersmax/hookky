@@ -125,7 +125,12 @@ export function sanitizeScene(input: unknown, keepId?: string): Scene {
     font: ((f) => (f && /^[\w .'-]+$/.test(f) ? f : undefined))(str(s.font, 60)),
     notes: str(s.notes, 400),
     icons: ((v) => (Array.isArray(v) ? (v.filter((x) => typeof x === "string" && ICON_NAME.test(x)).slice(0, 8) as string[]) : undefined))(s.icons),
-    shot: ((v: any) => (v && typeof v === "object" && typeof v.query === "string" ? { type: String(v.type ?? "medium").slice(0, 20), query: v.query.slice(0, 80) } : undefined))(s.shot),
+    shot: ((v: any) => {
+      if (!v || typeof v !== "object" || typeof v.query !== "string") return undefined;
+      const list = (x: unknown, n: number, len: number) => (Array.isArray(x) ? x.filter((y): y is string => typeof y === "string" && !!y.trim()).map((y) => y.slice(0, len)).slice(0, n) : []);
+      const queries = list(v.queries, 6, 80), must = list(v.must, 4, 30), avoid = list(v.avoid, 4, 30);
+      return { type: String(v.type ?? "medium").slice(0, 20), query: v.query.slice(0, 80), ...(typeof v.line === "string" && v.line && { line: v.line.slice(0, 300) }), ...(queries.length && { queries }), ...(must.length && { must }), ...(avoid.length && { avoid }) };
+    })(s.shot),
   };
   for (const k of Object.keys(scene) as (keyof Scene)[]) if (scene[k] === undefined) delete scene[k];
   return scene;

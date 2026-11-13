@@ -142,13 +142,20 @@ export function pickVideoFile<T extends { width?: number; height?: number; link?
   return fits[0] ?? usable.sort((a, b) => edge(a) - edge(b))[0];
 }
 
+/** Pexels videos have no title field, but their page address describes them (".../video/a-barista-pouring-latte-art-4820343/"). */
+export function pexelsTitle(url: unknown, fallback: string): string {
+  const slug = typeof url === "string" ? /\/video\/([a-z0-9-]+?)-?\d*\/?$/i.exec(url)?.[1] : undefined;
+  const words = slug?.replace(/-/g, " ").trim();
+  return words && /[a-z]{3}/i.test(words) ? words.slice(0, 140) : fallback;
+}
+
 export function mapPexelsVideos(d: any, q: string): Asset[] {
   return (d?.videos ?? [])
     .map((v: any): Asset | null => {
       const f = pickVideoFile(Array.isArray(v.video_files) ? v.video_files : []);
       if (!f) return null;
       return {
-        id: nid("pxv"), title: q, src: f.link!, thumb: v.image, source: "pexels", link: v.url, author: v.user?.name, license: "Pexels",
+        id: nid("pxv"), title: pexelsTitle(v.url, q), src: f.link!, thumb: v.image, source: "pexels", link: v.url, author: v.user?.name, license: "Pexels",
         w: f.width, h: f.height, duration: v.duration, kind: "video",
       };
     })

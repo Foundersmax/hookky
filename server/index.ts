@@ -120,7 +120,7 @@ app.post("/api/shots", async (req, res) => {
     const b = req.body ?? {};
     const shots = (Array.isArray(b.shots) ? b.shots : []).map((s: any) => ({ line: String(s?.line ?? ""), type: String(s?.type ?? "medium"), queries: Array.isArray(s?.queries) ? s.queries.map(String) : [] }));
     if (!shots.length) return void res.status(400).json({ error: "No shots to plan." });
-    res.json({ shots: await claudeShotList({ shots, brief: String(b.brief ?? ""), aspect: String(b.aspect ?? "16:9"), look: String(b.look ?? "cinematic"), text: String(b.text ?? "subtitles") }) });
+    res.json({ shots: await claudeShotList({ shots, brief: String(b.brief ?? ""), aspect: String(b.aspect ?? "16:9"), look: String(b.look ?? "cinematic"), text: String(b.text ?? "subtitles"), genre: String(b.genre ?? "ad"), direction: String(b.direction ?? ""), topic: String(b.topic ?? "") }) });
   } catch (e: any) {
     res.status(503).json({ error: e?.message ?? String(e) });
   }

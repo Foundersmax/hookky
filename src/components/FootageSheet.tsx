@@ -3,6 +3,8 @@ import type { Aspect, Asset } from "../types";
 import { useStudio, setState, getState } from "../store";
 import { LOOKS_PROD, SHOT_TYPES, type ProdLook, type Shot, type TextMode } from "../footage/plan";
 import { directFootage, stopDirecting } from "../footage/direct";
+import { GENRES, parseDirection, type Genre } from "../footage/mind";
+import { VIDEO_SOURCES, IMAGE_SOURCES } from "./FootageFinder";
 import { initialCopy } from "../soundApply";
 import { Icon } from "./Icon";
 import { LicenseCard } from "./LicenseCard";
@@ -16,6 +18,23 @@ const TEXT: { id: TextMode; label: string; note: string }[] = [
 const SHOT_LABEL: Record<(typeof SHOT_TYPES)[number], string> = { establishing: "Establishing", wide: "Wide", medium: "Medium", "close-up": "Close-up", detail: "Detail", people: "People", product: "Product", abstract: "Abstract" };
 const tc = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, "0")}`;
 const BRIEF_KEY = "hookky.footageBrief";
+const DIRECTION_KEY = "rookker.footageDirection";
+const GENRE_KEY = "rookker.footageGenre";
+const SOURCE_NAMES: Record<string, string> = { freepik: "Freepik", pexels: "Pexels", pixabay: "Pixabay", coverr: "Coverr", unsplash: "Unsplash", openverse: "Openverse" };
+const DIRECTION_IDEAS = [
+  "Cinematic aerial drone shots, moody light, no people",
+  "Real documentary footage, handheld, natural light, close-ups of hands at work",
+  "Slow motion, golden hour, warm and hopeful",
+  "Archival black and white photos and vintage footage",
+  "Clean modern b-roll, bright, no text or logos",
+];
+const read = (k: string) => {
+  try {
+    return localStorage.getItem(k) || "";
+  } catch {
+    return "";
+  }
+};
 
 /** Upload a voice-over and get an edit: a shot list, stock footage cast for every line, one look. */
 export function FootageSheet() {
@@ -35,7 +54,16 @@ export function FootageSheet() {
   const [cta, setCta] = useState(copy0.cta);
   const [url, setUrl] = useState(copy0.url);
   const [script, setScript] = useState("");
-  const [look, setLook] = useState<ProdLook>("cinematic");
+  const [genre, setGenreState] = useState<Genre>(() => (read(GENRE_KEY) in GENRES ? (read(GENRE_KEY) as Genre) : "documentary"));
+  const [direction, setDirection] = useState(() => read(DIRECTION_KEY));
+  const [offSources, setOffSources] = useState<string[]>([]);
+  const health = useStudio((s) => s.health);
+  const connected = (id: string) => !!health?.connectors.find((c) => c.id === id)?.configured;
+  const videoIds = VIDEO_SOURCES.filter(connected), imageIds = IMAGE_SOURCES.filter(connected);
+  const libraries = [...new Set([...videoIds, ...imageIds])];
+  const [look, setLook] = useState<ProdLook>(() => (read(GENRE_KEY) === "ad" ? "cinematic" : "documentary"));
+  const setGenre = (g: Genre) => (setGenreState(g), setLook(g === "ad" ? "cinematic" : g === "documentary" ? "documentary" : look));
+  const understood = parseDirection(direction);
   const [text, setText] = useState<TextMode>("subtitles");
   const [aspect, setAspect] = useState<Aspect>(project.aspect);
   const [busy, setBusy] = useState<string | null>(null);
@@ -61,6 +89,8 @@ export function FootageSheet() {
     setRows(null);
     try {
       localStorage.setItem(BRIEF_KEY, brief);
+      localStorage.setItem(DIRECTION_KEY, direction);
+      localStorage.setItem(GENRE_KEY, genre);
     } catch {
       /* private mode */
     }
@@ -72,6 +102,10 @@ export function FootageSheet() {
         voiceFile,
         script,
         brief: [brief, brand].filter(Boolean).join(" · "),
+        genre,
+        direction,
+        // every connected library the person left ticked, searched together
+        sources: { video: videoIds.filter((s) => !offSources.includes(s)), image: imageIds.filter((s) => !offSources.includes(s)) },
         look,
         text,
         aspect,
@@ -99,7 +133,7 @@ export function FootageSheet() {
         <div className="sheet-head">
           <div>
             <h3 id="footage-title">Footage from your voice-over</h3>
-            <p className="sound-sub">Each line gets a shot, like a real edit: a shot list, stock footage cast for every line, one grade across it all.</p>
+            <p className="sound-sub">Rookker reads the whole voice-over, works out what each line is about, and casts footage that shows it from your stock libraries. Describe the footage you want and it follows that in every shot.</p>
           </div>
           <button className="btn icon ghost" onClick={close} aria-label="Close">
             <Icon name="minus" />
@@ -124,10 +158,50 @@ export function FootageSheet() {
                 <textarea rows={3} value={script} placeholder="Paste what the voice-over says." onChange={(e) => setScript(e.target.value)} />
               </label>
             )}
+            <span className="label">Kind of film</span>
+            <div className="seg genre-seg" role="radiogroup" aria-label="Kind of film">
+              {(Object.keys(GENRES) as Genre[]).map((g) => (
+                <button key={g} role="radio" aria-checked={genre === g} title={GENRES[g].note} className={genre === g ? "on" : ""} onClick={() => setGenre(g)}>{GENRES[g].label}</button>
+              ))}
+            </div>
+            <span className="tiny">{GENRES[genre].note}.</span>
             <label className="field">
-              <span className="label">What's the ad for?</span>
-              <input type="text" value={brief} placeholder="A smartwatch for runners who sleep badly" onChange={(e) => setBrief(e.target.value)} />
+              <span className="label">{genre === "ad" ? "What's the ad for?" : "What's it about?"}</span>
+              <input type="text" value={brief} placeholder={genre === "ad" ? "A smartwatch for runners who sleep badly" : "The history of coffee, from Ethiopia to the world"} onChange={(e) => setBrief(e.target.value)} />
             </label>
+            <label className="field">
+              <span className="label">Describe the footage you want</span>
+              <textarea rows={3} value={direction} maxLength={600} placeholder="Cinematic aerial shots, moody light, real places, no people. Black and white photos for the historical parts." onChange={(e) => setDirection(e.target.value)} />
+            </label>
+            {!direction.trim() ? (
+              <div className="dir-ideas" aria-label="Examples">
+                {DIRECTION_IDEAS.map((d) => (
+                  <button key={d} onClick={() => setDirection(d)}>{d}</button>
+                ))}
+              </div>
+            ) : (
+              (understood.styles.length > 0 || understood.moods.length > 0 || understood.avoid.length > 0 || understood.media || understood.subjects.length > 0) && (
+                <div className="dir-read" aria-label="How Rookker reads your description">
+                  {understood.styles.map((s) => <span key={s} title="Added to the searches">{s}</span>)}
+                  {understood.moods.map((s) => <span key={s} title="Clips with this feel are preferred">{s}</span>)}
+                  {understood.subjects.map((s) => <span key={s} title="Searched as a subject">{s}</span>)}
+                  {understood.media && <span title="What to cast">{understood.media === "photo" ? "photos" : understood.media === "any" ? "video + photos" : "video only"}</span>}
+                  {understood.avoid.map((s) => <span key={s} className="no" title="Kept out of every shot">no {s}</span>)}
+                </div>
+              )
+            )}
+            {libraries.length > 0 && (
+              <div className="field">
+                <span className="label">Stock libraries to search</span>
+                <div className="lib-row">
+                  {libraries.map((id) => (
+                    <label key={id} className="toggle">
+                      <input type="checkbox" checked={!offSources.includes(id)} onChange={() => setOffSources((o) => (o.includes(id) ? o.filter((x) => x !== id) : [...o, id]))} /> {SOURCE_NAMES[id] ?? id}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <span className="label">Look</span>
             <div className="look-grid" role="radiogroup" aria-label="Look">
@@ -175,7 +249,7 @@ export function FootageSheet() {
               </button>
             ) : (
               <button className="btn primary sound-build" disabled={!hasVoice} onClick={go}>
-                <Icon name="sparkle" /> {rows ? "Shoot it again" : "Direct the footage"}
+                <Icon name="sparkle" /> {rows ? "Direct it again" : "Direct the footage"}
               </button>
             )}
             {project.scenes.length > 0 && !rows && <span className="tiny">Replaces this project's scenes. Undo brings them back.</span>}
@@ -190,7 +264,7 @@ export function FootageSheet() {
                   ))}
                 </div>
                 <p>The shot list appears here: each line of your voice-over, the shot it gets, and the footage cast for it.</p>
-                <p className="tiny">Swap any shot later in the Scene tab: search again, pick another take, or drop in your own clip.</p>
+                <p className="tiny">Don't like a shot? Press Swap on it to browse the libraries yourself, preview clips and photos, and replace it.</p>
               </div>
             ) : (
               <>
@@ -213,8 +287,11 @@ export function FootageSheet() {
                             <span className="tiny">{tc(s.s)} · {(s.e - s.s).toFixed(1)}s</span>
                           </span>
                           <q>{s.line || "(no words)"}</q>
-                          <small>{p === undefined ? `searching “${s.queries[0]}”` : p ? `${p.source} · “${s.queries[0]}”` : "no footage found: shown as type"}</small>
+                          <small>{p === undefined ? `searching “${s.queries[0]}”` : p ? `${p.kind === "video" ? "clip" : "photo"} from ${SOURCE_NAMES[p.source] ?? p.source} · ${s.visual ?? `“${s.queries[0]}”`}` : "no footage found: shown as type"}</small>
                         </span>
+                        {p !== undefined && done && (
+                          <button className="btn shot-swap" title="Browse the stock libraries and replace this shot" onClick={(e) => (e.stopPropagation(), setState({ selected: i, sheet: "finder" }))}>Swap</button>
+                        )}
                       </li>
                     );
                   })}
