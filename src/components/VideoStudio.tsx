@@ -13,6 +13,7 @@ type Connection = { id: string; name: string; keyName: string; keySet: boolean; 
 /** Admins: switch each video connection on or off for everyone. */
 function Connections({ onClose }: { onClose: () => void }) {
   const [list, setList] = useState<Connection[] | null>(null);
+  const [storage, setStorage] = useState<{ on: boolean; bucket: string | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   useEffect(() => {
@@ -23,7 +24,7 @@ function Connections({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     fetch("/api/admin/aivideo")
       .then(async (r) => ((await r.json().catch(() => ({}))) as any))
-      .then((j) => (j.connections ? setList(j.connections) : setError(j.error ?? "Couldn't load the connections.")))
+      .then((j) => (j.connections ? (setList(j.connections), setStorage(j.storage ?? null)) : setError(j.error ?? "Couldn't load the connections.")))
       .catch(() => setError("Couldn't load the connections."));
   }, []);
   const flip = async (c: Connection) => {
@@ -51,6 +52,19 @@ function Connections({ onClose }: { onClose: () => void }) {
         <p className="vs-conn-lead">Switch a maker off to stop new videos on its account, for everyone. Clips already rendering still finish. A model whose maker is off runs on fal.ai instead, if fal.ai is on.</p>
         {error && <p className="vs-error" role="alert">{error}</p>}
         {!list && !error && <p className="vs-conn-lead">Loading…</p>}
+        {storage && (
+          <p className={`vs-conn-store ${storage.on ? "on" : ""}`}>
+            {storage.on ? (
+              <>
+                <b>Storage: Cloudflare R2</b> · every finished clip is copied to the <code>{storage.bucket}</code> bucket, so it outlives the makers' links.
+              </>
+            ) : (
+              <>
+                <b>No storage yet</b> · clips last only as long as each maker keeps them (hours to days). Add <code>R2_ACCOUNT_ID</code>, <code>R2_ACCESS_KEY_ID</code>, <code>R2_SECRET_ACCESS_KEY</code> and <code>R2_BUCKET</code> in the server's environment to keep them.
+              </>
+            )}
+          </p>
+        )}
         <ul className="vs-conn-list">
           {list?.map((c) => (
             <li key={c.id}>
@@ -175,7 +189,7 @@ function Card({ g, onReuse }: { g: Generation; onReuse: (g: Generation) => void 
         ) : g.state === "failed" || broken ? (
           <div className="vs-wait failed" role="status">
             <b>{broken ? "This clip is no longer available" : "Didn't finish"}</b>
-            <small>{broken ? "The model's host keeps clips for a limited time. Generate it again to get a fresh one." : g.error}</small>
+            <small>{broken ? "It was never saved to storage, and the model's host only keeps clips for a limited time. Generate it again to get a fresh one." : g.error}</small>
           </div>
         ) : (
           <div className="vs-wait" role="status" aria-live="polite">
@@ -459,7 +473,7 @@ export function VideoStudio() {
           <button className="btn primary vs-generate" disabled={!canGo} onClick={() => void go()} title={why ?? "Generate (⌘↵)"}>
             <Icon name="sparkle" /> {sending ? "Sending…" : models.length > 1 ? `Generate on ${models.length} models` : "Generate"}
           </button>
-          <small className="vs-usage">{why ?? (usage?.configured ? `${usage.used} of ${usage.limit} made today · each clip is billed by the model's maker${models.length === 1 && usage.routes?.[models[0].id] ? ` (${usage.routes[models[0].id]!.via})` : ""}` : "")}</small>
+          <small className="vs-usage">{why ?? (usage?.configured ? `${usage.used} of ${usage.limit} made today${usage.storage ? " · clips are kept" : ""} · each clip is billed by the model's maker${models.length === 1 && usage.routes?.[models[0].id] ? ` (${usage.routes[models[0].id]!.via})` : ""}` : "")}</small>
         </div>
       </aside>
 

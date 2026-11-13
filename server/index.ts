@@ -17,6 +17,7 @@ import { listConnectors, searchVisuals, searchVideos, importFromUrl, magnificUps
 import { proxyVideo } from "./videoProxy";
 import { accountsEnabled, migrate } from "./db";
 import { loadSwitches, setSwitch, envOff, ALL_ROUTES } from "./aivideoSwitches";
+import { storageOn, storageBucket } from "./storage";
 import { toAac, aacAvailable } from "./aac";
 import { generate as aiVideoGenerate, jobStatus as aiVideoStatus, aiVideoConfigured, aiVideoDailyLimit, aiVideoUsed, aiVideoProviders, aiVideoRoutes, aiVideoConnections, serveFile as aiVideoFile, serveInput as aiVideoInput, AiVideoError } from "./aivideo";
 import { accountRoutes, requireUser, sameOrigin, takeAgentTurn, authCors } from "./accounts";
@@ -76,7 +77,7 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 60 
 
 app.get("/api/health", (_req, res) => {
   void recheckClaude();
-  res.json({ agent: claudeConfigured() ? "claude" : "local", claude: claudeCheck(), voice: voiceAvailable(), exportAac: aacAvailable(), aiVideo: aiVideoConfigured(), aiVideoProviders: aiVideoProviders(), ...(freepikVideoStatus() && { freepikVideo: { ...freepikVideoStatus(), licensedToday: licensesToday() } }), transcription: transcriptionProvider(), connectors: listConnectors(), accounts, ...(build && { build }), ...(process.env.RENDER_GIT_COMMIT && { commit: process.env.RENDER_GIT_COMMIT }) });
+  res.json({ agent: claudeConfigured() ? "claude" : "local", claude: claudeCheck(), voice: voiceAvailable(), exportAac: aacAvailable(), aiVideo: aiVideoConfigured(), aiVideoProviders: aiVideoProviders(), storage: storageOn() ? "r2" : null, ...(freepikVideoStatus() && { freepikVideo: { ...freepikVideoStatus(), licensedToday: licensesToday() } }), transcription: transcriptionProvider(), connectors: listConnectors(), accounts, ...(build && { build }), ...(process.env.RENDER_GIT_COMMIT && { commit: process.env.RENDER_GIT_COMMIT }) });
 });
 
 app.post("/api/agent", async (req, res) => {
@@ -181,7 +182,7 @@ app.post("/api/icons/resolve", async (req, res) => {
 // AI video: every model through one fal.ai key. Each generation costs money, so it has a daily cap per person.
 const aiWho = (req: express.Request) => (req.user ? `u:${req.user.id}` : "everyone");
 app.get("/api/aivideo/usage", (req, res) => {
-  res.json({ configured: aiVideoConfigured(), limit: aiVideoDailyLimit(), used: aiVideoUsed(aiWho(req)), providers: aiVideoProviders(), routes: aiVideoRoutes() });
+  res.json({ configured: aiVideoConfigured(), limit: aiVideoDailyLimit(), used: aiVideoUsed(aiWho(req)), providers: aiVideoProviders(), routes: aiVideoRoutes(), storage: storageOn() });
 });
 app.post("/api/aivideo/generate", async (req, res) => {
   try {
@@ -195,7 +196,7 @@ app.post("/api/aivideo/generate", async (req, res) => {
 // Admins switch video connections off and on for everyone (needs accounts; otherwise use AI_VIDEO_OFF).
 app.get("/api/admin/aivideo", (req, res) => {
   if (!accounts || req.user?.role !== "admin") return void res.status(403).json({ error: "Admins only." });
-  res.json({ connections: aiVideoConnections() });
+  res.json({ connections: aiVideoConnections(), storage: { on: storageOn(), bucket: storageOn() ? storageBucket() : null } });
 });
 app.post("/api/admin/aivideo", async (req, res) => {
   if (!accounts || req.user?.role !== "admin") return void res.status(403).json({ error: "Admins only." });
@@ -204,7 +205,7 @@ app.post("/api/admin/aivideo", async (req, res) => {
   if (on && envOff().has(route)) return void res.status(409).json({ error: `${route} is switched off in the server's environment (AI_VIDEO_OFF), so it can't be turned on here.` });
   try {
     await setSwitch(route, on);
-    res.json({ connections: aiVideoConnections() });
+    res.json({ connections: aiVideoConnections(), storage: { on: storageOn(), bucket: storageOn() ? storageBucket() : null } });
   } catch (e: any) {
     res.status(500).json({ error: `Couldn't save the switch (${e?.message ?? e}).` });
   }

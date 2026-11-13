@@ -17,6 +17,8 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.6.0",
+    "@aws-sdk/client-s3": "^3.1168.0",
+    "@aws-sdk/lib-storage": "^3.1168.0",
     "@iconify-json/iconoir": "^1.2.12",
     "@iconify-json/lucide": "^1.2.152",
     "@iconify-json/ph": "^1.2.2",

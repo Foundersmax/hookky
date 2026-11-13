@@ -61,8 +61,9 @@ test("a generation is queued, polled and finishes with a playable clip", async (
   assert.deepEqual(await jobStatus(id), { state: "queued", position: 2 });
   assert.deepEqual(await jobStatus(id), { state: "running" });
   const done = await jobStatus(id);
-  assert.deepEqual(done, { state: "done", video: { url: "https://v3.fal.media/files/abc/out.mp4", width: 1280, height: 720 } });
-  assert.ok(videoHostAllowed(done.video!.url), "the clip can stream through the video proxy");
+  // the studio plays it from this server, which streams (and can save) fal.ai's copy
+  assert.deepEqual(done, { state: "done", video: { url: `/api/aivideo/file?id=${encodeURIComponent(id)}`, width: 1280, height: 720 } });
+  assert.ok(videoHostAllowed("https://v3.fal.media/files/abc/out.mp4"), "fal.ai's own link is still allowed through the video proxy");
 });
 
 test("a job survives a server restart: the id alone finds it", async () => {

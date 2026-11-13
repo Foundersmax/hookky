@@ -29,6 +29,8 @@ export interface Usage {
   used: number;
   /** the connection each model would use now (null: not connected) */
   routes?: Record<string, { route: string; via: string; modes: ("text" | "image")[] } | null>;
+  /** finished clips are copied to the server's storage (Cloudflare R2) */
+  storage?: boolean;
 }
 
 const KEY = "rookker.aivideo.v1";

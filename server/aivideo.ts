@@ -10,6 +10,8 @@ import { normalize, buildInput, modelById, onFal, supports, VIDEO_MODELS, PROVID
 import { rememberVideoUrls } from "./connectors";
 import { MAKERS, MakerError, type Source } from "./videoProviders";
 import { safeFetch } from "./safeFetch";
+import { createReadStream, statSync } from "node:fs";
+import { storageOn, clipKey, stored, saveClip, readClip } from "./storage";
 import { isOff, envOff, switchedOff, ALL_ROUTES } from "./aivideoSwitches";
 
 type Route = Provider | "fal";
@@ -163,7 +165,8 @@ async function falStatus(model: NonNullable<ReturnType<typeof modelById>>, mode:
   if (!r.ok) return { state: "failed", error: `fal.ai ${falExplain(r.status, r.json, r.text).message}.` };
   const v = r.json?.video ?? r.json?.videos?.[0];
   const url = typeof v === "string" ? v : v?.url;
-  if (typeof url !== "string" || !/^https:\/\/[^\s]+$/.test(url)) return { state: "failed", error: "The model finished without a video (it may have been blocked by its safety filter). Try rewording the prompt." };
+  const fromFal = typeof url === "string" && url.startsWith(`${new URL(falBase()).origin}/`); // (a self-hosted or test queue)
+  if (typeof url !== "string" || !(/^https:\/\/[^\s]+$/.test(url) || fromFal)) return { state: "failed", error: "The model finished without a video (it may have been blocked by its safety filter). Try rewording the prompt." };
   rememberVideoUrls([{ kind: "video", src: url } as never]);
   return { state: "done", video: { url, ...(Number.isFinite(v?.width) && { width: v.width }), ...(Number.isFinite(v?.height) && { height: v.height }) } };
 }
@@ -234,12 +237,22 @@ export const fileUrl = (id: string) => `/api/aivideo/file?id=${encodeURIComponen
 /** Where a job is; when it's done, where its video plays from. */
 export async function jobStatus(id: string): Promise<JobState> {
   const j = parseId(id);
-  if (j.route === "fal") return falStatus(j.model, j.mode, j.rid);
+  if (j.route === "fal") {
+    const s = await falStatus(j.model, j.mode, j.rid);
+    if (s.state !== "done" || !s.video) return s;
+    // fal.ai's link is kept for streaming and saving; the studio plays it from this server
+    sources.set(id, { src: { url: s.video.url }, at: Date.now() });
+    void archive(id);
+    return { ...s, video: { ...s.video, url: fileUrl(id) } };
+  }
   const maker = MAKERS[j.route];
   if (!maker.configured()) throw new AiVideoError(`${routeName(j.route)} isn't connected on this server any more.`, 503);
   try {
     const p = await maker.poll(j.rid);
-    if (p.state === "done") return { state: "done", video: { url: fileUrl(id) } };
+    if (p.state === "done") {
+      void archive(id);
+      return { state: "done", video: { url: fileUrl(id) } };
+    }
     return p;
   } catch (e) {
     if (e instanceof MakerError && !e.retry) return { state: "failed", error: `${routeName(j.route)} ${e.message}.` };
@@ -252,7 +265,15 @@ const sources = new Map<string, { src: Source; at: number }>();
 const SOURCE_TTL = 20 * 60_000;
 async function sourceFor(id: string, fresh = false): Promise<{ src: Source; trusted: string }> {
   const j = parseId(id);
-  if (j.route === "fal") throw new AiVideoError("fal.ai clips play from their own link.", 404);
+  if (j.route === "fal") {
+    const hit = sources.get(id);
+    if (hit && !fresh && Date.now() - hit.at < SOURCE_TTL) return { src: hit.src, trusted: falBase() };
+    const s = await falStatus(j.model, j.mode, j.rid);
+    if (s.state !== "done" || !s.video) throw new AiVideoError(s.error ?? "This clip isn't finished.", s.state === "failed" ? 410 : 409);
+    const src = { url: s.video.url };
+    sources.set(id, { src, at: Date.now() });
+    return { src, trusted: falBase() };
+  }
   const maker = MAKERS[j.route];
   if (!maker.configured()) throw new AiVideoError(`${routeName(j.route)} isn't connected on this server any more.`, 503);
   const hit = sources.get(id);
@@ -267,11 +288,91 @@ async function sourceFor(id: string, fresh = false): Promise<{ src: Source; trus
   if (sources.size > 2000) for (const k of [...sources.keys()].slice(0, 400)) sources.delete(k);
   return { src, trusted: maker.base() };
 }
+/** Fetch a clip from where its maker keeps it. Keys only go to the maker's own API host; other links pass the SSRF guard. */
+async function openSource(src: { url: string; headers?: Record<string, string> }, trusted: string, range?: string) {
+  const headers = { "User-Agent": "Mozilla/5.0 (compatible; Rookker/0.1)", ...src.headers, ...(range && { Range: range }) };
+  let sameHost = false;
+  try {
+    sameHost = new URL(src.url).origin === new URL(trusted).origin;
+  } catch {}
+  if (src.headers && !sameHost) throw new AiVideoError("Refusing to send a key to another host.", 502);
+  return sameHost ? fetch(src.url, { headers, signal: AbortSignal.timeout(300_000) }) : (await safeFetch(src.url, { headers, timeoutMs: 300_000 })).res;
+}
+
+// ---------------------------------------------------------------- saving finished clips to R2
+const MAX_SAVE_BYTES = 2 * 1024 ** 3;
+const saving = new Map<string, Promise<boolean>>();
+const saveFailedAt = new Map<string, number>();
+/** Copy a finished clip into storage (once; quietly retried later if it fails). */
+export function archive(id: string): Promise<boolean> {
+  if (!storageOn()) return Promise.resolve(false);
+  const running = saving.get(id);
+  if (running) return running;
+  if (Date.now() - (saveFailedAt.get(id) ?? 0) < 5 * 60_000) return Promise.resolve(false);
+  const job = (async () => {
+    const key = clipKey(id);
+    if ((await stored(key)) !== null) return true;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const { src, trusted } = await sourceFor(id, attempt > 0);
+      if ("file" in src) {
+        await saveClip(key, createReadStream(src.file), "video/mp4", statSync(src.file).size);
+        return true;
+      }
+      const r = await openSource(src, trusted);
+      if ((r.status === 403 || r.status === 404 || r.status === 410) && attempt === 0) {
+        await r.body?.cancel().catch(() => {});
+        continue;
+      }
+      const type = (r.headers.get("content-type") || "video/mp4").toLowerCase();
+      const len = Number(r.headers.get("content-length")) || undefined;
+      if (r.status !== 200 || !r.body || !(/^video\//.test(type) || /octet-stream/.test(type)) || (len ?? 0) > MAX_SAVE_BYTES) {
+        await r.body?.cancel().catch(() => {});
+        throw new Error(`the clip couldn't be fetched (${r.status} ${type})`);
+      }
+      await saveClip(key, Readable.fromWeb(r.body as any), /^video\//.test(type) ? type : "video/mp4", len);
+      return true;
+    }
+    throw new Error("the clip's link had expired");
+  })()
+    .catch((e) => {
+      saveFailedAt.set(id, Date.now());
+      console.error(`Couldn't save clip ${id} to storage: ${e?.message ?? e}`);
+      return false;
+    })
+    .finally(() => saving.delete(id));
+  saving.set(id, job);
+  return job;
+}
+
 /** GET /api/aivideo/file?id= — the finished clip, with Range support so it can be scrubbed and exported. */
 export async function serveFile(req: Request, res: Response) {
   const id = String(req.query.id ?? "");
   const range = typeof req.headers.range === "string" && /^bytes=\d*-\d*$/.test(req.headers.range) ? req.headers.range : undefined;
   try {
+    parseId(id);
+    // from storage when it's there: it outlives the makers' links
+    if (storageOn()) {
+      const key = clipKey(id);
+      const size = await stored(key).catch(() => null);
+      if (size !== null) {
+        try {
+          const c = await readClip(key, range);
+          res.status(c.status);
+          res.setHeader("Content-Type", c.type);
+          if (c.length !== undefined) res.setHeader("Content-Length", String(c.length));
+          if (c.range) res.setHeader("Content-Range", c.range);
+          res.setHeader("Accept-Ranges", "bytes");
+          res.setHeader("Cache-Control", "private, max-age=31536000, immutable");
+          res.setHeader("X-Content-Type-Options", "nosniff");
+          res.on("close", () => c.body.destroy());
+          c.body.on("error", () => res.destroy());
+          return void c.body.pipe(res);
+        } catch (e: any) {
+          if (e?.name === "InvalidRange" || e?.$metadata?.httpStatusCode === 416) return void res.status(416).setHeader("Content-Range", `bytes */${size}`).end();
+          console.error(`Couldn't read clip ${id} from storage: ${e?.message ?? e}`); // fall through to the maker's copy
+        }
+      } else void archive(id);
+    }
     for (let attempt = 0; attempt < 2; attempt++) {
       const { src, trusted } = await sourceFor(id, attempt > 0);
       if ("file" in src) {
@@ -280,17 +381,7 @@ export async function serveFile(req: Request, res: Response) {
           if (err && !res.headersSent) res.status(404).send("This clip is no longer on the server.");
         });
       }
-      const headers = { "User-Agent": "Mozilla/5.0 (compatible; Rookker/0.1)", ...src.headers, ...(range && { Range: range }) };
-      // the maker's own API host is trusted (it gets the key); links it hands out go through the SSRF guard
-      const sameHost = (() => {
-        try {
-          return new URL(src.url).origin === new URL(trusted).origin;
-        } catch {
-          return false;
-        }
-      })();
-      if (src.headers && !sameHost) throw new AiVideoError("Refusing to send a key to another host.", 502);
-      const r = sameHost ? await fetch(src.url, { headers, signal: AbortSignal.timeout(300_000) }) : (await safeFetch(src.url, { headers, timeoutMs: 300_000 })).res;
+      const r = await openSource(src, trusted, range);
       if ((r.status === 403 || r.status === 404 || r.status === 410) && attempt === 0) {
         await r.body?.cancel().catch(() => {});
         continue; // the link expired: ask the maker again
