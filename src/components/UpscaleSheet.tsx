@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { setState } from "../store";
 import { download } from "../export";
 import { Icon } from "./Icon";
+import { takeHandoff } from "../handoff";
 import { Upscaler, DEFAULT_LOOK, type Look } from "../upscale/gl";
 import { probe, upscaleVideo, targetSize, pickCodec, upscaleBitrate, TARGETS, CODEC_NAME, type TargetId, type SourceInfo } from "../upscale/run";
 
@@ -169,6 +170,13 @@ export function UpscaleSheet() {
 
   const cap = caps[target];
   const est = src && cap?.ok ? (upscaleBitrate(cap.size[0], cap.size[1], src.fps) * src.duration) / 8 : 0;
+
+  // a clip handed over from another tool (AI video) opens straight away
+  useEffect(() => {
+    const f = takeHandoff();
+    if (f) void open(f);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="sheet-backdrop" onPointerDown={(e) => e.target === e.currentTarget && close()}>

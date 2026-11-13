@@ -244,6 +244,9 @@ export function Home() {
               <button className="btn" onClick={() => void createProject("blank").then(() => setState({ sheet: "formats" }))}>
                 <Icon name="sparkle" /> Creative formats
               </button>
+              <button className="btn" onClick={() => setState({ view: "video" })}>
+                <Icon name="wand" /> AI video generator
+              </button>
               <button className="btn" onClick={() => setState({ sheet: "caption" })}>
                 <Icon name="mic" /> Caption a video
               </button>

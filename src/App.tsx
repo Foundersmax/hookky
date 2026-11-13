@@ -13,6 +13,7 @@ import { Logo } from "./components/Logo";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ShortcutsSheet } from "./components/ShortcutsSheet";
 import { Home } from "./components/Home";
+import { VideoStudio } from "./components/VideoStudio";
 import { Versions } from "./components/Versions";
 import { CommandPalette } from "./components/CommandPalette";
 import { SoundTemplates } from "./components/SoundTemplates";
@@ -96,6 +97,19 @@ export function App() {
   }, [theme]);
 
   // server capabilities
+  // The AI video page has its own address (?view=video), so a reload or a shared link lands there.
+  useEffect(() => {
+    if (new URL(location.href).searchParams.get("view") === "video") setState({ view: "video" });
+  }, []);
+  useEffect(() => {
+    try {
+      const u = new URL(location.href);
+      if ((u.searchParams.get("view") === "video") === (view === "video")) return;
+      if (view === "video") u.searchParams.set("view", "video");
+      else u.searchParams.delete("view");
+      history.replaceState(history.state, "", u);
+    } catch {}
+  }, [view]);
   useEffect(() => {
     fetch("/api/health")
       .then((r) => r.json())
@@ -196,7 +210,7 @@ export function App() {
         setShowKeys(true);
         return;
       }
-      if (getState().view === "home") return; // studio shortcuts only apply in the studio
+      if (getState().view !== "studio") return; // studio shortcuts only apply in the studio
       if (e.code === "Space") {
         e.preventDefault();
         if (tag === "BUTTON" || tag === "INPUT") (e.target as HTMLElement).blur(); // stop the focused control also reacting on keyup
@@ -244,6 +258,12 @@ export function App() {
             <>
               <span className="crumb-sep" aria-hidden>/</span>
               <input className="title-input" value={project.title} aria-label="Project name" onChange={(e) => setState((s) => ({ project: { ...s.project, title: e.target.value } }))} />
+            </>
+          )}
+          {view === "video" && (
+            <>
+              <span className="crumb-sep" aria-hidden>/</span>
+              <span className="crumb on" aria-current="page">AI video</span>
             </>
           )}
           {view === "admin" && (
@@ -310,6 +330,10 @@ export function App() {
       {view === "admin" ? (
         <ErrorBoundary area="people page">
           <AdminPanel />
+        </ErrorBoundary>
+      ) : view === "video" ? (
+        <ErrorBoundary area="AI video page">
+          <VideoStudio />
         </ErrorBoundary>
       ) : view === "home" ? (
         <ErrorBoundary area="projects page">

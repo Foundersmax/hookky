@@ -259,7 +259,7 @@ export async function reportStockUse(source: string, id: string) {
 }
 
 /** Hosts the video proxy will stream from (the stock sources' CDNs). Redirects are still SSRF-checked. */
-export const VIDEO_HOSTS = [/(^|\.)pexels\.com$/, /(^|\.)pixabay\.com$/, /(^|\.)vimeo\.com$/, /(^|\.)vimeocdn\.com$/, /(^|\.)coverr\.co$/, /(^|\.)cdnpk\.net$/, /(^|\.)freepik\.com$/, /(^|\.)magnific\.com$/, /(^|\.)videvo\.net$/];
+export const VIDEO_HOSTS = [/(^|\.)fal\.media$/, /(^|\.)pexels\.com$/, /(^|\.)pixabay\.com$/, /(^|\.)vimeo\.com$/, /(^|\.)vimeocdn\.com$/, /(^|\.)coverr\.co$/, /(^|\.)cdnpk\.net$/, /(^|\.)freepik\.com$/, /(^|\.)magnific\.com$/, /(^|\.)videvo\.net$/];
 
 /** Clip URLs our own searches returned (their CDNs aren't always documented). Kept for this server's lifetime. */
 const issued = new Set<string>();

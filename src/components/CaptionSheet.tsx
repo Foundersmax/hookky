@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { getState, setState } from "../store";
 import { download } from "../export";
 import { Icon } from "./Icon";
+import { takeHandoff } from "../handoff";
 import { CaptionControls } from "./CaptionControls";
 import { renderCaptions, type CaptionBox } from "../engine/captions";
 import { probe, type SourceInfo } from "../upscale/run";
@@ -168,6 +169,13 @@ export function CaptionSheet() {
   }
 
   const now = words.findIndex((w) => at >= w.s && at <= w.e + 0.05);
+  // a clip handed over from another tool (AI video) opens straight away
+  useEffect(() => {
+    const f = takeHandoff();
+    if (f) void open(f);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div className="sheet-backdrop" onPointerDown={(e) => e.target === e.currentTarget && close()}>
       <div className="sheet sound-sheet upscale-sheet" role="dialog" aria-modal="true" aria-labelledby="caption-title">

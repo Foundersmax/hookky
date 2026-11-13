@@ -35,7 +35,7 @@ export interface StudioState {
   /** saved brand kits, shared by every project */
   kits: BrandKit[];
   /** what the app shows */
-  view: "home" | "studio" | "admin";
+  view: "home" | "studio" | "admin" | "video";
   /** an open sheet over the studio */
   sheet?: "sound" | "footage" | "formats" | "upscale" | "caption";
   health?: { agent: "claude" | "hosted" | "local"; claude?: { state: string }; voice?: boolean; transcription: string; connectors: { id: string; label: string; configured: boolean; kind: string; note: string }[]; accounts?: boolean };
