@@ -16,8 +16,9 @@ import { runAgentTurn, claudeConfigured, resetConversation, claudeCheck, probeCl
 import { listConnectors, searchVisuals, searchVideos, importFromUrl, magnificUpscale, reportStockUse, type Orientation } from "./connectors";
 import { proxyVideo } from "./videoProxy";
 import { accountsEnabled, migrate } from "./db";
+import { loadSwitches, setSwitch, envOff, ALL_ROUTES } from "./aivideoSwitches";
 import { toAac, aacAvailable } from "./aac";
-import { generate as aiVideoGenerate, jobStatus as aiVideoStatus, aiVideoConfigured, aiVideoDailyLimit, aiVideoUsed, aiVideoProviders, aiVideoRoutes, serveFile as aiVideoFile, serveInput as aiVideoInput, AiVideoError } from "./aivideo";
+import { generate as aiVideoGenerate, jobStatus as aiVideoStatus, aiVideoConfigured, aiVideoDailyLimit, aiVideoUsed, aiVideoProviders, aiVideoRoutes, aiVideoConnections, serveFile as aiVideoFile, serveInput as aiVideoInput, AiVideoError } from "./aivideo";
 import { accountRoutes, requireUser, sameOrigin, takeAgentTurn, authCors } from "./accounts";
 import { mailConfigured } from "./mailer";
 import { safeFetch, readLimited, BlockedUrlError } from "./safeFetch";
@@ -46,6 +47,7 @@ app.set("trust proxy", 1);
 const accounts = accountsEnabled();
 if (accounts) {
   await migrate();
+  await loadSwitches().catch((e) => console.error("Couldn't read the AI video switches:", e.message));
   if (!process.env.ADMIN_EMAILS?.trim()) console.warn("ADMIN_EMAILS is not set: nobody can approve new accounts. Set it to your email address.");
   if (!mailConfigured()) console.warn("BREVO_API_KEY is not set: account emails are printed to this log instead of sent.");
 }
@@ -188,6 +190,23 @@ app.post("/api/aivideo/generate", async (req, res) => {
     res.json({ ...out, limit: aiVideoDailyLimit(), used: aiVideoUsed(aiWho(req)) });
   } catch (e: any) {
     res.status(e instanceof AiVideoError ? e.status : 500).json({ error: e?.message ?? String(e) });
+  }
+});
+// Admins switch video connections off and on for everyone (needs accounts; otherwise use AI_VIDEO_OFF).
+app.get("/api/admin/aivideo", (req, res) => {
+  if (!accounts || req.user?.role !== "admin") return void res.status(403).json({ error: "Admins only." });
+  res.json({ connections: aiVideoConnections() });
+});
+app.post("/api/admin/aivideo", async (req, res) => {
+  if (!accounts || req.user?.role !== "admin") return void res.status(403).json({ error: "Admins only." });
+  const { route, on } = req.body ?? {};
+  if (!(ALL_ROUTES as string[]).includes(route) || typeof on !== "boolean") return void res.status(400).json({ error: "Say which connection and whether it's on." });
+  if (on && envOff().has(route)) return void res.status(409).json({ error: `${route} is switched off in the server's environment (AI_VIDEO_OFF), so it can't be turned on here.` });
+  try {
+    await setSwitch(route, on);
+    res.json({ connections: aiVideoConnections() });
+  } catch (e: any) {
+    res.status(500).json({ error: `Couldn't save the switch (${e?.message ?? e}).` });
   }
 });
 app.get("/api/aivideo/file", (req, res) => void aiVideoFile(req, res));

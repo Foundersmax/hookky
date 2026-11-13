@@ -330,3 +330,52 @@ test("job ids are checked; keys never go to links the makers hand out", async ()
   assert.ok(r.status >= 400, `refused (${r.status})`);
   assert.ok(!seen.some((s) => s.path.startsWith("/cdn/") && s.auth), "no key sent to a CDN");
 });
+
+test("Seedance 2.x run only on BytePlus, with their own ids (overridable)", async () => {
+  const { generate, routesFor } = await import("./aivideo");
+  assert.deepEqual(routesFor("seedance-25"), ["byteplus"], "no fal.ai route for 2.x");
+  await generate({ model: "seedance-25", mode: "text", prompt: "a parade", duration: 15, resolution: "1080p", aspect: "9:16" }, "u:s2");
+  let b = last("/ark/").body;
+  assert.equal(b.model, "dreamina-seedance-2-5-260628");
+  assert.equal(b.duration, 15);
+  assert.equal(b.ratio, "9:16");
+  assert.equal(b.generate_audio, true);
+  await generate({ model: "seedance-20", mode: "image", prompt: "turns", image: PNG }, "u:s2");
+  b = last("/ark/").body;
+  assert.equal(b.model, "dreamina-seedance-2-0-260128");
+  assert.equal(b.ratio, "adaptive");
+  process.env.AIV_MODEL_SEEDANCE_20_FAST = "dreamina-seedance-2-0-fast-261001";
+  await generate({ model: "seedance-20-fast", mode: "text", prompt: "x" }, "u:s2");
+  assert.equal(last("/ark/").body.model, "dreamina-seedance-2-0-fast-261001");
+  delete process.env.AIV_MODEL_SEEDANCE_20_FAST;
+});
+
+test("switches: a maker switched off stops taking new videos; fal.ai takes over where it can", async () => {
+  const { generate, routesFor, aiVideoConnections, aiVideoProviders, jobStatus } = await import("./aivideo");
+  const { setSwitch, _resetSwitches } = await import("./aivideoSwitches");
+  const running = await generate({ model: "sora-2", mode: "text", prompt: "before" }, "u:sw");
+  await setSwitch("openai", false);
+  assert.deepEqual(routesFor("sora-2"), ["fal"]);
+  assert.ok(!aiVideoProviders().includes("openai"));
+  const c = aiVideoConnections().find((x) => x.id === "openai")!;
+  assert.deepEqual([c.on, c.keySet, c.locked, c.keyName], [false, true, false, "OPENAI_API_KEY"]);
+  assert.deepEqual(c.models, ["Sora 2"]);
+  assert.equal((await generate({ model: "sora-2", mode: "text", prompt: "x" }, "u:sw")).route, "fal");
+  assert.ok((await jobStatus(running.id)).state !== "failed", "a clip already rendering still finishes");
+  await setSwitch("byteplus", false);
+  await assert.rejects(generate({ model: "seedance-25", mode: "text", prompt: "x" }, "u:sw"), /BytePlus ModelArk is switched off/);
+  await setSwitch("fal", false);
+  await assert.rejects(generate({ model: "sora-2", mode: "text", prompt: "x" }, "u:sw"), /OpenAI and fal\.ai are switched off/);
+  _resetSwitches();
+  assert.deepEqual(routesFor("sora-2"), ["openai", "fal"]);
+});
+
+test("AI_VIDEO_OFF locks makers off from the environment", async () => {
+  const { routesFor, aiVideoConnections } = await import("./aivideo");
+  process.env.AI_VIDEO_OFF = "kling, luma";
+  assert.deepEqual(routesFor("kling-3-pro"), ["fal"]);
+  const k = aiVideoConnections().find((x) => x.id === "kling")!;
+  assert.deepEqual([k.on, k.locked], [true, true]);
+  delete process.env.AI_VIDEO_OFF;
+  assert.deepEqual(routesFor("kling-3-pro"), ["kling", "fal"]);
+});

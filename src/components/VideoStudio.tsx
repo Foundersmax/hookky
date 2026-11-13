@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { addAssets, setState } from "../store";
+import { addAssets, setState, useStudio } from "../store";
 import { uid } from "../engine/util";
 import { download } from "../export";
 import { handoff } from "../handoff";
@@ -8,6 +8,68 @@ import { VIDEO_MODELS, supports, type GenMode, type VideoModel } from "../aivide
 import { useGenerations, startGeneration, removeGeneration, clearFinished, refreshUsage, pending, playable, fetchClip, fileName, type Generation } from "../aivideo/store";
 
 const MAX_MODELS = 3;
+
+type Connection = { id: string; name: string; keyName: string; keySet: boolean; on: boolean; locked: boolean; models: string[] };
+/** Admins: switch each video connection on or off for everyone. */
+function Connections({ onClose }: { onClose: () => void }) {
+  const [list, setList] = useState<Connection[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    addEventListener("keydown", esc);
+    return () => removeEventListener("keydown", esc);
+  }, [onClose]);
+  useEffect(() => {
+    fetch("/api/admin/aivideo")
+      .then(async (r) => ((await r.json().catch(() => ({}))) as any))
+      .then((j) => (j.connections ? setList(j.connections) : setError(j.error ?? "Couldn't load the connections.")))
+      .catch(() => setError("Couldn't load the connections."));
+  }, []);
+  const flip = async (c: Connection) => {
+    setBusy(c.id);
+    setError(null);
+    try {
+      const r = await fetch("/api/admin/aivideo", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ route: c.id, on: !c.on }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error ?? `The server answered ${r.status}.`);
+      setList(j.connections);
+      void refreshUsage();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+  return (
+    <div className="sheet-backdrop" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="sheet vs-conn" role="dialog" aria-modal="true" aria-labelledby="vs-conn-title">
+        <div className="sheet-head">
+          <h3 id="vs-conn-title">Video connections</h3>
+          <button className="btn ghost icon" aria-label="Close" onClick={onClose}>×</button>
+        </div>
+        <p className="vs-conn-lead">Switch a maker off to stop new videos on its account, for everyone. Clips already rendering still finish. A model whose maker is off runs on fal.ai instead, if fal.ai is on.</p>
+        {error && <p className="vs-error" role="alert">{error}</p>}
+        {!list && !error && <p className="vs-conn-lead">Loading…</p>}
+        <ul className="vs-conn-list">
+          {list?.map((c) => (
+            <li key={c.id}>
+              <div>
+                <b>{c.name}</b>
+                <small>{c.keySet ? c.models.join(", ") : `No key yet: add ${c.keyName} in the server's environment`}</small>
+                {c.locked && <small className="vs-conn-locked">Switched off in the environment (AI_VIDEO_OFF)</small>}
+              </div>
+              <label className="vs-switch" title={c.locked ? "Off in the server's environment" : c.on ? "Switch off" : "Switch on"}>
+                <input type="checkbox" role="switch" checked={c.on && !c.locked} disabled={c.locked || busy === c.id} aria-label={`${c.name} ${c.on ? "on" : "off"}`} onChange={() => void flip(c)} />
+                <span aria-hidden />
+              </label>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
 const IDEAS = [
   "A barista pours latte art in slow motion, warm morning light, shallow depth of field",
   "Macro shot of a sneaker splashing through a neon puddle at night, camera tracking low",
@@ -178,13 +240,15 @@ export function VideoStudio() {
   const [negative, setNegative] = useState("");
   const [seed, setSeed] = useState("");
   const [more, setMore] = useState(false);
+  const [conn, setConn] = useState(false);
+  const admin = useStudio((s) => s.auth.user?.role === "admin");
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const promptBox = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => void refreshUsage(), []);
 
-  const models = useMemo(() => picked.map((id) => VIDEO_MODELS.find((m) => m.id === id)!).filter((m) => m && supports(m, mode) && (!usage?.configured || usage.routes?.[m.id] !== null)), [picked, mode, usage]);
+  const models = useMemo(() => picked.map((id) => VIDEO_MODELS.find((m) => m.id === id)!).filter((m) => m && supports(m, mode) && (!usage?.configured || !!usage.routes?.[m.id]?.modes.includes(mode))), [picked, mode, usage]);
   // options on offer: everything any picked model has (each model takes its nearest)
   const aspects = union(models.map((m) => (mode === "text" || m.i2vAspect ? m.aspects : undefined)));
   const durations = union(models.map((m) => m.durations)).sort((a, b) => a - b);
@@ -236,6 +300,7 @@ export function VideoStudio() {
 
   return (
     <div className="vs">
+      {conn && <Connections onClose={() => setConn(false)} />}
       <aside className="vs-compose" aria-label="New video">
         <div className="vs-scroll">
           <div className="seg vs-mode" role="tablist" aria-label="Start from">
@@ -290,7 +355,7 @@ export function VideoStudio() {
             <div className="vs-models">
               {shown.map((m) => {
                 const route = usage?.routes?.[m.id];
-                const connected = !usage?.configured || route !== null;
+                const connected = !usage?.configured || (!!route && route.modes.includes(mode));
                 const ok = supports(m, mode) && connected;
                 const on = picked.includes(m.id);
                 return (
@@ -300,7 +365,7 @@ export function VideoStudio() {
                       <b>
                         {m.name} <i>{m.maker}</i>
                       </b>
-                      <small>{!connected ? "Not connected" : ok ? m.blurb : "Text to video only"}</small>
+                      <small>{!supports(m, mode) ? "Text to video only" : !connected ? (route ? `${mode === "image" ? "Image" : "Text"} to video isn't connected` : "Not connected") : m.blurb}</small>
                     </span>
                     <span className="vs-badges">
                       {badges(m).map((b) => (
@@ -403,17 +468,24 @@ export function VideoStudio() {
           <h2>
             Your videos <span className="count">{list.length ? `${finished} made${active ? ` · ${active} rendering` : ""}` : ""}</span>
           </h2>
-          {finished > 0 && (
-            <button className="btn ghost" onClick={clearFinished}>
-              Clear finished
-            </button>
-          )}
+          <span className="row" style={{ flex: "none", gap: 6 }}>
+            {finished > 0 && (
+              <button className="btn ghost" onClick={clearFinished}>
+                Clear finished
+              </button>
+            )}
+            {admin && (
+              <button className="btn" onClick={() => setConn(true)} title="Switch video makers on or off for everyone">
+                <Icon name="link" /> Connections
+              </button>
+            )}
+          </span>
         </div>
         {list.length === 0 ? (
           <div className="vs-empty">
             <Icon name="sparkle" />
             <h3>One prompt, every video model</h3>
-            <p>Seedance, Kling, MiniMax Hailuo, Veo, Sora, Wan, Luma, PixVerse, Vidu, LTX and Grok. Write a prompt, pick a model (or three, to compare), and the clips land here. Then caption them, upscale them, or drop them into a project.</p>
+            <p>Seedance (up to 2.5), Kling, MiniMax Hailuo, Veo, Sora, Wan, Luma, PixVerse, Vidu, LTX and Grok. Write a prompt, pick a model (or three, to compare), and the clips land here. Then caption them, upscale them, or drop them into a project.</p>
           </div>
         ) : (
           <div className="vs-grid">

@@ -28,7 +28,7 @@ export interface Usage {
   limit: number;
   used: number;
   /** the connection each model would use now (null: not connected) */
-  routes?: Record<string, { route: string; via: string } | null>;
+  routes?: Record<string, { route: string; via: string; modes: ("text" | "image")[] } | null>;
 }
 
 const KEY = "rookker.aivideo.v1";

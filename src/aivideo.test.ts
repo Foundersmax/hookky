@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { VIDEO_MODELS, buildInput, modelById, supports } from "./aivideo/models";
+import { VIDEO_MODELS, buildInput, normalize, modelById, supports, onFal } from "./aivideo/models";
 
 const IMG = "data:image/jpeg;base64,/9j/4AAQ";
 
@@ -10,7 +10,8 @@ test("the catalog is well formed", () => {
     assert.match(m.id, /^[a-z0-9-]{2,40}$/, m.id);
     assert.ok(!ids.has(m.id), `duplicate ${m.id}`);
     ids.add(m.id);
-    assert.ok(m.t2v || m.i2v, `${m.id} has an endpoint`);
+    assert.ok(m.t2v || m.i2v || m.direct?.modes?.length, `${m.id} runs somewhere`);
+    if (!m.t2v && !m.i2v) assert.ok(m.direct, `${m.id}: a model without fal.ai needs its maker`);
     for (const e of [m.t2v, m.i2v]) if (e) assert.match(e, /^[a-z0-9-]+\/[A-Za-z0-9./-]+$/, e);
     if (m.durations) assert.deepEqual([...m.durations].sort((a, b) => a - b), m.durations);
   }
@@ -22,6 +23,13 @@ test("every model builds a text and an image request", () => {
     for (const mode of ["text", "image"] as const) {
       if (!supports(m, mode)) {
         assert.throws(() => buildInput({ model: m.id, mode, prompt: "a cat", image: IMG }), /doesn't do/);
+        continue;
+      }
+      if (!onFal(m, mode)) {
+        assert.throws(() => buildInput({ model: m.id, mode, prompt: "a cat", image: IMG }), /isn't on fal\.ai/);
+        const n = normalize({ model: m.id, mode, prompt: "a cat", image: IMG, duration: 7 });
+        assert.equal(n.prompt, "a cat");
+        if (m.durations) assert.ok(m.durations.includes(n.duration!));
         continue;
       }
       const { endpoint, input } = buildInput({ model: m.id, mode, prompt: "  a   cat  ", image: IMG, endImage: IMG, aspect: "9:16", duration: 7, resolution: "1080p", audio: false, negative: "blur", seed: 7 });

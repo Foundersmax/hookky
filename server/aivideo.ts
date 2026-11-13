@@ -6,27 +6,45 @@
 import type { Request, Response } from "express";
 import { Readable } from "node:stream";
 import { randomBytes } from "node:crypto";
-import { normalize, buildInput, modelById, VIDEO_MODELS, PROVIDER_NAMES, type GenRequest, type Normal, type Provider } from "../src/aivideo/models";
+import { normalize, buildInput, modelById, onFal, supports, VIDEO_MODELS, PROVIDER_NAMES, type GenMode, type GenRequest, type Normal, type Provider } from "../src/aivideo/models";
 import { rememberVideoUrls } from "./connectors";
 import { MAKERS, MakerError, type Source } from "./videoProviders";
 import { safeFetch } from "./safeFetch";
+import { isOff, envOff, switchedOff, ALL_ROUTES } from "./aivideoSwitches";
 
 type Route = Provider | "fal";
 const falBase = () => (process.env.FAL_QUEUE_URL || "https://queue.fal.run").replace(/\/+$/, "");
 const falKey = () => process.env.FAL_KEY?.trim() || process.env.FAL_API_KEY?.trim() || "";
 const falOn = () => !!falKey();
 
-/** The routes a model can run on, best first. */
-export function routesFor(modelId: string): Route[] {
+/** A connection that has its key and isn't switched off. */
+const live = (r: Route) => !isOff(r) && (r === "fal" ? falOn() : MAKERS[r].configured());
+/** The routes a model can run on, best first (for one mode, or for either). */
+export function routesFor(modelId: string, mode?: GenMode): Route[] {
   const m = modelById(modelId);
   if (!m) return [];
-  const direct: Route[] = m.direct && MAKERS[m.direct.provider].configured() ? [m.direct.provider] : [];
-  const fal: Route[] = falOn() ? ["fal"] : [];
+  const modes: GenMode[] = mode ? [mode] : ["text", "image"];
+  const direct: Route[] = m.direct && live(m.direct.provider) && modes.some((md) => supports(m, md)) ? [m.direct.provider] : [];
+  const fal: Route[] = live("fal") && modes.some((md) => onFal(m, md)) ? ["fal"] : [];
   return process.env.AI_VIDEO_ROUTE === "fal" ? [...fal, ...direct] : [...direct, ...fal];
 }
 export const aiVideoConfigured = () => VIDEO_MODELS.some((m) => routesFor(m.id).length > 0);
 /** Which connections are switched on (names only, for health and the workspace). */
-export const aiVideoProviders = (): Route[] => [...(Object.keys(MAKERS) as Provider[]).filter((p) => MAKERS[p].configured()), ...(falOn() ? (["fal"] as Route[]) : [])];
+export const aiVideoProviders = (): Route[] => ALL_ROUTES.filter(live);
+/** Every connection, for the admin's switches. */
+export function aiVideoConnections() {
+  const locked = envOff();
+  return ALL_ROUTES.map((r) => ({
+    id: r,
+    name: PROVIDER_NAMES[r],
+    keyName: r === "fal" ? "FAL_KEY" : MAKERS[r].keyName,
+    keySet: r === "fal" ? falOn() : MAKERS[r].configured(),
+    /** the app's own switch; `locked` = off in the environment regardless */
+    on: !switchedOff().includes(r),
+    locked: locked.has(r),
+    models: VIDEO_MODELS.filter((m) => (r === "fal" ? onFal(m, "text") || onFal(m, "image") : m.direct?.provider === r)).map((m) => m.name),
+  }));
+}
 /** Clips one person can generate a day (each one costs money). */
 export const aiVideoDailyLimit = () => {
   const n = Number(process.env.AI_VIDEO_DAILY);
@@ -184,11 +202,13 @@ export async function generate(req: GenRequest, who: string, origin = ""): Promi
   } catch (e: any) {
     throw new AiVideoError(e?.message ?? "That request can't be run.");
   }
-  const routes = routesFor(n.model.id);
+  const routes = routesFor(n.model.id, n.mode);
   if (!routes.length) {
     if (!aiVideoConfigured()) throw new AiVideoError("AI video isn't set up on this server yet: add a video maker's API key (or FAL_KEY) in the server's environment.", 503);
     const d = n.model.direct;
-    throw new AiVideoError(`${n.model.name} isn't connected: add ${d ? `${MAKERS[d.provider].keyName} or ` : ""}FAL_KEY on the server.`, 503);
+    const offNow = [d?.provider, "fal"].filter((r) => r && isOff(r as Route)).map((r) => PROVIDER_NAMES[r as Route]);
+    if (offNow.length) throw new AiVideoError(`${n.model.name} isn't available: ${offNow.join(" and ")} ${offNow.length > 1 ? "are" : "is"} switched off.`, 503);
+    throw new AiVideoError(`${n.model.name} isn't connected: add ${d ? MAKERS[d.provider].keyName : ""}${d && onFal(n.model, n.mode) ? " or " : ""}${onFal(n.model, n.mode) ? "FAL_KEY" : ""} on the server.`, 503);
   }
   if (!take(who)) throw new AiVideoError(`You've made today's ${aiVideoDailyLimit()} AI videos. The count resets at midnight UTC.`, 429);
   const notes: string[] = [];
@@ -302,9 +322,10 @@ export async function serveFile(req: Request, res: Response) {
 }
 
 /** For the workspace: which route each model would take right now. */
-export function aiVideoRoutes(): Record<string, { route: Route; via: string } | null> {
+export function aiVideoRoutes(): Record<string, { route: Route; via: string; modes: GenMode[] } | null> {
   return Object.fromEntries(VIDEO_MODELS.map((m) => {
     const r = routesFor(m.id)[0];
-    return [m.id, r ? { route: r, via: routeName(r) } : null];
+    const modes = (["text", "image"] as GenMode[]).filter((md) => routesFor(m.id, md).length > 0);
+    return [m.id, r ? { route: r, via: routeName(r), modes } : null];
   }));
 }

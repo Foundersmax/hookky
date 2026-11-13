@@ -38,6 +38,8 @@ export interface VideoModel {
 export type Provider = "google" | "openai" | "kling" | "minimax" | "byteplus" | "luma";
 export interface Direct {
   provider: Provider;
+  /** for models only the maker serves (no fal.ai endpoint): what it can start from */
+  modes?: GenMode[];
   /** the maker's model id (overridable on the server with AIV_MODEL_<ID>) */
   model: string;
   /** a fixed quality tier where the maker's model has one (Hailuo, Kling) */
@@ -46,6 +48,11 @@ export interface Direct {
 export const PROVIDER_NAMES: Record<Provider | "fal", string> = { google: "Google Vertex AI", openai: "OpenAI", kling: "Kling", minimax: "MiniMax", byteplus: "BytePlus ModelArk", luma: "Luma", fal: "fal.ai" };
 
 export const VIDEO_MODELS: VideoModel[] = [
+  // Seedance 2.x run only on BytePlus ModelArk. Their ids come from BytePlus's changelog and
+  // third-party guides; check them in the ModelArk console and correct with AIV_MODEL_SEEDANCE_25 etc.
+  { id: "seedance-25", family: "Seedance", name: "Seedance 2.5", maker: "ByteDance", blurb: "ByteDance's newest: longer multi-shot clips with sound. BytePlus only.", aspects: ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9"], durations: [5, 8, 10, 12, 15], resolutions: ["480p", "720p", "1080p"], audio: "generate_audio", seed: true, endParam: "end_image_url", speed: "premium", direct: { provider: "byteplus", model: "dreamina-seedance-2-5-260628", modes: ["text", "image"] } },
+  { id: "seedance-20", family: "Seedance", name: "Seedance 2.0", maker: "ByteDance", blurb: "Seedance 2: cinematic multi-shot video with sound. BytePlus only.", aspects: ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9"], durations: [5, 8, 10, 12, 15], resolutions: ["480p", "720p", "1080p"], audio: "generate_audio", seed: true, endParam: "end_image_url", speed: "premium", direct: { provider: "byteplus", model: "dreamina-seedance-2-0-260128", modes: ["text", "image"] } },
+  { id: "seedance-20-fast", family: "Seedance", name: "Seedance 2.0 Fast", maker: "ByteDance", blurb: "Seedance 2 quicker and cheaper. BytePlus only.", aspects: ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9"], durations: [5, 8, 10, 12, 15], resolutions: ["480p", "720p"], audio: "generate_audio", seed: true, endParam: "end_image_url", speed: "fast", direct: { provider: "byteplus", model: "dreamina-seedance-2-0-fast-260128", modes: ["text", "image"] } },
   { id: "seedance-15-pro", family: "Seedance", name: "Seedance 1.5 Pro", maker: "ByteDance", blurb: "Cinematic motion with sound, up to 12 s at 1080p.", t2v: "fal-ai/bytedance/seedance/v1.5/pro/text-to-video", i2v: "fal-ai/bytedance/seedance/v1.5/pro/image-to-video", aspects: ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9"], durations: [4, 5, 6, 8, 10, 12], resolutions: ["480p", "720p", "1080p"], audio: "generate_audio", seed: true, endParam: "end_image_url", speed: "premium", direct: { provider: "byteplus", model: "seedance-1-5-pro-251215" } },
   { id: "seedance-1-fast", family: "Seedance", name: "Seedance 1 Pro Fast", maker: "ByteDance", blurb: "The quick, low-cost Seedance for drafts.", t2v: "fal-ai/bytedance/seedance/v1/pro/fast/text-to-video", i2v: "fal-ai/bytedance/seedance/v1/pro/fast/image-to-video", aspects: ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9"], durations: [3, 5, 8, 10, 12], resolutions: ["480p", "720p", "1080p"], seed: true, speed: "fast", direct: { provider: "byteplus", model: "seedance-1-0-pro-fast-251015" } },
   { id: "kling-3-pro", family: "Kling", name: "Kling 3 Pro", maker: "Kuaishou", blurb: "Kling's best: strong physics and faces, sound, up to 15 s.", t2v: "fal-ai/kling-video/v3/pro/text-to-video", i2v: "fal-ai/kling-video/v3/pro/image-to-video", aspects: ["16:9", "9:16", "1:1"], durations: [3, 5, 8, 10, 15], audio: "generate_audio", negative: true, imageParam: "start_image_url", endParam: "end_image_url", speed: "premium", direct: { provider: "kling", model: "kling-3.0", resolution: "1080p" } },
@@ -65,7 +72,9 @@ export const VIDEO_MODELS: VideoModel[] = [
   { id: "grok-imagine", family: "Grok", name: "Grok Imagine", maker: "xAI", blurb: "xAI's video model: quick, many shapes.", t2v: "xai/grok-imagine-video/text-to-video", i2v: "xai/grok-imagine-video/image-to-video", aspects: ["16:9", "9:16", "1:1", "4:3", "3:4"], i2vAspect: true, durations: [6, 10], durationAs: "number", resolutions: ["480p", "720p"], speed: "fast" },
 ];
 export const modelById = (id: string) => VIDEO_MODELS.find((m) => m.id === id);
-export const supports = (m: VideoModel, mode: GenMode) => !!(mode === "text" ? m.t2v : m.i2v);
+/** fal.ai has this model for this mode */
+export const onFal = (m: VideoModel, mode: GenMode) => !!(mode === "text" ? m.t2v : m.i2v);
+export const supports = (m: VideoModel, mode: GenMode) => onFal(m, mode) || !!m.direct?.modes?.includes(mode);
 
 export interface GenRequest {
   model: string;
@@ -105,7 +114,7 @@ export function normalize(req: GenRequest): Normal {
   const m = modelById(req?.model);
   if (!m) throw new Error("That model isn't available.");
   const mode: GenMode = req.mode === "image" ? "image" : "text";
-  if (!(mode === "text" ? m.t2v : m.i2v)) throw new Error(`${m.name} doesn't do ${mode === "text" ? "text to video" : "image to video"}.`);
+  if (!supports(m, mode)) throw new Error(`${m.name} doesn't do ${mode === "text" ? "text to video" : "image to video"}.`);
   const prompt = String(req.prompt ?? "").replace(/\s+/g, " ").trim().slice(0, 2000);
   if (!prompt) throw new Error("Describe the video first.");
   const n: Normal = { model: m, mode, prompt };
@@ -129,9 +138,11 @@ export function normalize(req: GenRequest): Normal {
  * can't be run (no prompt, unknown model, image → video without an image).
  */
 export function buildInput(req: GenRequest): { endpoint: string; input: Record<string, unknown>; model: VideoModel } {
+  // (fal.ai's own endpoint and field names; models only a maker serves have none)
   const n = normalize(req);
   const m = n.model;
-  const endpoint = (n.mode === "text" ? m.t2v : m.i2v)!;
+  const endpoint = n.mode === "text" ? m.t2v : m.i2v;
+  if (!endpoint) throw new Error(`${m.name} isn't on fal.ai.`);
   const input: Record<string, unknown> = { prompt: n.prompt };
   if (n.image) input[m.imageParam ?? "image_url"] = n.image;
   if (n.endImage) input[m.endParam!] = n.endImage;

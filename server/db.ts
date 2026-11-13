@@ -64,6 +64,11 @@ create table if not exists auth_tokens (
   expires_at timestamptz not null,
   used_at timestamptz
 );
+create table if not exists settings (
+  key text primary key,
+  value jsonb not null,
+  updated_at timestamptz not null default now()
+);
 create table if not exists usage (
   user_id bigint not null references users(id) on delete cascade,
   day date not null,
