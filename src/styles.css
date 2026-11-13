@@ -1123,3 +1123,27 @@ input[type="range"] { accent-color: var(--text); }
 .vs-spend-tables td:not(:first-child), .vs-spend-tables th:not(:first-child) { text-align: right; padding-left: 8px; white-space: nowrap; }
 @media (max-width: 520px) { .vs-spend-top { grid-template-columns: minmax(0, 1fr); } }
 .limit-field + .limit-field { margin-left: 0; }
+
+/* Caption a video: screen sizes */
+.upscale-done b { white-space: pre-line; }
+.cap-frame { display: flex; flex-direction: column; gap: 10px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.cap-frame-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.cap-frame-head .tiny { font-family: var(--mono); }
+.cap-shapes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.cap-shape { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 4px 7px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--text); text-align: center; min-width: 0; }
+.cap-shape:hover:not(:disabled) { border-color: var(--line-2); background: var(--panel-2); }
+.cap-shape.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.cap-shape.also { border-style: dashed; border-color: var(--text-3); }
+.cap-shape b { font-size: 12px; font-weight: 600; }
+.cap-shape small { font-size: 10px; line-height: 1.25; color: var(--text-3); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.cap-shape-icon { display: block; height: 22px; border: 1.5px solid currentColor; border-radius: 3px; opacity: .7; margin: 2px 0 3px; box-sizing: border-box; }
+.cap-shape.on .cap-shape-icon { color: var(--accent); opacity: 1; }
+.cap-frame .sheet-row { align-items: center; }
+.cap-frame .sheet-row > span:first-child { font-size: 12.5px; color: var(--text-2); }
+.cap-frame .seg { flex-wrap: wrap; }
+.cap-zoom input[type="range"] { flex: 1; min-width: 0; }
+.cap-warn { color: var(--danger); }
+.cap-also summary { cursor: pointer; font-size: 12.5px; color: var(--text-2); }
+.cap-also-list { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; }
+.cap-also-list .toggle .tiny { margin-left: 4px; }
+@media (max-width: 520px) { .cap-shapes { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

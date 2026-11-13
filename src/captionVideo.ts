@@ -7,6 +7,14 @@ import { encodeAudio } from "./export";
 import { renderCaptions } from "./engine/captions";
 export { spreadWords } from "./captionWords";
 import { probe, seek, soundOf, pickCodec, upscaleBitrate, CODEC_NAME, CODEC_NOTE } from "./upscale/run";
+import { outputSize, drawFramed, captionZoom, DEFAULT_FRAMING, type FrameId, type Quality, type Framing } from "./captionFrame";
+
+/** The screen shape to save in: see captionFrame.ts. */
+export interface FrameChoice {
+  frame: FrameId;
+  quality: Quality;
+  framing: Framing;
+}
 
 /** The soundtrack as a 16 kHz mono WAV: all a transcriber needs, at ~2 MB a minute. */
 export async function speechWav(file: Blob): Promise<Blob> {
@@ -58,19 +66,23 @@ export interface CaptionedResult {
   notes: string[];
 }
 
-/** Burn captions into a video file; the result keeps its size, frame rate and sound. */
+/** Burn captions into a video file, in its own shape or another (9:16, 1:1, …); keeps its frame rate and sound. */
 export async function captionVideo(
   file: Blob,
-  opts: { words: Word[]; style?: CaptionStyle; brand: Pick<Brand, "accent" | "fontDisplay" | "fontBody">; onProgress?: (p: number, label: string) => void; signal?: AbortSignal },
+  opts: { words: Word[]; style?: CaptionStyle; brand: Pick<Brand, "accent" | "fontDisplay" | "fontBody">; frame?: FrameChoice; onProgress?: (p: number, label: string) => void; signal?: AbortSignal },
 ): Promise<CaptionedResult> {
   const say = opts.onProgress ?? (() => {});
   say(0, "Reading the video");
   const src = await probe(file);
   const notes: string[] = [];
   try {
-    const W = even(src.w), H = even(src.h), fps = src.fps;
+    const choice = opts.frame ?? { frame: "original" as FrameId, quality: "source" as Quality, framing: DEFAULT_FRAMING };
+    const out = outputSize(src.w, src.h, choice.frame, choice.quality);
+    const W = even(out.w), H = even(out.h), fps = src.fps;
+    const framed = !(choice.frame === "original" && W === even(src.w) && H === even(src.h));
+    const scratch = {};
     const bitrate = upscaleBitrate(W, H, fps);
-    if ((bitrate * src.duration) / 8 > 1.6e9) throw new Error("This video is too long to caption in a browser tab at its size. Trim it or use a smaller copy.");
+    if ((bitrate * src.duration) / 8 > 1.6e9) throw new Error("This video is too long to caption in a browser tab at this size. Pick a lower quality, or trim it.");
     const vc = await pickCodec(W, H, fps, bitrate);
     if (!vc) throw new Error(`This browser can't encode ${W}×${H} video. Try Chrome or Edge on a desktop.`);
     if (CODEC_NOTE[vc.mux]) notes.push(`Saved as ${CODEC_NAME[vc.mux]}: this browser can't make H.264 at this size. ${CODEC_NOTE[vc.mux]}`);
@@ -79,6 +91,7 @@ export async function captionVideo(
     canvas.width = W;
     canvas.height = H;
     const ctx = canvas.getContext("2d", { alpha: false })!;
+    ctx.imageSmoothingQuality = "high";
 
     say(0, "Reading the sound");
     const audio = await soundOf(file);
@@ -105,8 +118,9 @@ export async function captionVideo(
       if (failure) throw failure;
       const t = (i + 0.5) / fps;
       await seek(src.video, Math.min(src.duration - 1e-3, t));
-      ctx.drawImage(src.video, 0, 0, W, H);
-      renderCaptions(ctx, W, H, { words: opts.words, style: opts.style, brand: opts.brand, t });
+      if (framed) drawFramed(ctx, src.video, src.w, src.h, W, H, choice.framing, opts.brand.accent, scratch);
+      else ctx.drawImage(src.video, 0, 0, W, H);
+      renderCaptions(ctx, W, H, { words: opts.words, style: opts.style, brand: opts.brand, t, zoom: captionZoom(W, H) });
       const frame = new VideoFrame(canvas, { timestamp: Math.round((i * 1e6) / fps), duration: Math.round(1e6 / fps) });
       venc.encode(frame, { keyFrame: i % gop === 0 });
       frame.close();

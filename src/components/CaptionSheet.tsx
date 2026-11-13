@@ -8,6 +8,20 @@ import { renderCaptions, type CaptionBox } from "../engine/captions";
 import { probe, type SourceInfo } from "../upscale/run";
 import { captionVideo, transcribeVideo, spreadWords } from "../captionVideo";
 import type { CaptionStyle, Word } from "../types";
+import { FRAMES, QUALITIES, DEFAULT_FRAMING, captionZoom, outputSize, drawFramed, panFocus, keptShare, frameSuffix, frameById, type FrameId, type Quality, type Framing, type Backdrop } from "../captionFrame";
+
+const BACKDROPS: { id: Backdrop; label: string }[] = [
+  { id: "blur", label: "Blurred" },
+  { id: "black", label: "Black" },
+  { id: "white", label: "White" },
+  { id: "brand", label: "Brand colour" },
+];
+/** A small rectangle in the shape's proportions. */
+function ShapeIcon({ ratio }: { ratio: number }) {
+  const r = ratio || 16 / 9;
+  const w = r >= 1 ? 22 : 22 * r, h = r >= 1 ? 22 / r : 22;
+  return <i className="cap-shape-icon" style={{ width: w, height: h }} aria-hidden />;
+}
 
 type Loaded = SourceInfo & { url: string; video: HTMLVideoElement; file: File };
 const mb = (n: number) => (n >= 1e9 ? `${(n / 1e9).toFixed(2)} GB` : `${(n / 1e6).toFixed(1)} MB`);
@@ -28,6 +42,18 @@ export function CaptionSheet() {
   const [done, setDone] = useState<{ line: string; notes: string[] } | null>(null);
   const [opening, setOpening] = useState(false);
   const [guide, setGuide] = useState(false);
+  // screen size: the shape being previewed, more shapes to save alongside it, and each shape's framing
+  const [frame, setFrame] = useState<FrameId>("original");
+  const [quality, setQuality] = useState<Quality>("source");
+  const [also, setAlso] = useState<FrameId[]>([]);
+  const [framings, setFramings] = useState<Partial<Record<FrameId, Framing>>>({});
+  const framing = framings[frame] ?? DEFAULT_FRAMING;
+  const setFraming = (p: Partial<Framing>) => setFramings((m) => ({ ...m, [frame]: { ...(m[frame] ?? DEFAULT_FRAMING), ...p } }));
+  const scratch = useRef({});
+  const pan = useRef<{ x: number; y: number } | null>(null);
+  const out = src ? outputSize(src.w, src.h, frame, quality) : { w: 16, h: 9 };
+  const liveFrame = useRef({ frame, framing, out });
+  liveFrame.current = { frame, framing, out };
   const view = useRef<HTMLCanvasElement>(null);
   const fileIn = useRef<HTMLInputElement>(null);
   const abort = useRef<AbortController | null>(null);
@@ -91,17 +117,20 @@ export function CaptionSheet() {
   const paint = () => {
     const c = view.current;
     if (!c || !src) return;
+    const { frame: fr, framing: fg, out: o } = liveFrame.current;
     const wrap = c.parentElement!.getBoundingClientRect();
     const dpr = Math.min(2, window.devicePixelRatio || 1);
-    const fit = Math.min(wrap.width / src.w, (window.innerHeight * 0.5) / src.h);
-    const cw = Math.round(src.w * fit), ch = Math.round(src.h * fit);
-    if (c.style.width !== `${cw}px`) (c.style.width = `${cw}px`), (c.style.height = `${ch}px`);
-    if (c.width !== Math.round(cw * dpr)) (c.width = Math.round(cw * dpr)), (c.height = Math.round(ch * dpr));
+    const fit = Math.min(wrap.width / o.w, (window.innerHeight * 0.5) / o.h);
+    const cw = Math.round(o.w * fit), ch = Math.round(o.h * fit);
+    if (c.style.width !== `${cw}px` || c.style.height !== `${ch}px`) (c.style.width = `${cw}px`), (c.style.height = `${ch}px`);
+    if (c.width !== Math.round(cw * dpr) || c.height !== Math.round(ch * dpr)) (c.width = Math.round(cw * dpr)), (c.height = Math.round(ch * dpr));
     const x = c.getContext("2d")!;
-    // draw in the video's own pixel units, so captions sit exactly where the export puts them
-    x.setTransform(c.width / src.w, 0, 0, c.height / src.h, 0, 0);
-    x.drawImage(src.video, 0, 0, src.w, src.h);
-    box.current = renderCaptions(x, src.w, src.h, { words: live.current.words, style: live.current.style, brand, t: src.video.currentTime });
+    // draw in the output's own pixel units, so captions sit exactly where the export puts them
+    x.setTransform(c.width / o.w, 0, 0, c.height / o.h, 0, 0);
+    x.imageSmoothingQuality = "high";
+    if (fr === "original") x.drawImage(src.video, 0, 0, o.w, o.h);
+    else drawFramed(x, src.video, src.w, src.h, o.w, o.h, fg, brand.accent, scratch.current);
+    box.current = renderCaptions(x, o.w, o.h, { words: live.current.words, style: live.current.style, brand, t: src.video.currentTime, zoom: captionZoom(o.w, o.h) });
   };
   useEffect(() => {
     if (!src || busy) return;
@@ -123,32 +152,45 @@ export function CaptionSheet() {
     else paint();
     return () => v.removeEventListener("seeked", onSeek);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [src, playing, at, words, style, busy]);
+  }, [src, playing, at, words, style, busy, frame, quality, framings]);
 
-  // Dragging the captions on the preview.
+  // Dragging on the preview: the captions move them; elsewhere, on a cropped shape, the video moves in the frame.
   const toVideo = (e: React.PointerEvent) => {
     const r = e.currentTarget.getBoundingClientRect();
-    return { x: ((e.clientX - r.left) / r.width) * src!.w, y: ((e.clientY - r.top) / r.height) * src!.h };
+    return { x: ((e.clientX - r.left) / r.width) * out.w, y: ((e.clientY - r.top) / r.height) * out.h };
   };
   const onDown = (e: React.PointerEvent) => {
+    if (!src || busy) return;
     const b = box.current;
-    if (!b || !src) return;
-    const p = toVideo(e), m = Math.min(src.w, src.h) * 0.02;
-    if (p.x < b.x - m || p.x > b.x + b.w + m || p.y < b.y - m || p.y > b.y + b.h + m) return;
+    const p = toVideo(e), m = Math.min(out.w, out.h) * 0.02;
+    const onCaption = b && !(p.x < b.x - m || p.x > b.x + b.w + m || p.y < b.y - m || p.y > b.y + b.h + m);
+    if (!onCaption) {
+      if (frame === "original" || framing.fit !== "fill") return;
+      e.currentTarget.setPointerCapture(e.pointerId);
+      pan.current = p;
+      return;
+    }
     e.currentTarget.setPointerCapture(e.pointerId);
-    drag.current = { dx: p.x - (b.x + b.w / 2), dy: p.y - (b.y + b.h / 2) };
+    drag.current = { dx: p.x - (b!.x + b!.w / 2), dy: p.y - (b!.y + b!.h / 2) };
   };
   const onMove = (e: React.PointerEvent) => {
-    if (!drag.current || !src) return;
+    if (!src) return;
+    if (pan.current) {
+      const p = toVideo(e);
+      setFraming(panFocus(src.w, src.h, out.w, out.h, framing, p.x - pan.current.x, p.y - pan.current.y));
+      pan.current = p;
+      return;
+    }
+    if (!drag.current) return;
     const p = toVideo(e);
-    let x = Math.min(1, Math.max(0, (p.x - drag.current.dx) / src.w));
-    const y = Math.min(1, Math.max(0, (p.y - drag.current.dy) / src.h));
+    let x = Math.min(1, Math.max(0, (p.x - drag.current.dx) / out.w));
+    const y = Math.min(1, Math.max(0, (p.y - drag.current.dy) / out.h));
     const snap = Math.abs(x - 0.5) < 0.02;
     if (snap) x = 0.5;
     setGuide(snap);
     setStyle((s) => ({ ...s, x: +x.toFixed(3), y: +y.toFixed(3) }));
   };
-  const onUp = () => ((drag.current = null), setGuide(false));
+  const onUp = () => ((drag.current = null), (pan.current = null), setGuide(false));
 
   async function run() {
     if (!src || !words.length) return;
@@ -157,10 +199,23 @@ export function CaptionSheet() {
     setPlaying(false);
     abort.current = new AbortController();
     setBusy({ p: 0, label: "Starting" });
+    // the previewed shape first, then any others ticked; each saved as its own file
+    const shapes = [frame, ...also.filter((f) => f !== frame)];
+    const lines: string[] = [];
+    const notes = new Set<string>();
     try {
-      const r = await captionVideo(src.file, { words, style, brand, signal: abort.current.signal, onProgress: (p, label) => setBusy({ p, label }) });
-      const saved = await download(r.blob, `${src.file.name.replace(/\.[^.]+$/, "") || "video"}-captioned.mp4`);
-      setDone({ line: `${saved ? "Saved" : "Ready"}: ${r.w}×${r.h} · ${r.frames} frames · ${r.codec}${r.audio ? ` + ${r.audio.toUpperCase()}` : ", no sound"} · ${mb(r.blob.size)}`, notes: r.notes });
+      for (const [k, shape] of shapes.entries()) {
+        const tag = shapes.length > 1 ? `${frameById(shape).label} (${k + 1} of ${shapes.length}) · ` : "";
+        const r = await captionVideo(src.file, {
+          words, style, brand, signal: abort.current.signal,
+          frame: { frame: shape, quality, framing: framings[shape] ?? DEFAULT_FRAMING },
+          onProgress: (p, label) => setBusy({ p: (k + p) / shapes.length, label: tag + label }),
+        });
+        const saved = await download(r.blob, `${src.file.name.replace(/\.[^.]+$/, "") || "video"}-captioned${frameSuffix(shape)}.mp4`);
+        lines.push(`${saved ? "Saved" : "Ready"}${shapes.length > 1 ? ` ${frameById(shape).label}` : ""}: ${r.w}×${r.h} · ${r.frames} frames · ${r.codec}${r.audio ? ` + ${r.audio.toUpperCase()}` : ", no sound"} · ${mb(r.blob.size)}`);
+        r.notes.forEach((n) => notes.add(n));
+        setDone({ line: lines.join("\n"), notes: [...notes] });
+      }
     } catch (e: any) {
       if (e?.name !== "AbortError") setError(e?.message ?? "The captions couldn't be added.");
     } finally {
@@ -199,7 +254,7 @@ export function CaptionSheet() {
           <div className="upscale-body">
             <div className="upscale-view">
               <div className="upscale-canvas">
-                <canvas ref={view} aria-label="Preview. Drag the captions to move them." style={{ cursor: "grab", touchAction: "none" }} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} />
+                <canvas ref={view} aria-label={frame !== "original" && framing.fit === "fill" ? "Preview. Drag the captions to move them, or the video to reframe it." : "Preview. Drag the captions to move them."} style={{ cursor: "grab", touchAction: "none" }} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} />
                 {guide && <i className="cap-guide" style={{ left: "50%", top: 0, bottom: 0 }} aria-hidden />}
               </div>
               <div className="upscale-scrub">
@@ -248,6 +303,82 @@ export function CaptionSheet() {
                 <span>{src.w}×{src.h} · {src.duration.toFixed(1)}s · {src.fps} fps · {mb(src.file.size)}</span>
                 <button className="link" disabled={!!busy} onClick={() => (setPlaying(false), setSrc(null), setWords([]), setDone(null), setError(null), setNote(null))}>Choose another</button>
               </div>
+              <section className="cap-frame" aria-labelledby="cap-frame-title">
+                <div className="cap-frame-head">
+                  <span className="label" id="cap-frame-title">Screen size</span>
+                  <span className="tiny">{out.w}×{out.h}</span>
+                </div>
+                <div className="cap-shapes" role="radiogroup" aria-label="Screen shape">
+                  {FRAMES.map((f) => (
+                    <button
+                      key={f.id}
+                      role="radio"
+                      aria-checked={frame === f.id}
+                      className={`cap-shape ${frame === f.id ? "on" : ""} ${also.includes(f.id) && frame !== f.id ? "also" : ""}`}
+                      title={f.hint}
+                      disabled={!!busy}
+                      onClick={() => setFrame(f.id)}
+                    >
+                      <ShapeIcon ratio={f.ratio || src.w / src.h} />
+                      <b>{f.label}</b>
+                      <small>{f.hint}</small>
+                    </button>
+                  ))}
+                </div>
+                {frame !== "original" && (
+                  <>
+                    <div className="sheet-row">
+                      <span>Framing</span>
+                      <div className="seg" role="radiogroup" aria-label="Framing">
+                        <button role="radio" aria-checked={framing.fit === "fill"} className={framing.fit === "fill" ? "on" : ""} onClick={() => setFraming({ fit: "fill" })} title="Crop to fill the screen; drag the video to choose what stays in">Fill (crop)</button>
+                        <button role="radio" aria-checked={framing.fit === "fit"} className={framing.fit === "fit" ? "on" : ""} onClick={() => setFraming({ fit: "fit" })} title="Show the whole video, with a background around it">Fit (whole)</button>
+                      </div>
+                    </div>
+                    {framing.fit === "fill" ? (
+                      <>
+                        <label className="sheet-row cap-zoom">
+                          <span>Zoom</span>
+                          <input type="range" min={1} max={2.5} step={0.05} value={framing.zoom} aria-label="Zoom" onChange={(e) => setFraming({ zoom: +e.target.value })} />
+                          <span className="tiny">{Math.round(framing.zoom * 100)}%</span>
+                        </label>
+                        <span className="tiny">Drag the video in the preview to choose what stays in the frame.{" "}
+                          <button className="link" onClick={() => setFraming({ focusX: 0.5, focusY: 0.5, zoom: 1 })}>Centre it</button>
+                        </span>
+                        {keptShare(src.w, src.h, out.w, out.h, framing) < 0.45 && <span className="tiny cap-warn">This crop keeps less than half of the picture. "Fit" shows all of it.</span>}
+                      </>
+                    ) : (
+                      <div className="sheet-row">
+                        <span>Background</span>
+                        <div className="seg" role="radiogroup" aria-label="Background">
+                          {BACKDROPS.map((b) => (
+                            <button key={b.id} role="radio" aria-checked={framing.backdrop === b.id} className={framing.backdrop === b.id ? "on" : ""} onClick={() => setFraming({ backdrop: b.id })}>{b.label}</button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+                <div className="sheet-row">
+                  <span>Quality</span>
+                  <div className="seg" role="radiogroup" aria-label="Quality">
+                    {QUALITIES.map((q) => (
+                      <button key={q.id} role="radio" aria-checked={quality === q.id} className={quality === q.id ? "on" : ""} title={q.id === "source" ? "Keep the video's own sharpness (no upscaling)" : `${q.label} on the short side`} onClick={() => setQuality(q.id)}>{q.label}</button>
+                    ))}
+                  </div>
+                </div>
+                <details className="cap-also">
+                  <summary>Also save in other sizes{also.filter((f) => f !== frame).length ? ` (${also.filter((f) => f !== frame).length})` : ""}</summary>
+                  <div className="cap-also-list">
+                    {FRAMES.filter((f) => f.id !== frame).map((f) => (
+                      <label key={f.id} className="toggle">
+                        <input type="checkbox" checked={also.includes(f.id)} disabled={!!busy} onChange={(e) => setAlso((a) => (e.target.checked ? [...a, f.id] : a.filter((x) => x !== f.id)))} />
+                        {f.label} <span className="tiny">{f.hint}</span>
+                      </label>
+                    ))}
+                    <span className="tiny">Each size uses its own framing: pick it above to adjust. Captions keep their place in every size.</span>
+                  </div>
+                </details>
+              </section>
               <CaptionControls value={style} onChange={setStyle} />
               {error && <p className="sound-error" role="alert">{error}</p>}
               {busy ? (
@@ -258,7 +389,7 @@ export function CaptionSheet() {
                 </div>
               ) : (
                 <button className="btn primary sound-build" disabled={!words.length || listening} onClick={run}>
-                  <Icon name="download" /> {listening ? "Listening…" : "Save with captions"}
+                  <Icon name="download" /> {listening ? "Listening…" : also.some((f) => f !== frame) ? `Save ${1 + also.filter((f) => f !== frame).length} sizes with captions` : "Save with captions"}
                 </button>
               )}
               {done && (
