@@ -22,6 +22,8 @@ export interface VideoModel {
   /** how the length is sent: "5", "5s" or 5 */
   durationAs?: "string" | "seconds" | "number";
   resolutions?: string[];
+  /** the subset fal.ai's endpoint takes, when smaller (requests above it are sent at its best) */
+  falResolutions?: string[];
   /** sound: the switch's parameter name, or "always" when every clip has sound */
   audio?: "generate_audio" | "generate_audio_switch" | "audio" | "always";
   negative?: boolean;
@@ -48,11 +50,11 @@ export interface Direct {
 export const PROVIDER_NAMES: Record<Provider | "fal", string> = { google: "Google Vertex AI", openai: "OpenAI", kling: "Kling", minimax: "MiniMax", byteplus: "BytePlus ModelArk", luma: "Luma", fal: "fal.ai" };
 
 export const VIDEO_MODELS: VideoModel[] = [
-  // Seedance 2.x run only on BytePlus ModelArk. Their ids come from BytePlus's changelog and
-  // third-party guides; check them in the ModelArk console and correct with AIV_MODEL_SEEDANCE_25 etc.
-  { id: "seedance-25", family: "Seedance", name: "Seedance 2.5", maker: "ByteDance", blurb: "ByteDance's newest: longer multi-shot clips with sound. BytePlus only.", aspects: ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9"], durations: [5, 8, 10, 12, 15], resolutions: ["480p", "720p", "1080p"], audio: "generate_audio", seed: true, endParam: "end_image_url", speed: "premium", direct: { provider: "byteplus", model: "dreamina-seedance-2-5-260628", modes: ["text", "image"] } },
-  { id: "seedance-20", family: "Seedance", name: "Seedance 2.0", maker: "ByteDance", blurb: "Seedance 2: cinematic multi-shot video with sound. BytePlus only.", aspects: ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9"], durations: [5, 8, 10, 12, 15], resolutions: ["480p", "720p", "1080p"], audio: "generate_audio", seed: true, endParam: "end_image_url", speed: "premium", direct: { provider: "byteplus", model: "dreamina-seedance-2-0-260128", modes: ["text", "image"] } },
-  { id: "seedance-20-fast", family: "Seedance", name: "Seedance 2.0 Fast", maker: "ByteDance", blurb: "Seedance 2 quicker and cheaper. BytePlus only.", aspects: ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9"], durations: [5, 8, 10, 12, 15], resolutions: ["480p", "720p"], audio: "generate_audio", seed: true, endParam: "end_image_url", speed: "fast", direct: { provider: "byteplus", model: "dreamina-seedance-2-0-fast-260128", modes: ["text", "image"] } },
+  // Seedance 2.x: on BytePlus ModelArk (ids from BytePlus's docs) and on fal.ai. fal.ai's endpoints
+  // stop at 720p, so a 1080p request sent there comes back at 720p.
+  { id: "seedance-25", family: "Seedance", name: "Seedance 2.5", maker: "ByteDance", blurb: "ByteDance's newest: up to 30 s of multi-shot story with sound.", t2v: "bytedance/seedance-2.5/text-to-video", i2v: "bytedance/seedance-2.5/image-to-video", aspects: ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9"], durations: [4, 5, 6, 8, 10, 12, 15, 20, 25, 30], resolutions: ["480p", "720p", "1080p"], falResolutions: ["480p", "720p"], audio: "generate_audio", seed: true, endParam: "end_image_url", speed: "premium", direct: { provider: "byteplus", model: "dreamina-seedance-2-5-260628" } },
+  { id: "seedance-20", family: "Seedance", name: "Seedance 2.0", maker: "ByteDance", blurb: "Cinematic multi-shot video with sound, up to 15 s.", t2v: "bytedance/seedance-2.0/text-to-video", i2v: "bytedance/seedance-2.0/image-to-video", aspects: ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9"], durations: [4, 5, 6, 8, 10, 12, 15], resolutions: ["480p", "720p", "1080p"], falResolutions: ["480p", "720p"], audio: "generate_audio", seed: true, endParam: "end_image_url", speed: "premium", direct: { provider: "byteplus", model: "dreamina-seedance-2-0-260128" } },
+  { id: "seedance-20-fast", family: "Seedance", name: "Seedance 2.0 Fast", maker: "ByteDance", blurb: "Seedance 2 quicker and cheaper.", t2v: "bytedance/seedance-2.0/fast/text-to-video", i2v: "bytedance/seedance-2.0/fast/image-to-video", aspects: ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9"], durations: [4, 5, 6, 8, 10, 12, 15], resolutions: ["480p", "720p"], audio: "generate_audio", seed: true, endParam: "end_image_url", speed: "fast", direct: { provider: "byteplus", model: "dreamina-seedance-2-0-fast-260128" } },
   { id: "seedance-15-pro", family: "Seedance", name: "Seedance 1.5 Pro", maker: "ByteDance", blurb: "Cinematic motion with sound, up to 12 s at 1080p.", t2v: "fal-ai/bytedance/seedance/v1.5/pro/text-to-video", i2v: "fal-ai/bytedance/seedance/v1.5/pro/image-to-video", aspects: ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9"], durations: [4, 5, 6, 8, 10, 12], resolutions: ["480p", "720p", "1080p"], audio: "generate_audio", seed: true, endParam: "end_image_url", speed: "premium", direct: { provider: "byteplus", model: "seedance-1-5-pro-251215" } },
   { id: "seedance-1-fast", family: "Seedance", name: "Seedance 1 Pro Fast", maker: "ByteDance", blurb: "The quick, low-cost Seedance for drafts.", t2v: "fal-ai/bytedance/seedance/v1/pro/fast/text-to-video", i2v: "fal-ai/bytedance/seedance/v1/pro/fast/image-to-video", aspects: ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9"], durations: [3, 5, 8, 10, 12], resolutions: ["480p", "720p", "1080p"], seed: true, speed: "fast", direct: { provider: "byteplus", model: "seedance-1-0-pro-fast-251015" } },
   { id: "kling-3-pro", family: "Kling", name: "Kling 3 Pro", maker: "Kuaishou", blurb: "Kling's best: strong physics and faces, sound, up to 15 s.", t2v: "fal-ai/kling-video/v3/pro/text-to-video", i2v: "fal-ai/kling-video/v3/pro/image-to-video", aspects: ["16:9", "9:16", "1:1"], durations: [3, 5, 8, 10, 15], audio: "generate_audio", negative: true, imageParam: "start_image_url", endParam: "end_image_url", speed: "premium", direct: { provider: "kling", model: "kling-3.0", resolution: "1080p" } },
@@ -148,7 +150,10 @@ export function buildInput(req: GenRequest): { endpoint: string; input: Record<s
   if (n.endImage) input[m.endParam!] = n.endImage;
   if (n.aspect) input.aspect_ratio = n.aspect;
   if (n.duration !== undefined) input.duration = m.durationAs === "number" ? n.duration : m.durationAs === "seconds" ? `${n.duration}s` : String(n.duration);
-  if (n.resolution) input.resolution = n.resolution;
+  if (n.resolution) {
+    const ok = m.falResolutions ?? m.resolutions ?? [];
+    input.resolution = ok.includes(n.resolution) ? n.resolution : ok.filter((r) => parseInt(r) <= parseInt(n.resolution!)).pop() ?? ok[0];
+  }
   if (n.audio !== undefined) input[m.audio as string] = n.audio;
   if (n.negative) input.negative_prompt = n.negative;
   if (n.seed !== undefined) input.seed = n.seed;

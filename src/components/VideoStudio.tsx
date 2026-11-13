@@ -231,7 +231,7 @@ export function VideoStudio() {
   const [prompt, setPrompt] = useState("");
   const [image, setImage] = useState<string>();
   const [endImage, setEndImage] = useState<string>();
-  const [picked, setPicked] = useState<string[]>(["seedance-15-pro"]);
+  const [picked, setPicked] = useState<string[]>(["seedance-25"]);
   const [family, setFamily] = useState<string>("All");
   const [aspect, setAspect] = useState("16:9");
   const [duration, setDuration] = useState(5);

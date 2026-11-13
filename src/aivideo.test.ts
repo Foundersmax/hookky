@@ -65,6 +65,17 @@ test("each maker's own parameter names and value shapes", () => {
   assert.deepEqual(hailuo, { prompt: "x" });
 });
 
+test("Seedance 2.5 on fal.ai: its endpoints, up to 30 s, quality capped at fal's 720p", () => {
+  const t = buildInput({ model: "seedance-25", mode: "text", prompt: "x", duration: 28, resolution: "1080p", aspect: "21:9" });
+  assert.equal(t.endpoint, "bytedance/seedance-2.5/text-to-video");
+  assert.deepEqual(t.input, { prompt: "x", aspect_ratio: "21:9", duration: "30", resolution: "720p", generate_audio: true });
+  const i = buildInput({ model: "seedance-25", mode: "image", prompt: "x", image: IMG, resolution: "480p" });
+  assert.equal(i.endpoint, "bytedance/seedance-2.5/image-to-video");
+  assert.equal(i.input.resolution, "480p");
+  assert.ok(!("aspect_ratio" in i.input), "image to video follows the picture");
+  assert.equal(buildInput({ model: "seedance-20-fast", mode: "image", prompt: "x", image: IMG }).endpoint, "bytedance/seedance-2.0/fast/image-to-video");
+});
+
 test("bad requests are refused in plain words", () => {
   assert.throws(() => buildInput({ model: "nope", mode: "text", prompt: "x" }), /isn't available/);
   assert.throws(() => buildInput({ model: "sora-2", mode: "text", prompt: "   " }), /Describe/);

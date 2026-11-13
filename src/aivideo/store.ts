@@ -1,7 +1,7 @@
 // The AI video workspace's generations: sent to the server, polled until they finish, and kept in
 // this browser so a reload (or a walk to another page) doesn't lose a clip that's still rendering.
 import { useSyncExternalStore } from "react";
-import { buildInput, modelById, type GenRequest } from "./models";
+import { buildInput, normalize, modelById, type GenRequest } from "./models";
 
 export interface Generation {
   /** the server's job id; "local-…" until it's queued */
@@ -86,10 +86,12 @@ export async function refreshUsage() {
 }
 
 /** What the model will actually use (each snaps to its nearest length, shape and quality). */
-function effective(req: GenRequest): Generation["settings"] {
+function effective(req: GenRequest, onFal = false): Generation["settings"] {
   try {
-    const { input } = buildInput(req);
-    return { aspect: input.aspect_ratio as string | undefined, duration: parseInt(String(input.duration)) || undefined, resolution: input.resolution as string | undefined, audio: req.audio, negative: req.negative, seed: req.seed };
+    const n = normalize(req);
+    // fal.ai's endpoint may take less than the maker's own API (Seedance 2.x tops out at 720p there)
+    const res = onFal ? (buildInput(req).input.resolution as string | undefined) : n.resolution;
+    return { aspect: n.aspect, duration: n.duration, resolution: res, audio: req.audio, negative: req.negative, seed: req.seed };
   } catch {
     return { aspect: req.aspect, duration: req.duration, resolution: req.resolution, audio: req.audio, negative: req.negative, seed: req.seed };
   }
@@ -114,7 +116,7 @@ export async function startGeneration(req: GenRequest) {
   try {
     const out = await json("/api/aivideo/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(req) });
     if (usage && Number.isFinite(out.used)) usage = { ...usage, used: out.used, limit: out.limit ?? usage.limit };
-    patch(local, { id: out.id, state: "queued", via: out.via, ...(out.notes?.length && { note: `${out.notes.join(". ")}, so it ran on ${out.via}.` }) });
+    patch(local, { id: out.id, state: "queued", via: out.via, ...(out.route === "fal" && { settings: effective(req, true) }), ...(out.notes?.length && { note: `${out.notes.join(". ")}, so it ran on ${out.via}.` }) });
     ensurePolling();
   } catch (e) {
     patch(local, { state: "failed", error: (e as Error)?.message ?? "Couldn't send this to the server." });

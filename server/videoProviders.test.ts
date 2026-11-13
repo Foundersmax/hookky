@@ -331,19 +331,34 @@ test("job ids are checked; keys never go to links the makers hand out", async ()
   assert.ok(!seen.some((s) => s.path.startsWith("/cdn/") && s.auth), "no key sent to a CDN");
 });
 
-test("Seedance 2.x run only on BytePlus, with their own ids (overridable)", async () => {
+test("Seedance 2.x: BytePlus first with its own ids (overridable), fal.ai as backup", async () => {
   const { generate, routesFor } = await import("./aivideo");
-  assert.deepEqual(routesFor("seedance-25"), ["byteplus"], "no fal.ai route for 2.x");
-  await generate({ model: "seedance-25", mode: "text", prompt: "a parade", duration: 15, resolution: "1080p", aspect: "9:16" }, "u:s2");
+  assert.deepEqual(routesFor("seedance-25"), ["byteplus", "fal"]);
+  await generate({ model: "seedance-25", mode: "text", prompt: "a parade", duration: 30, resolution: "1080p", aspect: "9:16" }, "u:s2");
   let b = last("/ark/").body;
   assert.equal(b.model, "dreamina-seedance-2-5-260628");
-  assert.equal(b.duration, 15);
+  assert.equal(b.duration, 30);
+  assert.equal(b.resolution, "1080p");
   assert.equal(b.ratio, "9:16");
   assert.equal(b.generate_audio, true);
   await generate({ model: "seedance-20", mode: "image", prompt: "turns", image: PNG }, "u:s2");
   b = last("/ark/").body;
   assert.equal(b.model, "dreamina-seedance-2-0-260128");
   assert.equal(b.ratio, "adaptive");
+  // the model isn't activated on the BytePlus account: said plainly, and fal.ai takes it
+  fails["/ark/"] = { status: 400, body: { error: { code: "ModelNotOpen", message: "Your account has not activated the model" } } };
+  const na = await generate({ model: "seedance-25", mode: "text", prompt: "x" }, "u:s2");
+  assert.equal(na.route, "fal");
+  assert.match(na.notes![0], /activate it in the ModelArk console, or set its current id with AIV_MODEL_SEEDANCE_25/);
+  // BytePlus out of credit: Seedance 2.5 goes to fal.ai, at fal's best quality (720p)
+  fails["/ark/"] = { status: 403, body: { error: { code: "AccountOverdueError", message: "Your account is overdue" } } };
+  const f = await generate({ model: "seedance-25", mode: "image", prompt: "spins", image: PNG, endImage: PNG, duration: 20, resolution: "1080p", seed: 3 }, "u:s2");
+  assert.equal(f.route, "fal");
+  const sent = last("/fal/");
+  assert.equal(sent.path, "/fal/bytedance/seedance-2.5/image-to-video");
+  assert.deepEqual(sent.body, { prompt: "spins", image_url: PNG, end_image_url: PNG, duration: "20", resolution: "720p", generate_audio: true, seed: 3 });
+  await generate({ model: "seedance-20-fast", mode: "text", prompt: "x" }, "u:s2");
+  assert.equal(last("/ark/").body.model, "dreamina-seedance-2-0-fast-260128");
   process.env.AIV_MODEL_SEEDANCE_20_FAST = "dreamina-seedance-2-0-fast-261001";
   await generate({ model: "seedance-20-fast", mode: "text", prompt: "x" }, "u:s2");
   assert.equal(last("/ark/").body.model, "dreamina-seedance-2-0-fast-261001");
@@ -363,9 +378,10 @@ test("switches: a maker switched off stops taking new videos; fal.ai takes over 
   assert.equal((await generate({ model: "sora-2", mode: "text", prompt: "x" }, "u:sw")).route, "fal");
   assert.ok((await jobStatus(running.id)).state !== "failed", "a clip already rendering still finishes");
   await setSwitch("byteplus", false);
-  await assert.rejects(generate({ model: "seedance-25", mode: "text", prompt: "x" }, "u:sw"), /BytePlus ModelArk is switched off/);
+  assert.equal((await generate({ model: "seedance-25", mode: "text", prompt: "x" }, "u:sw")).route, "fal");
   await setSwitch("fal", false);
   await assert.rejects(generate({ model: "sora-2", mode: "text", prompt: "x" }, "u:sw"), /OpenAI and fal\.ai are switched off/);
+  await assert.rejects(generate({ model: "seedance-25", mode: "text", prompt: "x" }, "u:sw"), /BytePlus ModelArk and fal\.ai are switched off/);
   _resetSwitches();
   assert.deepEqual(routesFor("sora-2"), ["openai", "fal"]);
 });

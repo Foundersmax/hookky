@@ -332,7 +332,13 @@ const byteplus: Maker = {
     if (n.audio !== undefined) body.generate_audio = n.audio;
     if (n.seed !== undefined) body.seed = n.seed;
     const a = await call(`${byteplus.base()}/contents/generations/tasks`, { headers: arkHead(), json: body });
-    if (!a.ok) fail(a);
+    if (!a.ok) {
+      // ModelArk doesn't switch Seedance models on by itself, and dated ids get replaced over time
+      const code = String(a.json?.error?.code ?? "");
+      if (/NotOpen|NotActivated|ModelNotFound|InvalidEndpointOrModel|NotFound/i.test(code))
+        throw new MakerError(`can't run ${body.model} (${code}): activate it in the ModelArk console, or set its current id with AIV_MODEL_${n.model.id.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`, 503, true);
+      fail(a);
+    }
     const id = safeId(a.json?.id);
     if (!id) throw new MakerError("didn't return a job id", 502, true);
     return id;
