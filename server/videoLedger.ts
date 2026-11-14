@@ -103,13 +103,102 @@ export async function commit(token: string, job: { id: string; actor: Actor; mod
   }
 }
 /** A job ended: a failure gives its credits back (once). */
-export async function settle(id: string, state: "done" | "failed") {
+export async function settle(id: string, state: "done" | "failed"): Promise<{ who: string; model: string; route: string } | null> {
   if (!accountsEnabled()) {
     const r = mem.find((x) => x.id === id);
-    if (r && r.state === "queued") r.state = state;
-    return;
+    if (!r || r.state !== "queued") return null;
+    r.state = state;
+    return { who: r.who, model: r.model, route: r.route };
   }
-  await db().query("update video_jobs set state = $2, settled_at = now() where id = $1 and state = 'queued'", [id, state]);
+  const q = await db().query("update video_jobs set state = $2, settled_at = now() where id = $1 and state = 'queued' returning who, model, route", [id, state]);
+  return q.rows[0] ?? null;
+}
+
+// ---------------------------------------------------------------- what went wrong, for admins
+export interface Failure {
+  at: string;
+  who: string;
+  /** the person, when known */
+  email?: string;
+  model: string;
+  route: string;
+  /** sending the request, rendering it, or saving the finished clip */
+  stage: "send" | "render" | "save" | "test";
+  message: string;
+}
+const failMem: Failure[] = [];
+/** Note a failure (never throws: logging a problem mustn't cause one). */
+export async function recordFailure(f: Omit<Failure, "at" | "email">) {
+  const message = f.message.replace(/\s+/g, " ").trim().slice(0, 500);
+  try {
+    if (!accountsEnabled()) {
+      failMem.unshift({ ...f, message, at: new Date().toISOString() });
+      failMem.splice(200);
+      return;
+    }
+    await db().query("insert into video_failures (who, model, route, stage, message) values ($1, $2, $3, $4, $5)", [f.who, f.model, f.route, f.stage, message]);
+    // keep a month
+    if (Math.random() < 0.02) await db().query("delete from video_failures where at < now() - interval '30 days'");
+  } catch (e) {
+    console.error("Couldn't record a video failure:", (e as Error)?.message ?? e);
+  }
+}
+export async function recentFailures(limit = 50): Promise<Failure[]> {
+  if (!accountsEnabled()) return failMem.slice(0, limit);
+  const r = await db().query(
+    `select f.at, f.who, f.model, f.route, f.stage, f.message, u.email from video_failures f
+     left join users u on f.who = 'u:' || u.id::text order by f.at desc limit $1`,
+    [limit],
+  );
+  return r.rows.map((x) => ({ ...x, at: new Date(x.at).toISOString(), ...(x.email ? { email: x.email } : { email: undefined }) }));
+}
+
+// ---------------------------------------------------------------- warnings before the money runs out
+const ALERT_KEY = "aivideo.alerts";
+const STEPS = [50, 80, 100];
+let alertState: { month: string; sent: number[] } = { month: "", sent: [] };
+const personAlerted = new Set<string>();
+/** How much one person may spend in a day before admins hear about it (dollars; AI_VIDEO_ALERT_PERSON_USD, default 10). */
+export const personAlertUsd = () => num(process.env.AI_VIDEO_ALERT_PERSON_USD) ?? 10;
+export type Alert = { kind: "budget"; step: number; spent: number; budget: number } | { kind: "person"; who: string; spent: number };
+
+/**
+ * After a clip is charged: which warnings are now due. Each budget step is reported once a month
+ * (remembered in Postgres, so a redeploy doesn't repeat it); each person once a day.
+ */
+export async function dueAlerts(who: string): Promise<Alert[]> {
+  const out: Alert[] = [];
+  const budget = limits().monthlyBudgetUsd;
+  const month = utcMonth();
+  if (budget && budget > 0) {
+    if (alertState.month !== month) {
+      alertState = { month, sent: [] };
+      if (accountsEnabled()) {
+        const v = (await db().query("select value from settings where key = $1", [ALERT_KEY])).rows[0]?.value;
+        if (v?.month === month && Array.isArray(v.sent)) alertState.sent = v.sent.filter((n: unknown) => typeof n === "number");
+      }
+    }
+    const spent = await spentThisMonth();
+    const pct = (spent / budget) * 100;
+    const step = [...STEPS].reverse().find((s) => pct >= s && !alertState.sent.includes(s));
+    if (step) {
+      // one email for the highest step reached; lower ones count as said
+      alertState.sent = [...new Set([...alertState.sent, ...STEPS.filter((s) => s <= step)])];
+      if (accountsEnabled()) await db().query("insert into settings (key, value, updated_at) values ($1, $2::jsonb, now()) on conflict (key) do update set value = excluded.value, updated_at = now()", [ALERT_KEY, JSON.stringify(alertState)]);
+      out.push({ kind: "budget", step, spent, budget });
+    }
+  }
+  const cap = personAlertUsd();
+  const key = `${utcDay()}|${who}`;
+  if (cap > 0 && !personAlerted.has(key)) {
+    const usd = (await spentToday(who)) * 0.01;
+    if (usd >= cap) {
+      personAlerted.add(key);
+      if (personAlerted.size > 5000) personAlerted.clear();
+      out.push({ kind: "person", who, spent: usd });
+    }
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------- the admin's view
@@ -151,4 +240,4 @@ export async function report(): Promise<Report> {
   return { month: { ...m, budgetUsd }, today: t, byRoute, byModel, people };
 }
 /** Tests only. */
-export const _resetLedger = () => (mem.splice(0), pending.clear(), (saved = {}));
+export const _resetLedger = () => (mem.splice(0), pending.clear(), (saved = {}), failMem.splice(0), (alertState = { month: "", sent: [] }), personAlerted.clear());

@@ -1196,3 +1196,37 @@ input[type="range"] { accent-color: var(--text); }
 .ff-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
 @media (max-width: 640px) { .ff-sheet { padding: 14px 12px 10px; } .ff-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } .ff-foot .tiny { display: none; } .ff-foot { justify-content: flex-end; } }
 @media (prefers-reduced-motion: reduce) { .ff-card.ghost .ff-media { animation: none; } }
+
+/* AI video settings: connection checks, test clips, problems */
+.vs-conn-tabs { grid-template-columns: repeat(3, 1fr); }
+.vs-conn { max-height: 90vh; }
+.vs-conn-all { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+.vs-conn-list li.vs-conn-row { display: block; }
+.vs-conn-top { display: flex; align-items: center; gap: 12px; }
+.vs-conn-top > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.vs-conn-top .btn { flex: none; height: 28px; padding: 0 10px; font-size: 12px; }
+.vs-keycheck { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin-top: 8px; padding: 8px 10px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel-2); font-size: 12.5px; line-height: 1.45; color: var(--text-2); }
+.vs-keycheck > span:nth-child(2) { flex: 1 1 240px; min-width: 0; overflow-wrap: anywhere; }
+.vs-keycheck .btn { flex: none; height: 28px; padding: 0 10px; font-size: 12px; }
+.vs-keycheck-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--text-3); }
+.vs-keycheck.ok .vs-keycheck-dot { background: #34c759; box-shadow: 0 0 0 3px rgba(52,199,89,.18); }
+.vs-keycheck.warn .vs-keycheck-dot { background: #f5a623; }
+.vs-keycheck.bad { border-color: color-mix(in srgb, var(--danger) 45%, transparent); }
+.vs-keycheck.bad .vs-keycheck-dot { background: var(--danger); }
+.vs-test { display: flex; align-items: center; gap: 12px; margin-top: 8px; padding: 8px 10px; border-radius: 9px; border: 1px solid var(--line); font-size: 12.5px; line-height: 1.45; color: var(--text-2); }
+.vs-test b { color: var(--text); }
+.vs-test video { flex: none; width: 160px; aspect-ratio: 16 / 9; border-radius: 7px; background: #000; object-fit: contain; }
+.vs-test.done { border-color: color-mix(in srgb, #34c759 50%, transparent); }
+.vs-test.failed { border-color: color-mix(in srgb, var(--danger) 45%, transparent); }
+.vs-test.failed b { color: var(--danger); }
+.vs-test .vs-pulse { display: inline-block; margin-right: 6px; vertical-align: middle; }
+.vs-fail-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.vs-fail-list li { padding: 10px 0; border-top: 1px solid var(--line); }
+.vs-fail-list li > div { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; font-size: 12px; color: var(--text-3); }
+.vs-fail-list b { font-size: 13px; color: var(--text); }
+.vs-fail-list p { margin: 4px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--text-2); overflow-wrap: anywhere; }
+@media (max-width: 520px) { .vs-test { flex-direction: column; align-items: stretch; } .vs-test video { width: 100%; } }
+.vs-conn-list li.vs-conn-row > .vs-conn-top, .vs-conn-list li.vs-conn-row > .vs-keycheck, .vs-conn-list li.vs-conn-row > .vs-test { flex-direction: row; gap: 12px; }
+.vs-conn-list li.vs-conn-row > .vs-keycheck { gap: 9px; }
+.vs-test > span { flex: 1; min-width: 0; }
+@media (max-width: 520px) { .vs-conn-list li.vs-conn-row > .vs-test { flex-direction: column; align-items: stretch; } .vs-conn-list li.vs-conn-row > .vs-conn-top { flex-wrap: wrap; } }

@@ -40,8 +40,8 @@ const env = (...names: string[]) => names.map((n) => process.env[n]?.trim()).fin
 /** The maker's model id, overridable per catalog model (AIV_MODEL_VEO_31=veo-3.1-generate-preview). */
 export const makerModel = (catalogId: string, d: Direct) => env(`AIV_MODEL_${catalogId.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`) || d.model;
 
-type Answer = { ok: boolean; status: number; json: any; text: string };
-async function call(url: string, init: { method?: string; headers?: Record<string, string>; json?: unknown; form?: FormData; timeoutMs?: number } = {}): Promise<Answer> {
+export type Answer = { ok: boolean; status: number; json: any; text: string };
+export async function call(url: string, init: { method?: string; headers?: Record<string, string>; json?: unknown; form?: FormData; timeoutMs?: number } = {}): Promise<Answer> {
   let r: Response;
   try {
     r = await fetch(url, {

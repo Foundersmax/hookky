@@ -84,6 +84,16 @@ create table if not exists video_jobs (
 );
 create index if not exists video_jobs_who_created on video_jobs (who, created_at);
 create index if not exists video_jobs_created on video_jobs (created_at);
+create table if not exists video_failures (
+  id bigserial primary key,
+  at timestamptz not null default now(),
+  who text not null default '',
+  model text not null default '',
+  route text not null default '',
+  stage text not null,
+  message text not null
+);
+create index if not exists video_failures_at on video_failures (at desc);
 create table if not exists usage (
   user_id bigint not null references users(id) on delete cascade,
   day date not null,

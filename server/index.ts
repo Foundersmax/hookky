@@ -18,9 +18,10 @@ import { proxyVideo } from "./videoProxy";
 import { accountsEnabled, migrate } from "./db";
 import { loadSwitches, setSwitch, envOff, ALL_ROUTES } from "./aivideoSwitches";
 import { storageOn, storageBucket } from "./storage";
-import { loadLimits, setLimits, limits as videoLimits, report as videoReport, type Actor } from "./videoLedger";
+import { loadLimits, setLimits, limits as videoLimits, report as videoReport, recentFailures, type Actor } from "./videoLedger";
+import { checkConnection, rememberCheck, checkStates, hasKey } from "./videoChecks";
 import { toAac, aacAvailable } from "./aac";
-import { generate as aiVideoGenerate, jobStatus as aiVideoStatus, aiVideoConfigured, aiVideoUsage, prices as aiVideoPrices, aiVideoProviders, aiVideoRoutes, aiVideoConnections, serveFile as aiVideoFile, serveInput as aiVideoInput, AiVideoError } from "./aivideo";
+import { generate as aiVideoGenerate, jobStatus as aiVideoStatus, aiVideoConfigured, aiVideoUsage, prices as aiVideoPrices, aiVideoProviders, aiVideoRoutes, aiVideoConnections, testClip as aiVideoTestClip, cheapestOn as aiVideoCheapest, serveFile as aiVideoFile, serveInput as aiVideoInput, AiVideoError } from "./aivideo";
 import { accountRoutes, requireUser, sameOrigin, takeAgentTurn, authCors } from "./accounts";
 import { mailConfigured } from "./mailer";
 import { safeFetch, readLimited, BlockedUrlError } from "./safeFetch";
@@ -79,7 +80,7 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 60 
 
 app.get("/api/health", (_req, res) => {
   void recheckClaude();
-  res.json({ agent: claudeConfigured() ? "claude" : "local", claude: claudeCheck(), voice: voiceAvailable(), exportAac: aacAvailable(), aiVideo: aiVideoConfigured(), aiVideoProviders: aiVideoProviders(), storage: storageOn() ? "r2" : null, ...(freepikVideoStatus() && { freepikVideo: { ...freepikVideoStatus(), licensedToday: licensesToday() } }), transcription: transcriptionProvider(), connectors: listConnectors(), accounts, ...(build && { build }), ...(process.env.RENDER_GIT_COMMIT && { commit: process.env.RENDER_GIT_COMMIT }) });
+  res.json({ agent: claudeConfigured() ? "claude" : "local", claude: claudeCheck(), voice: voiceAvailable(), exportAac: aacAvailable(), aiVideo: aiVideoConfigured(), aiVideoProviders: aiVideoProviders(), aiVideoChecks: checkStates(ALL_ROUTES.filter(hasKey)), storage: storageOn() ? "r2" : null, ...(freepikVideoStatus() && { freepikVideo: { ...freepikVideoStatus(), licensedToday: licensesToday() } }), transcription: transcriptionProvider(), connectors: listConnectors(), accounts, ...(build && { build }), ...(process.env.RENDER_GIT_COMMIT && { commit: process.env.RENDER_GIT_COMMIT }) });
 });
 
 app.post("/api/agent", async (req, res) => {
@@ -216,6 +217,33 @@ app.post("/api/admin/aivideo", async (req, res) => {
     res.json({ connections: aiVideoConnections(), storage: { on: storageOn(), bucket: storageOn() ? storageBucket() : null }, limits: videoLimits() });
   } catch (e: any) {
     res.status(500).json({ error: `Couldn't save the switch (${e?.message ?? e}).` });
+  }
+});
+// Admins test a connection: a free check of the key, or one cheapest clip through the whole path.
+app.post("/api/admin/aivideo/check", async (req, res) => {
+  if (!accounts || req.user?.role !== "admin") return void res.status(403).json({ error: "Admins only." });
+  const route = String(req.body?.route ?? "");
+  if (!(ALL_ROUTES as string[]).includes(route)) return void res.status(400).json({ error: "Unknown connection." });
+  const check = await checkConnection(route as (typeof ALL_ROUTES)[number]);
+  rememberCheck(route as (typeof ALL_ROUTES)[number], check);
+  const cheapest = aiVideoCheapest(route as (typeof ALL_ROUTES)[number]);
+  res.json({ check, ...(cheapest && { test: { model: cheapest.name, credits: cheapest.credits, usd: cheapest.usd } }) });
+});
+app.post("/api/admin/aivideo/test", async (req, res) => {
+  if (!accounts || req.user?.role !== "admin") return void res.status(403).json({ error: "Admins only." });
+  try {
+    const origin = (process.env.APP_URL?.trim() || `${req.protocol}://${req.get("host")}`).replace(/\/+$/, "");
+    res.json(await aiVideoTestClip(String(req.body?.route ?? "") as (typeof ALL_ROUTES)[number], aiActor(req), origin));
+  } catch (e: any) {
+    res.status(e instanceof AiVideoError ? e.status : 500).json({ error: e?.message ?? String(e) });
+  }
+});
+app.get("/api/admin/aivideo/failures", async (req, res) => {
+  if (!accounts || req.user?.role !== "admin") return void res.status(403).json({ error: "Admins only." });
+  try {
+    res.json({ failures: await recentFailures(60) });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message ?? String(e) });
   }
 });
 app.get("/api/admin/aivideo/spend", async (req, res) => {

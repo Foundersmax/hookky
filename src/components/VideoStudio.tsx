@@ -132,9 +132,160 @@ function Spending() {
   );
 }
 
+type CheckResult = { check: { state: string; message: string; balance?: string }; test?: { model: string; credits: number; usd: number } };
+type TestRun = { state: "sending" | "queued" | "running" | "done" | "failed"; id?: string; url?: string; error?: string; model?: string; at: number };
+const post = async (url: string, body: unknown) => {
+  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(90_000) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error ?? `The server answered ${r.status}.`);
+  return j;
+};
+
+/** One connection: its switch, a free check of the key, and a cheapest test clip through the whole path. */
+function ConnectionRow({ c, busy, onFlip, checkAll }: { c: Connection; busy: boolean; onFlip: () => void; checkAll: number }) {
+  const [checking, setChecking] = useState(false);
+  const [result, setResult] = useState<CheckResult | null>(null);
+  const [run, setRun] = useState<TestRun | null>(null);
+  const alive = useRef(true);
+  useEffect(() => () => void (alive.current = false), []);
+  const check = async () => {
+    setChecking(true);
+    try {
+      const j = await post("/api/admin/aivideo/check", { route: c.id });
+      if (alive.current) setResult(j);
+    } catch (e) {
+      if (alive.current) setResult({ check: { state: "unreachable", message: (e as Error).message } });
+    } finally {
+      if (alive.current) setChecking(false);
+    }
+  };
+  useEffect(() => {
+    if (checkAll && c.keySet) void check();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checkAll]);
+  const test = async () => {
+    setRun({ state: "sending", at: Date.now() });
+    try {
+      const j = await post("/api/admin/aivideo/test", { route: c.id });
+      let cur: TestRun = { state: "queued", id: j.id, model: j.model, at: Date.now() };
+      if (alive.current) setRun(cur);
+      // watch it through to a playable clip (or the maker's reason it failed)
+      while (alive.current && (cur.state === "queued" || cur.state === "running")) {
+        await new Promise((r) => setTimeout(r, 4000));
+        if (Date.now() - cur.at > 20 * 60_000) cur = { ...cur, state: "failed", error: "No result after 20 minutes." };
+        else {
+          const s = await fetch(`/api/aivideo/status?id=${encodeURIComponent(j.id)}`).then((r) => r.json()).catch(() => null);
+          if (s?.state === "done" && s.video?.url) cur = { ...cur, state: "done", url: s.video.url };
+          else if (s?.state === "failed") cur = { ...cur, state: "failed", error: s.error ?? "The maker couldn't make the clip." };
+          else if (s?.error && !s.state) cur = { ...cur, state: "failed", error: s.error };
+          else if (s?.state === "running" || s?.state === "queued") cur = { ...cur, state: s.state };
+        }
+        if (alive.current) setRun(cur);
+      }
+      void refreshUsage();
+    } catch (e) {
+      if (alive.current) setRun({ state: "failed", error: (e as Error).message, at: Date.now() });
+    }
+  };
+  const st = result?.check.state;
+  const testing = !!run && run.state !== "done" && run.state !== "failed";
+  return (
+    <li className="vs-conn-row">
+      <div className="vs-conn-top">
+        <div>
+          <b>{c.name}</b>
+          <small>{c.keySet ? c.models.join(", ") : `No key yet: add ${c.keyName} in the server's environment`}</small>
+          {c.locked && <small className="vs-conn-locked">Switched off in the environment (AI_VIDEO_OFF)</small>}
+        </div>
+        {c.keySet && (
+          <button className="btn" disabled={checking} onClick={() => void check()} title="Free: asks the maker whether the key is accepted">
+            {checking ? "Checking…" : "Check key"}
+          </button>
+        )}
+        <label className="vs-switch" title={c.locked ? "Off in the server's environment" : c.on ? "Switch off" : "Switch on"}>
+          <input type="checkbox" role="switch" checked={c.on && !c.locked} disabled={c.locked || busy} aria-label={`${c.name} ${c.on ? "on" : "off"}`} onChange={onFlip} />
+          <span aria-hidden />
+        </label>
+      </div>
+      {result && (
+        <div className={`vs-keycheck ${st === "ok" ? "ok" : st === "unclear" ? "warn" : "bad"}`} role="status">
+          <span className="vs-keycheck-dot" aria-hidden />
+          <span>
+            {result.check.message}
+            {result.check.balance ? ` Balance: ${result.check.balance}.` : ""}
+          </span>
+          {result.test && (st === "ok" || st === "unclear") && (
+            <button className="btn" disabled={testing} onClick={() => void test()} title={`Makes one real clip on ${c.name} (${result.test.model}, shortest and lowest quality): about $${result.test.usd.toFixed(2)}`}>
+              {testing ? "Testing…" : `Make a test clip (≈ ${result.test.credits} credits)`}
+            </button>
+          )}
+        </div>
+      )}
+      {run && (
+        <div className={`vs-test ${run.state}`} role="status" aria-live="polite">
+          {run.state === "done" && run.url ? (
+            <>
+              <video src={run.url} controls muted loop playsInline preload="metadata" />
+              <span><b>It works.</b> {run.model} made a clip on {c.name}, and it plays from Rookker. The whole path is good.</span>
+            </>
+          ) : run.state === "failed" ? (
+            <span><b>The test clip failed.</b> {run.error}</span>
+          ) : (
+            <span><span className="vs-pulse" aria-hidden /> {run.state === "sending" ? "Sending the request…" : run.state === "queued" ? `Queued on ${c.name}…` : `Rendering on ${c.name}…`} This usually takes 1–4 minutes; you can leave this open.</span>
+          )}
+        </div>
+      )}
+    </li>
+  );
+}
+
+type FailureRow = { at: string; who: string; email?: string; model: string; route: string; stage: string; message: string };
+const STAGES: Record<string, string> = { send: "Sending", render: "Rendering", save: "Saving", test: "Test clip" };
+const when = (iso: string) => {
+  const s = (Date.now() - new Date(iso).getTime()) / 1000;
+  return s < 90 ? "just now" : s < 3600 ? `${Math.round(s / 60)} min ago` : s < 86400 ? `${Math.round(s / 3600)} h ago` : `${Math.round(s / 86400)} d ago`;
+};
+/** Admins: what went wrong lately, in the makers' own words. */
+function Problems() {
+  const [rows, setRows] = useState<FailureRow[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    fetch("/api/admin/aivideo/failures")
+      .then(async (r) => {
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(j.error ?? `The server answered ${r.status}.`);
+        setRows(j.failures ?? []);
+      })
+      .catch((e) => setError(e.message));
+  }, []);
+  if (error) return <p className="vs-error" role="alert">{error}</p>;
+  if (!rows) return <p className="vs-conn-lead">Loading…</p>;
+  if (!rows.length) return <p className="vs-conn-lead">Nothing has failed in the last 30 days.</p>;
+  return (
+    <>
+      <p className="vs-conn-lead">The last {rows.length} failures, newest first. A clip that failed gave its credits back. Failures that fell back to another connection still finished.</p>
+      <ul className="vs-fail-list">
+        {rows.map((f, i) => (
+          <li key={i}>
+            <div>
+              <b>{ROUTE_NAMES[f.route] ?? (f.route || "Storage")}</b>
+              <span>{VIDEO_MODELS.find((m) => m.id === f.model)?.name ?? f.model}</span>
+              <span>{STAGES[f.stage] ?? f.stage}</span>
+              <span>{when(f.at)}</span>
+              {(f.email || (f.who && f.who !== "everyone")) && <span>{f.email ?? f.who}</span>}
+            </div>
+            <p>{f.message}</p>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
 /** Admins: switch each video connection on or off for everyone, and see and cap the spend. */
 function Connections({ onClose }: { onClose: () => void }) {
-  const [tab, setTab] = useState<"connections" | "spend">("connections");
+  const [tab, setTab] = useState<"connections" | "spend" | "problems">("connections");
+  const [checkAll, setCheckAll] = useState(0);
   const [list, setList] = useState<Connection[] | null>(null);
   const [storage, setStorage] = useState<{ on: boolean; bucket: string | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -175,8 +326,9 @@ function Connections({ onClose }: { onClose: () => void }) {
         <div className="seg vs-conn-tabs" role="tablist">
           <button role="tab" aria-selected={tab === "connections"} className={tab === "connections" ? "on" : ""} onClick={() => setTab("connections")}>Connections</button>
           <button role="tab" aria-selected={tab === "spend"} className={tab === "spend" ? "on" : ""} onClick={() => setTab("spend")}>Spending & limits</button>
+          <button role="tab" aria-selected={tab === "problems"} className={tab === "problems" ? "on" : ""} onClick={() => setTab("problems")}>Problems</button>
         </div>
-        {tab === "spend" ? <Spending /> : <>
+        {tab === "spend" ? <Spending /> : tab === "problems" ? <Problems /> : <>
         <p className="vs-conn-lead">Switch a maker off to stop new videos on its account, for everyone. Clips already rendering still finish. A model whose maker is off runs on fal.ai instead, if fal.ai is on.</p>
         {error && <p className="vs-error" role="alert">{error}</p>}
         {!list && !error && <p className="vs-conn-lead">Loading…</p>}
@@ -193,19 +345,15 @@ function Connections({ onClose }: { onClose: () => void }) {
             )}
           </p>
         )}
+        {list && list.some((c) => c.keySet) && (
+          <div className="vs-conn-all">
+            <span className="tiny">After adding a key: check it (free), then make one test clip to prove the whole path.</span>
+            <button className="btn" onClick={() => setCheckAll((n) => n + 1)}>Check all keys</button>
+          </div>
+        )}
         <ul className="vs-conn-list">
           {list?.map((c) => (
-            <li key={c.id}>
-              <div>
-                <b>{c.name}</b>
-                <small>{c.keySet ? c.models.join(", ") : `No key yet: add ${c.keyName} in the server's environment`}</small>
-                {c.locked && <small className="vs-conn-locked">Switched off in the environment (AI_VIDEO_OFF)</small>}
-              </div>
-              <label className="vs-switch" title={c.locked ? "Off in the server's environment" : c.on ? "Switch off" : "Switch on"}>
-                <input type="checkbox" role="switch" checked={c.on && !c.locked} disabled={c.locked || busy === c.id} aria-label={`${c.name} ${c.on ? "on" : "off"}`} onChange={() => void flip(c)} />
-                <span aria-hidden />
-              </label>
-            </li>
+            <ConnectionRow key={c.id} c={c} busy={busy === c.id} onFlip={() => void flip(c)} checkAll={checkAll} />
           ))}
         </ul>
         </>}

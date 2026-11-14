@@ -83,9 +83,26 @@ test("ledger in Postgres", { skip: !url && "set TEST_DATABASE_URL to run" }, asy
     L._resetLedger();
     await L.loadLimits();
     assert.deepEqual(L.limits(), { dailyCredits: 777, monthlyBudgetUsd: 55.5 });
+    // failures are kept with the person's email; budget warnings already sent aren't repeated after a restart
+    const uid = Number(rows[0].id);
+    await db().query("delete from video_failures; delete from settings where key = 'aivideo.alerts'");
+    await L.recordFailure({ who: `u:${uid}`, model: "sora-2", route: "openai", stage: "render", message: "  blocked by   the safety filter " });
+    await L.recordFailure({ who: "", model: "veo-31", route: "google", stage: "save", message: "x".repeat(900) });
+    const f = await L.recentFailures();
+    assert.deepEqual([f.length, f[0].stage, f[0].message.length, f[0].email], [2, "save", 500, undefined]);
+    assert.deepEqual([f[1].email, f[1].message, f[1].route], [email, "blocked by the safety filter", "openai"]);
+    await L.setLimits({ dailyCredits: null, monthlyBudgetUsd: 10 });
+    const t = await L.reserve({ who: `u:${uid}`, userId: uid, role: "admin" }, 600, 6);
+    await L.commit(t, { id: `alert-${Date.now()}`, actor: { who: `u:${uid}`, userId: uid }, model: "sora-2", route: "openai" });
+    const spentSoFar = await L.spentThisMonth();
+    const due = await L.dueAlerts(`u:${uid}`);
+    assert.ok(due.some((x) => x.kind === "budget" && x.step === (spentSoFar >= 10 ? 100 : spentSoFar >= 8 ? 80 : 50)), JSON.stringify(due));
+    L._resetLedger(); // as after a restart
+    await L.setLimits({ dailyCredits: null, monthlyBudgetUsd: 10 });
+    assert.ok(!(await L.dueAlerts("u:someone-else")).some((x) => x.kind === "budget"), "not sent twice");
   } finally {
     await db().query("delete from users where email = $1", [email]);
-    await db().query("delete from settings where key = 'aivideo.limits'");
+    await db().query("delete from settings where key in ('aivideo.limits', 'aivideo.alerts'); delete from video_failures");
     await closeDb();
     delete process.env.DATABASE_URL;
   }

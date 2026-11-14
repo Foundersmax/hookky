@@ -12,7 +12,8 @@ import { MAKERS, MakerError, type Source } from "./videoProviders";
 import { safeFetch } from "./safeFetch";
 import { createReadStream, statSync } from "node:fs";
 import { storageOn, clipKey, stored, saveClip, readClip } from "./storage";
-import { reserve, release, commit, settle, spentToday, dailyLimitFor, OverLimit, type Actor } from "./videoLedger";
+import { reserve, release, commit, settle, spentToday, dailyLimitFor, recordFailure, OverLimit, type Actor } from "./videoLedger";
+import { sendAlerts } from "./videoAlerts";
 import { isOff, envOff, switchedOff, ALL_ROUTES } from "./aivideoSwitches";
 
 type Route = Provider | "fal";
@@ -190,15 +191,16 @@ export function serveInput(req: Request, res: Response) {
 // ---------------------------------------------------------------- generate
 const routeName = (r: Route) => PROVIDER_NAMES[r];
 /** Queue a generation on the first route that takes it; returns the job id the studio polls with. */
-export async function generate(req: GenRequest, actorOrWho: string | Actor, origin = ""): Promise<{ id: string; model: string; route: Route; via: string; notes?: string[]; credits: number; usd: number }> {
+export async function generate(req: GenRequest, actorOrWho: string | Actor, origin = "", opts: { /** run on this connection only, even if it's switched off (an admin's test) */ only?: Route } = {}): Promise<{ id: string; model: string; route: Route; via: string; notes?: string[]; credits: number; usd: number }> {
   const actor = asActor(actorOrWho);
+  const stage = opts.only ? ("test" as const) : ("send" as const);
   let n: Normal;
   try {
     n = normalize(req);
   } catch (e: any) {
     throw new AiVideoError(e?.message ?? "That request can't be run.");
   }
-  const routes = routesFor(n.model.id, n.mode);
+  const routes = opts.only ? [opts.only] : routesFor(n.model.id, n.mode);
   if (!routes.length) {
     if (!aiVideoConfigured()) throw new AiVideoError("AI video isn't set up on this server yet: add a video maker's API key (or FAL_KEY) in the server's environment.", 503);
     const d = n.model.direct;
@@ -220,10 +222,12 @@ export async function generate(req: GenRequest, actorOrWho: string | Actor, orig
       const rid = route === "fal" ? await falSubmit(req) : await MAKERS[route].submit(n, n.model.direct!, { publicImage: async (u) => hostImage(u, origin) });
       const id = makeId(n, route, rid);
       await commit(hold, { id, actor, model: n.model.id, route }).catch((e) => console.error(`Couldn't record video job ${id}: ${e?.message ?? e}`));
+      void sendAlerts(actor.who, origin);
       return { id, model: n.model.name, route, via: routeName(route), ...(notes.length && { notes }), credits: cost.credits, usd: cost.usd };
     } catch (e) {
       const err = e instanceof MakerError ? e : new MakerError(String((e as Error)?.message ?? e), 502, true);
       notes.push(`${routeName(route)} ${err.message}`);
+      void recordFailure({ who: actor.who, model: n.model.id, route, stage, message: err.message });
       if (err.retry && i < routes.length - 1) continue;
       release(hold); // a request that never queued costs nothing
       throw new AiVideoError(notes.length > 1 ? `${notes.join(". Then ")}.` : `${routeName(route)} ${err.message}.`, err.status);
@@ -239,7 +243,11 @@ export const fileUrl = (id: string) => `/api/aivideo/file?id=${encodeURIComponen
 /** Where a job is; when it's done, where its video plays from. A failed job gets its credits back. */
 export async function jobStatus(id: string): Promise<JobState> {
   const s = await jobStatusInner(id);
-  if (s.state === "done" || s.state === "failed") await settle(id, s.state).catch((e) => console.error(`Couldn't settle video job ${id}: ${e?.message ?? e}`));
+  if (s.state === "done" || s.state === "failed") {
+    const job = await settle(id, s.state).catch((e) => (console.error(`Couldn't settle video job ${id}: ${e?.message ?? e}`), null));
+    // the first time a clip is seen to have failed, note why for the admins
+    if (job && s.state === "failed") void recordFailure({ ...job, stage: "render", message: s.error ?? "failed without a reason" });
+  }
   return s;
 }
 async function jobStatusInner(id: string): Promise<JobState> {
@@ -344,6 +352,14 @@ export function archive(id: string): Promise<boolean> {
     .catch((e) => {
       saveFailedAt.set(id, Date.now());
       console.error(`Couldn't save clip ${id} to storage: ${e?.message ?? e}`);
+      const j = (() => {
+        try {
+          return parseId(id);
+        } catch {
+          return null;
+        }
+      })();
+      void recordFailure({ who: "", model: j?.model.id ?? "", route: j?.route ?? "", stage: "save", message: `Couldn't save the finished clip to storage: ${e?.message ?? e}` });
       return false;
     })
     .finally(() => saving.delete(id));
@@ -426,4 +442,26 @@ export function aiVideoRoutes(): Record<string, { route: Route; via: string; mod
     const modes = (["text", "image"] as GenMode[]).filter((md) => routesFor(m.id, md).length > 0);
     return [m.id, r ? { route: r, via: routeName(r), modes } : null];
   }));
+}
+
+/** The cheapest clip a connection can make: the shortest, lowest-quality, silent one of its cheapest model. */
+export function cheapestOn(route: Route): { req: GenRequest; credits: number; usd: number; name: string } | null {
+  const p = prices();
+  let best: { req: GenRequest; credits: number; usd: number; name: string } | null = null;
+  for (const m of VIDEO_MODELS) {
+    if (route === "fal" ? !onFal(m, "text") : m.direct?.provider !== route || !supports(m, "text")) continue;
+    const res = route === "fal" ? m.falResolutions ?? m.resolutions : m.resolutions;
+    const req: GenRequest = { model: m.id, mode: "text", prompt: "A red balloon drifting slowly across a clear blue sky", duration: m.durations?.[0], resolution: res?.[0], aspect: m.aspects?.[0], audio: false };
+    const c = estimateCost(normalize(req), p);
+    if (!best || c.usd < best.usd) best = { req, credits: c.credits, usd: c.usd, name: m.name };
+  }
+  return best;
+}
+/** An admin's test: one cheapest clip on exactly this connection (no fallback), to prove the whole path. */
+export async function testClip(route: Route, actor: Actor, origin = "") {
+  if (!(ALL_ROUTES as string[]).includes(route)) throw new AiVideoError("Unknown connection.", 400);
+  if (route === "fal" ? !falOn() : !MAKERS[route].configured()) throw new AiVideoError(`${routeName(route)} has no key yet.`, 503);
+  const pick = cheapestOn(route);
+  if (!pick) throw new AiVideoError(`${routeName(route)} has no model to test.`, 400);
+  return { ...(await generate(pick.req, actor, origin, { only: route })), prompt: pick.req.prompt, settings: { duration: pick.req.duration, resolution: pick.req.resolution } };
 }
