@@ -7,17 +7,8 @@
 //                 on edges that are already hard, so it never overshoots.
 //   4. Enrich   — a little vibrance for flat colour and optional fine grain for surface texture.
 
-export interface Look {
-  /** 0–1: compression clean-up before scaling */
-  clean: number;
-  /** 0–1: sharpening after scaling */
-  sharp: number;
-  /** 0–1: colour vibrance */
-  rich: number;
-  /** 0–1: fine grain */
-  grain: number;
-}
-export const DEFAULT_LOOK: Look = { clean: 0.25, sharp: 0.7, rich: 0.15, grain: 0 };
+import type { Look } from "./size";
+export { DEFAULT_LOOK, type Look } from "./size";
 
 const VERT = `#version 300 es
 in vec2 p; out vec2 uv;
@@ -126,6 +117,7 @@ export class Upscaler {
   private src: WebGLTexture;
   private targets: Target[] = [];
   private frame = 0;
+  private wasLost = false;
 
   /** Throws if WebGL2 isn't available or the output is larger than the GPU allows. */
   constructor(readonly outW: number, readonly outH: number, canvas?: HTMLCanvasElement) {
@@ -134,6 +126,8 @@ export class Upscaler {
     this.canvas.height = outH;
     const gl = this.canvas.getContext("webgl2", { alpha: false, antialias: false, preserveDrawingBuffer: true, powerPreference: "high-performance" }) as WebGL2RenderingContext | null;
     if (!gl) throw new Error("This browser can't run the upscaler (WebGL2 is off).");
+    // a lost context (the GPU reset, or too many contexts) is noticed, not drawn as black frames
+    this.canvas.addEventListener("webglcontextlost", ((e: Event) => (e.preventDefault(), (this.wasLost = true))) as EventListener);
     const max = Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE), gl.getParameter(gl.MAX_RENDERBUFFER_SIZE));
     if (outW > max || outH > max) throw new Error(`This device's graphics can't draw ${outW}×${outH} (its limit is ${max} px).`);
     this.gl = gl;
@@ -236,8 +230,14 @@ export class Upscaler {
     gl.flush();
   }
 
+  /** The GPU dropped this context: frames drawn now come out black. Make a new Upscaler. */
+  get lost() {
+    return this.wasLost || this.gl.isContextLost();
+  }
+
   dispose() {
     const gl = this.gl;
+    if (gl.isContextLost()) return;
     for (const t of this.targets) {
       gl.deleteFramebuffer(t.fb);
       gl.deleteTexture(t.tex);
